@@ -23,6 +23,7 @@ static void MakeOfn(TCHAR* pszFilter)
 }
 
 // The automatic save (nvram or nvram+state if restore state on load is enabled.)
+// TODO: Find a better name for this function.  Something like 'Load Default State(bool saveFirst)'
 int StatedAuto(int bSave)
 {
 	static TCHAR szName[MAX_PATH] = _T("");

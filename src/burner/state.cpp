@@ -3,9 +3,9 @@
 #include "luaengine.h"
 
 // from dynhuff.cpp
-INT32 FreezeDecode(UINT8 **buffer, INT32 *size);
+INT32 FreezeDecode(UINT8** buffer, INT32* size);
 INT32 UnfreezeDecode(const UINT8* buffer, INT32 size);
-INT32 FreezeEncode(UINT8 **buffer, INT32 *size);
+INT32 FreezeEncode(UINT8** buffer, INT32* size);
 INT32 UnfreezeEncode(const UINT8* buffer, INT32 size);
 
 // from replay.cpp
@@ -59,7 +59,7 @@ static INT32 StateInfo(int* pnLen, int* pnMinVer, INT32 bAll)
 }
 
 // State load
-INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)())
+INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32(*pLoadGame)())
 {
 	const char* szHeader = "FS1 ";						// Chunk identifier
 
@@ -69,16 +69,18 @@ INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)
 	char ReadHeader[4];
 	char szForName[33];
 	INT32 nChunkSize = 0;
-	UINT8 *Def = NULL;
+	UINT8* Def = NULL;
 	INT32 nDefLen = 0;									// Deflated version
 	INT32 nRet = 0;
 
 	if (nOffset >= 0) {
 		fseek(fp, nOffset, SEEK_SET);
-	} else {
+	}
+	else {
 		if (nOffset == -2) {
 			fseek(fp, 0, SEEK_END);
-		} else {
+		}
+		else {
 			fseek(fp, 0, SEEK_CUR);
 		}
 	}
@@ -104,7 +106,8 @@ INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)
 
 	if (bAll) {											// Get the min version number which applies to us
 		nFileMin = t2;
-	} else {
+	}
+	else {
 		nFileMin = t1;
 	}
 
@@ -125,7 +128,8 @@ INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)
 			if (strcmp(szForName, BurnDrvGetTextA(DRV_NAME))) {	// The save state is for the wrong game
 				bLoadGame = true;
 			}
-		} else {										// No game loaded
+		}
+		else {										// No game loaded
 			bLoadGame = true;
 		}
 
@@ -141,7 +145,8 @@ INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)
 			if (i == nBurnDrvCount) {
 				nBurnDrvActive = nCurrentGame;
 				return -3;
-			} else {
+			}
+			else {
 				if (nCurrentGame != nBurnDrvActive) {
 					INT32 nOldActive = nBurnDrvActive;  // Exit current game if loading a state from another game
 					nBurnDrvActive = nCurrentGame;
@@ -191,19 +196,20 @@ INT32 BurnStateLoadEmbed(FILE* fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)
 
 	if (nRet) {
 		return -1;
-	} else {
+	}
+	else {
 		return 0;
 	}
 }
 
 // State load
-INT32 BurnStateLoad(TCHAR* szName, INT32 bAll, INT32 (*pLoadGame)())
+INT32 BurnStateLoad(TCHAR* filename, INT32 bAll, INT32(*pLoadGame)())
 {
 	const char szHeader[] = "FB1 ";						// File identifier
 	char szReadHeader[4] = "";
 	INT32 nRet = 0;
 
-	FILE* fp = _tfopen(szName, _T("rb"));
+	FILE* fp = _tfopen(filename, _T("rb"));
 	if (fp == NULL) {
 		return 1;
 	}
@@ -219,71 +225,73 @@ INT32 BurnStateLoad(TCHAR* szName, INT32 bAll, INT32 (*pLoadGame)())
 	nAcbLoadState = 0;
 
 	// load movie extra info
-	if(nReplayStatus)
+	if (nReplayStatus)
 	{
 		const char szMovieExtra[] = "MOV ";
 		const char szDecodeChunk[] = "HUFF";
 		const char szInputChunk[] = "INP ";
 
 		INT32 nChunkSize;
-		UINT8* buf=NULL;
+		UINT8* buf = NULL;
 
 		do
 		{
 			fread(szReadHeader, 1, 4, fp);
-			if(memcmp(szReadHeader, szMovieExtra, 4))           { nRet = -1;  break; }
+			if (memcmp(szReadHeader, szMovieExtra, 4)) { nRet = -1;  break; }
 			fread(&nChunkSize, 1, 4, fp);
 
 			fread(szReadHeader, 1, 4, fp);
-			if(memcmp(szReadHeader, szDecodeChunk, 4))          { nRet = -1;  break; }
+			if (memcmp(szReadHeader, szDecodeChunk, 4)) { nRet = -1;  break; }
 			fread(&nChunkSize, 1, 4, fp);
 
-			if((buf=(UINT8*)malloc(nChunkSize))==NULL)  { nRet = -1;  break; }
+			if ((buf = (UINT8*)malloc(nChunkSize)) == NULL) { nRet = -1;  break; }
 			fread(buf, 1, nChunkSize, fp);
 
-			INT32 ret=-1;
-			if(nReplayStatus == 1)
+			INT32 ret = -1;
+			if (nReplayStatus == 1)
 			{
 				ret = UnfreezeEncode(buf, nChunkSize);
 				if (!FBA_LuaRerecordCountSkip()) { ++nReplayUndoCount; }
 			}
-			else if(nReplayStatus == 2)
+			else if (nReplayStatus == 2)
 			{
 				ret = UnfreezeDecode(buf, nChunkSize);
 			}
-			if(ret)                                             { nRet = -1;  break; }
+			if (ret) { nRet = -1;  break; }
 
 			free(buf);
 			buf = NULL;
 
 			fread(szReadHeader, 1, 4, fp);
-			if(memcmp(szReadHeader, szInputChunk, 4))           { nRet = -1;  break; }
+			if (memcmp(szReadHeader, szInputChunk, 4)) { nRet = -1;  break; }
 			fread(&nChunkSize, 1, 4, fp);
 
-			if((buf=(UINT8*)malloc(nChunkSize))==NULL)  { nRet = -1;  break; }
+			if ((buf = (UINT8*)malloc(nChunkSize)) == NULL) { nRet = -1;  break; }
 			fread(buf, 1, nChunkSize, fp);
-			if(UnfreezeInput(buf, nChunkSize))                  { nRet = -1;  break; }
+			if (UnfreezeInput(buf, nChunkSize)) { nRet = -1;  break; }
 
 			free(buf);
 			buf = NULL;
-		}
-		while(false);
+		} while (false);
 
-		if(buf) free(buf);
+		if (buf) free(buf);
 	}
 
 	fclose(fp);
 
-	luasav_load(_TtoA(szName));
+	luasav_load(_TtoA(filename));
 
+	// NOTE: What are we doing here, and can this be some kind of 'plugin' type approach?
 	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1")) {
-		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A)
+		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A) {
 			WriteValueAtHardwareAddress(0x638FC63, 0x0B, 1, 0);
+		}
 	}
 
 	if (nRet < 0) {
 		return -nRet;
-	} else {
+	}
+	else {
 		return 0;
 	}
 }
@@ -300,7 +308,7 @@ INT32 BurnStateSaveEmbed(FILE* fp, INT32 nOffset, INT32 bAll)
 	INT32 nNvMin = 0, nAMin = 0;
 	INT32 nZero = 0;
 	char szGame[33];
-	UINT8 *Def = NULL;
+	UINT8* Def = NULL;
 	INT32 nDefLen = 0;									// Deflated version
 	INT32 nRet = 0;
 
@@ -320,10 +328,12 @@ INT32 BurnStateSaveEmbed(FILE* fp, INT32 nOffset, INT32 bAll)
 
 	if (nOffset >= 0) {
 		fseek(fp, nOffset, SEEK_SET);
-	} else {
+	}
+	else {
 		if (nOffset == -2) {
 			fseek(fp, 0, SEEK_END);
-		} else {
+		}
+		else {
 			fseek(fp, 0, SEEK_CUR);
 		}
 	}
@@ -374,17 +384,17 @@ INT32 BurnStateSaveEmbed(FILE* fp, INT32 nOffset, INT32 bAll)
 	fseek(fp, nSizeOffset, SEEK_SET);					// Write size of the chunk
 	fwrite(&nDefLen, 1, 4, fp);							//
 
-	fseek (fp, 0, SEEK_END);							// Set file pointer to the end of the chunk
+	fseek(fp, 0, SEEK_END);							// Set file pointer to the end of the chunk
 
 	return nDefLen;
 }
 
 #ifdef BUILD_WIN32
-INT32 FileExists(const TCHAR *fileName)
+INT32 FileExists(const TCHAR* fileName)
 {
-    DWORD dwAttrib = GetFileAttributes(fileName);
-    return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
-            !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+	DWORD dwAttrib = GetFileAttributes(fileName);
+	return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+		!(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 #endif
 
@@ -393,41 +403,43 @@ INT32 FileExists(const TCHAR *fileName)
 INT32 BurnStateUNDO(TCHAR* szName)
 {
 #ifdef BUILD_WIN32
-         /*
-         Savestate Undo
-         derp.fs.backup0 -> derp.fs
-         derp.fs.backup1 -> derp.fs.backup0
-         derp.fs.backup2 -> derpfs.backup1
-         derp.fs.backup3 -> derpfs.backup2
-         */
-    INT32 cantundo = 0;
+	/*
+	Savestate Undo
+	derp.fs.backup0 -> derp.fs
+	derp.fs.backup1 -> derp.fs.backup0
+	derp.fs.backup2 -> derpfs.backup1
+	derp.fs.backup3 -> derpfs.backup2
+	*/
+	INT32 cantundo = 0;
 
-    for (INT32 i = 0; i <= MAX_STATEBACKUPS; i++) {
-            TCHAR szBackupNameTo[1024] = _T("");
-            TCHAR szBackupNameFrom[1024] = _T("");
-            TCHAR szBackupNamePrev[1024] = _T("");
+	for (INT32 i = 0; i <= MAX_STATEBACKUPS; i++) {
+		TCHAR szBackupNameTo[1024] = _T("");
+		TCHAR szBackupNameFrom[1024] = _T("");
+		TCHAR szBackupNamePrev[1024] = _T("");
 
-            if (i == 0) {
-                _stprintf(szBackupNameTo, _T("%s.UNDO"), szName);// game.fs -> game.fs.UNDO
-                _stprintf(szBackupNamePrev, _T("%s.backup0"), szName);
-                if (FileExists(szName) && FileExists(szBackupNamePrev)) {
-                    DeleteFileW(szBackupNameTo);
-                    MoveFileW(szName, szBackupNameTo);
-                } else {
-                    cantundo = 1;
-                }
+		if (i == 0) {
+			_stprintf(szBackupNameTo, _T("%s.UNDO"), szName);// game.fs -> game.fs.UNDO
+			_stprintf(szBackupNamePrev, _T("%s.backup0"), szName);
+			if (FileExists(szName) && FileExists(szBackupNamePrev)) {
+				DeleteFileW(szBackupNameTo);
+				MoveFileW(szName, szBackupNameTo);
+			}
+			else {
+				cantundo = 1;
+			}
 
-                _stprintf(szBackupNameTo, _T("%s"), szName);// game.fs
-            } else {
-                _stprintf(szBackupNameTo, _T("%s.backup%d"), szName, i - 1); //game.fs.backup0
-            }
-            _stprintf(szBackupNameFrom, _T("%s.backup%d"), szName, i); //game.fs.backup1
-            //bprintf(0, _T("%d: %s -> %s\n"), i, szBackupNameFrom, szBackupNameTo);
-            MoveFileW(szBackupNameFrom, szBackupNameTo);
-    }
-    return cantundo;
+			_stprintf(szBackupNameTo, _T("%s"), szName);// game.fs
+		}
+		else {
+			_stprintf(szBackupNameTo, _T("%s.backup%d"), szName, i - 1); //game.fs.backup0
+		}
+		_stprintf(szBackupNameFrom, _T("%s.backup%d"), szName, i); //game.fs.backup1
+		//bprintf(0, _T("%d: %s -> %s\n"), i, szBackupNameFrom, szBackupNameTo);
+		MoveFileW(szBackupNameFrom, szBackupNameTo);
+	}
+	return cantundo;
 #else
-    return 0;
+	return 0;
 #endif
 
 }
@@ -441,7 +453,8 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 
 	if (bAll) {											// Get amount of data
 		StateInfo(&nLen, &nVer, 1);
-	} else {
+	}
+	else {
 		StateInfo(&nLen, &nVer, 0);
 	}
 	if (nLen <= 0) {									// No data, so exit without creating a savestate
@@ -457,7 +470,7 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 	 derp.fs.backup3 -> derpfs.backup4
 	*/
 	if (_tcsstr(szName, _T(" slot "))) {
-		for (INT32 i=MAX_STATEBACKUPS;i>=0;i--) {
+		for (INT32 i = MAX_STATEBACKUPS; i >= 0; i--) {
 			TCHAR szBackupNameTo[1024] = _T("");
 			TCHAR szBackupNameFrom[1024] = _T("");
 
@@ -465,7 +478,8 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 			_stprintf(szBackupNameFrom, _T("%s.backup%d"), szName, i);
 			if (i == MAX_STATEBACKUPS) {
 				DeleteFileW(szBackupNameFrom); // make sure there is only MAX_STATEBACKUPS :)
-			} else {
+			}
+			else {
 				MoveFileW(szBackupNameFrom, szBackupNameTo); //derp.fs.backup0 -> derp.fs.backup1
 				if (i == 0) {
 					MoveFileW(szName, szBackupNameFrom); //derp.fs -> derp.fs.backup0
@@ -484,24 +498,24 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 	nRet = BurnStateSaveEmbed(fp, -1, bAll);
 
 	// save movie extra info
-	if(nReplayStatus)
+	if (nReplayStatus)
 	{
 		UINT8* huff_buf = NULL;
 		INT32 huff_size;
 		UINT8* input_buf = NULL;
 		INT32 input_size;
-		INT32 ret=-1;
+		INT32 ret = -1;
 
-		if(nReplayStatus == 1)
+		if (nReplayStatus == 1)
 		{
 			ret = FreezeEncode(&huff_buf, &huff_size);
 		}
-		else if(nReplayStatus == 2)
+		else if (nReplayStatus == 2)
 		{
 			ret = FreezeDecode(&huff_buf, &huff_size);
 		}
 
-		if(!ret &&
+		if (!ret &&
 			!FreezeInput(&input_buf, &input_size))
 		{
 			const char szMovieExtra[] = "MOV ";
@@ -519,26 +533,26 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 			nMovChunkLen = 0;
 
 			// write Decode block
-			nAlign = (huff_size&3) ? (4 - (huff_size&3)) : 0;
+			nAlign = (huff_size & 3) ? (4 - (huff_size & 3)) : 0;
 			nChkLen = huff_size + nAlign;
 
 			fwrite(szDecodeChunk, 1, 4, fp);
 			fwrite(&nChkLen, 1, 4, fp);
 			fwrite(huff_buf, 1, huff_size, fp);
-			if(nAlign)
+			if (nAlign)
 			{
 				fwrite(&nZero, 1, nAlign, fp);
 			}
 			nMovChunkLen += nChkLen + 8;
 
 			// write Input block
-			nAlign = (input_size&3) ? (4 - (input_size&3)) : 0;
+			nAlign = (input_size & 3) ? (4 - (input_size & 3)) : 0;
 			nChkLen = input_size + nAlign;
 
 			fwrite(szInputChunk, 1, 4, fp);
 			fwrite(&nChkLen, 1, 4, fp);
 			fwrite(input_buf, 1, input_size, fp);
-			if(nAlign)
+			if (nAlign)
 			{
 				fwrite(&nZero, 1, nAlign, fp);
 			}
@@ -549,8 +563,8 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 			fseek(fp, nMovChunkLen, SEEK_CUR);
 		}
 
-		if(huff_buf)    free(huff_buf);
-		if(input_buf)   free(input_buf);
+		if (huff_buf)    free(huff_buf);
+		if (input_buf)   free(input_buf);
 	}
 
 	fclose(fp);
@@ -559,7 +573,8 @@ INT32 BurnStateSave(TCHAR* szName, INT32 bAll)
 
 	if (nRet < 0) {
 		return 1;
-	} else {
+	}
+	else {
 		return 0;
 	}
 }

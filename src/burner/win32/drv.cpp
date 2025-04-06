@@ -19,32 +19,32 @@ static int DrvBzipOpen()
 
 	// If there is a problem with the romset, report it
 	switch (BzipStatus()) {
-		case BZIP_STATUS_BADDATA: {
-			if (!bHideROMWarnings) {
-				FBAPopupDisplay(PUF_TYPE_WARNING);
-			}
-			break;
+	case BZIP_STATUS_BADDATA: {
+		if (!bHideROMWarnings) {
+			FBAPopupDisplay(PUF_TYPE_WARNING);
 		}
-		case BZIP_STATUS_ERROR: {
-			FBAPopupDisplay(PUF_TYPE_ERROR);
+		break;
+	}
+	case BZIP_STATUS_ERROR: {
+		FBAPopupDisplay(PUF_TYPE_ERROR);
 
 #if 0 || !defined FBNEO_DEBUG
-			// Don't even bother trying to start the game if we know it won't work
-			BzipClose();
-			return 1;
+		// Don't even bother trying to start the game if we know it won't work
+		BzipClose();
+		return 1;
 #endif
 
-			break;
-		}
-		default: {
+		break;
+	}
+	default: {
 
 #if 0 && defined FBNEO_DEBUG
-			FBAPopupDisplay(PUF_TYPE_INFO);
+		FBAPopupDisplay(PUF_TYPE_INFO);
 #else
-			FBAPopupDisplay(PUF_TYPE_INFO | PUF_TYPE_LOGONLY);
+		FBAPopupDisplay(PUF_TYPE_INFO | PUF_TYPE_LOGONLY);
 #endif
 
-		}
+	}
 	}
 
 	return 0;
@@ -70,7 +70,8 @@ static int DoLibInit()					// Do Init of Burn library driver
 
 	if (nRet) {
 		return 3;
-	} else {
+	}
+	else {
 		return 0;
 	}
 }
@@ -104,20 +105,20 @@ static int __cdecl DrvLoadRom(unsigned char* Dest, int* pnWrote, int i)
 int __cdecl DrvCartridgeAccess(BurnCartrigeCommand nCommand)
 {
 	switch (nCommand) {
-		case CART_INIT_START:
-			if (!bQuietLoading) ProgressCreate();
-			if (DrvBzipOpen()) {
-				return 1;
-			}
-			break;
-		case CART_INIT_END:
-			if (!bQuietLoading) ProgressDestroy();
-			BzipClose();
-			break;
-		case CART_EXIT:
-			break;
-		default:
+	case CART_INIT_START:
+		if (!bQuietLoading) ProgressCreate();
+		if (DrvBzipOpen()) {
 			return 1;
+		}
+		break;
+	case CART_INIT_END:
+		if (!bQuietLoading) ProgressDestroy();
+		BzipClose();
+		break;
+	case CART_EXIT:
+		break;
+	default:
+		return 1;
 	}
 
 	return 0;
@@ -132,6 +133,7 @@ void NeoCDZRateChangeback()
 	}
 }
 
+// -----------------------------------------------------------------------------------------------------------------------------
 static void NeoCDZRateChange()
 {
 	if (nAudSampleRate[nAudSelect] != 44100) {
@@ -141,6 +143,7 @@ static void NeoCDZRateChange()
 	}
 }
 
+// -----------------------------------------------------------------------------------------------------------------------------
 int DrvInit(int nDrvNum, bool bRestore)
 {
 	int nStatus;
@@ -193,7 +196,7 @@ int DrvInit(int nDrvNum, bool bRestore)
 	nMaxPlayers = BurnDrvGetMaxPlayers();
 	GameInpInit(); // Init game input
 
-	if(ConfigGameLoad(true)) {
+	if (ConfigGameLoad(true)) {
 		ConfigGameLoadHardwareDefaults();
 	}
 	InputMake(true);
@@ -230,20 +233,22 @@ int DrvInit(int nDrvNum, bool bRestore)
 	if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL) {
 		nScreenSize = nScreenSizeVer;
 		bVidArcaderes = bVidArcaderesVer;
-		nVidWidth	= nVidVerWidth;
-		nVidHeight	= nVidVerHeight;
-	} else {
+		nVidWidth = nVidVerWidth;
+		nVidHeight = nVidVerHeight;
+	}
+	else {
 		nScreenSize = nScreenSizeHor;
 		bVidArcaderes = bVidArcaderesHor;
-		nVidWidth	= nVidHorWidth;
-		nVidHeight	= nVidHorHeight;
+		nVidWidth = nVidHorWidth;
+		nVidHeight = nVidHorHeight;
 	}
 
 	bSaveRAM = false;
 	if (kNetGame) {
 		NetworkInitInput();
 		NetworkGetInput();
-	} else {
+	}
+	else {
 		if (bRestore) {
 			StatedAuto(0);
 			bSaveRAM = true;
@@ -261,9 +266,12 @@ int DrvInit(int nDrvNum, bool bRestore)
 	POST_INITIALISE_MESSAGE;
 	CallRegisteredLuaFunctions(LUACALL_ONSTART);
 
+	// Again, what are we doing here?  Can this be a 'plugin' type approach?
 	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1")) {
 		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A)
+		{
 			WriteValueAtHardwareAddress(0x638FC63, 0x0B, 1, 0);
+		}
 	}
 
 	return 0;

@@ -1,3 +1,4 @@
+// Extra stuff added by FCADE implementation....
 #ifndef _GGPOCLIENT_H_
 #define _GGPOCLIENT_H_
 
@@ -24,6 +25,7 @@ typedef enum {
    GGPOCLIENT_GAMEEVENT_FINISHED                     = 6011,
    GGPOCLIENT_GAMEEVENT_LAST
 } GGPOClientGameEventType;
+
 
 typedef enum {
    GGPOCLIENT_EVENTCODE_FIRST                         = 5000,
@@ -67,19 +69,15 @@ typedef struct {
    } u;
 } GGPOClientEvent;
 
-__declspec(dllexport) GGPOSession * __cdecl ggpo_client_connect(GGPOSessionCallbacks *cb,
-                                                                char *game,
-                                                                char *matchid,
-                                                                int serverport);
+//__declspec(dllexport) GGPOSession * __cdecl ggpo_client_connect(GGPOSessionCallbacks *cb,
+//                                                                char *game,
+//                                                                char *matchid,
+//                                                                int serverport);
+//
 
-__declspec(dllexport) bool __cdecl ggpo_client_chat(GGPOSession *,
-                                                    char *text);
 
-__declspec(dllexport) bool __cdecl ggpo_client_set_game_event(GGPOSession *,
-                                                              GGPOClientGameEventType type,
-                                                              void *data);
 #ifdef __cplusplus
-}
+};
 #endif
 
 #endif

@@ -236,9 +236,10 @@ void RunaheadLoadState()
 	bRunaheadFrame = 0;
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------------
 // With or without sound, run one frame.
 // If bDraw is true, it's the last frame before we are up to date, and so we should draw the screen
-int RunFrame(int bDraw, int bPause, int bInput)
+int RunFrame(int bDraw, int bPause, bool updateNetInputs)
 {
 	if (!bDrvOkay) {
 		return 1;
@@ -251,7 +252,7 @@ int RunFrame(int bDraw, int bPause, int bInput)
 		nCurrentFrame++;
 
 		if (kNetGame) {
-			if (bInput) {
+			if (updateNetInputs) {
 				GetInput(true);						// Update inputs
 				VidDisplayInputs(0, 0);
 				if (NetworkGetInput()) {	// Synchronize input with Network
@@ -354,6 +355,7 @@ int RunFrame(int bDraw, int bPause, int bInput)
 	return 0;
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------------
 int RunIdle()
 {
 	if (bAudPlaying) {
@@ -401,7 +403,7 @@ int RunIdle()
 		if (bAppDoStep) {					  // Step one frame
 			nCount = 0;
 		} else {
-			RunFrame(1, 1, 1);				// Paused
+			RunFrame(1, 1, true);			  // Paused
 			VidPaint(3);
 			AudBlankSound();
 			return 0;
@@ -414,11 +416,13 @@ int RunIdle()
 		int skip = bAlwaysDrawFrames ? nSkipFrames : (nCount > nSkipFrames ? nCount : nSkipFrames);
 		// skip frames (for rift balance or auto frame skip)
 		for (int i = skip; i > 0; i--) {
-			RunFrame(0, 0, 1);
+			RunFrame(0, 0, true);
 		}
 		nSkipFrames = 0;
-		RunFrame(1, 0, 1);					    // End-frame
+		RunFrame(1, 0, true);					    // End-frame
 	} else {
+
+		// I believe this happends when the fast-forward buttons are held down....
 		if (bAppDoFast) {				    // do more frames
 			for (int i = 0; i < nFastSpeed; i++) {
 #ifdef INCLUDE_AVI_RECORDING
@@ -453,6 +457,7 @@ int RunIdle()
 	return 0;
 }
 
+// TODO: Find a better name for this function!
 int RunReset()
 {
 	// Reset FPS display
@@ -540,7 +545,7 @@ int RunMessageLoop()
 		}
 		*/
 
-		while (1) {
+		while (true) {
 			if (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE)) {
 				// A message is waiting to be processed
 				if (Msg.message == WM_QUIT)	{											// Quit program

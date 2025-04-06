@@ -1759,6 +1759,11 @@ void DetectFreeze()
 	}
 }
 
+
+// TODO: After a proper input update, let's revisit this whole turbo thing.
+// This is a LOT of code that depends on input names and other goofy stuff for what
+// should otherwise be a simple test.
+// Also, all it doesn't is splat some stuff to the screen, and why do we care, really?
 #define TURBOARRAYSIZE 60
 static int P1LP_Array[TURBOARRAYSIZE] = {};
 static int P1MP_Array[TURBOARRAYSIZE] = {};

@@ -1,10 +1,13 @@
 #include "burner.h"
 
 const int MAXPLAYER = 4;
+
+// This is how we are deciding offsets for the inputs.
+// Each frame we are going to send inputs for all players, but only one of them is actually filled out.
 static int nPlayerInputs[MAXPLAYER], nCommonInputs, nDIPInputs;
 static int nPlayerOffset[MAXPLAYER], nCommonOffset, nDIPOffset;
 
-const int INPUTSIZE = 8 * (4 + 8);
+const int INPUTSIZE = 8 * (4 + 8);				// We are assuming a max of eight bytes of input for up to 12 players.
 static unsigned char nControls[INPUTSIZE];
 
 // Inputs are assumed to be in the following order:
@@ -26,6 +29,9 @@ int NetworkInitInput()
 
 	unsigned int i = 0;
 
+	// All of this code is computing the indexes for where the p1 / p2, etc. controls begin.
+	// They are scanning for Pn descriptions + counting the indexes.
+	// This can be severly cleaned up with a better, more concise input system.
 	nPlayerOffset[0] = 0;
 	do {
 		BurnDrvGetInputInfo(&bii, i);
@@ -70,7 +76,7 @@ int NetworkInitInput()
 
 int NetworkGetInput()
 {
-	int i, j, k;
+	int i, j;
 
 	struct BurnInputInfo bii;
 	memset(&bii, 0, sizeof(bii));
@@ -78,7 +84,7 @@ int NetworkGetInput()
 	// Initialize controls to 0
 	memset(nControls, 0, INPUTSIZE);
 
-	// Pack all DIP switches + common controls + player 1 controls
+	// Pack all DIP switches + common controls + Player 1 controls.
 	for (i = 0, j = 0; i < nPlayerInputs[0]; i++, j++) {
 		BurnDrvGetInputInfo(&bii, i + nPlayerOffset[0]);
 		if (*bii.pVal && bii.nType == BIT_DIGITAL) {
@@ -95,7 +101,7 @@ int NetworkGetInput()
 		}
 	}
 
-	// Convert j to byte count
+	// Convert j to byte count (>> 3 == / 8)
 	j = (j + 7) >> 3;
 
 	// Analog controls/constants
@@ -117,8 +123,8 @@ int NetworkGetInput()
 		nControls[j] = *bii.pVal;
 	}
 
-	// k has the size of all inputs for one player
-	k = j + 1;
+	// k is the size in bytes of all inputs for one player
+	int k = j + 1;
 
 	// Send the control block to the Network DLL & retrieve all controls
 	if (kNetGame) {
@@ -128,6 +134,8 @@ int NetworkGetInput()
 	}
 
 	// Decode Player 1 input block
+	// NOTE: Will this actually be any different from when we sent the inputs?
+	// --> I think so because of sync / rollback....
 	for (i = 0, j = 0; i < nPlayerInputs[0]; i++, j++) {
 		BurnDrvGetInputInfo(&bii, i + nPlayerOffset[0]);
 		if (bii.nType == BIT_DIGITAL) {

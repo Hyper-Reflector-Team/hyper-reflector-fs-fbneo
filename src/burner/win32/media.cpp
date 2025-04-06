@@ -3,8 +3,8 @@
 
 int MediaInit()
 {
-  if (!hScrnWnd && ScrnInit()) {		// Init the Scrn Window
-    FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_UI_WINDOW));
+	if (!hScrnWnd && ScrnInit()) {		// Init the Scrn Window
+		FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_UI_WINDOW));
 		FBAPopupDisplay(PUF_TYPE_ERROR);
 		return 1;
 	}
@@ -70,8 +70,9 @@ int MediaExit(bool scrn_exit)
 	DestroyWindow(hInpsDlg);			// Make sure the Input Set dialog is exitted
 	DestroyWindow(hInpdDlg);			// Make sure the Input Dialog is exitted
 
-	if (scrn_exit)
+	if (scrn_exit) {
 		ScrnExit();						// Exit the Scrn Window
+	}
 
 	return 0;
 }

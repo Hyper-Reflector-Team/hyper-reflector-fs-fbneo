@@ -246,7 +246,9 @@ extern char kNetQuarkId[128];
 
 int RunIdleDelay(int frames);
 int RunIdle();
-int RunFrame(int bDraw, int bPause, int bInput);
+
+// updateNetInputs: If we are running a net game, set this to true to get local inputs before network sync.
+int RunFrame(int bDraw, int bPause, bool updateNetInputs);
 int RunMessageLoop();
 int RunInit();
 int RunReset();
@@ -446,7 +448,7 @@ void QuarkInit(TCHAR *connect);
 void QuarkEnd();
 void QuarkTogglePerfMon();
 void QuarkRunIdle(int ms);
-bool QuarkGetInput(void *values, int size, int players);
+bool QuarkGetInput(void *values, int size, int playerCount);
 bool QuarkIncrementFrame();
 void QuarkSendChatText(char *text);
 void QuarkSendChatCmd(char *text, char cmd);

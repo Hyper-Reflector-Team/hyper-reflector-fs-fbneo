@@ -2,7 +2,10 @@
 #include <stdio.h>
 #include "ggpo_perfmon.h"
 #include "resource.h"
-#include "ggponet.h"
+
+extern "C" {
+	#include "ggponet.h"
+}
 
 static HWND _hwnd = NULL;
 static HWND _dialog = NULL;
