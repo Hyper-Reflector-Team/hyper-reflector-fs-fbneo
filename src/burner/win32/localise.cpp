@@ -561,20 +561,20 @@ void ParseDlgTemplateEx(const DLGTEMPLATEEX* pTemplate)
 	char* pTemplateDataIn = (char*)(((UINT32)pTemplate + 26 + sizeof(WORD) - 1) & ~(sizeof(WORD) - 1));
 
 #if 0
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
 	char* pData = (char*)pTemplate;
 	for (int i = 0; i < 16; i++) {
 		for (int j = 0; j < 4; j++) {
 			for (int k = 0; k < 4; k++) {
 				unsigned int n = *pData;
-				dprintf(_T("%02X"), n & 255);
+				debugPrintf(_T("%02X"), n & 255);
 				pData++;
 			}
-			dprintf(_T(" "));
+			debugPrintf(_T(" "));
 		}
-		dprintf(_T("\n"));
+		debugPrintf(_T("\n"));
 	}
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
 #endif
 
 	// Menu
@@ -583,11 +583,11 @@ void ParseDlgTemplateEx(const DLGTEMPLATEEX* pTemplate)
 			pTemplateDataIn += 1 * sizeof(WORD);
 			break;
 		case 0xFFFF:
-			dprintf(_T("   menu is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+			debugPrintf(_T("   menu is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 			pTemplateDataIn += 2 * sizeof(WORD);
 			break;
 		default:
-			dprintf(_T("   menu is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+			debugPrintf(_T("   menu is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 			pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 			break;
 	}
@@ -600,11 +600,11 @@ void ParseDlgTemplateEx(const DLGTEMPLATEEX* pTemplate)
 			pTemplateDataIn += 1 * sizeof(WORD);
 			break;
 		case 0xFFFF:
-			dprintf(_T("   class is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+			debugPrintf(_T("   class is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 			pTemplateDataIn += 2 * sizeof(WORD);
 			break;
 		default:
-			dprintf(_T("   class is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+			debugPrintf(_T("   class is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 			pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 			break;
 	}
@@ -612,38 +612,38 @@ void ParseDlgTemplateEx(const DLGTEMPLATEEX* pTemplate)
 //	pTemplateDataIn = (char*)(((UINT32)pTemplateDataIn + sizeof(WORD) - 1) & ~(sizeof(WORD) - 1));
 
 	// Caption
-	dprintf(_T("   "));
+	debugPrintf(_T("   "));
 	switch (*((WORD*)pTemplateDataIn)) {
 		case 0x0000:
 			pTemplateDataIn += 1 * sizeof(WORD);
 			break;
 		case 0xFFFF:
-			dprintf(_T("icon is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+			debugPrintf(_T("icon is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 			pTemplateDataIn += 2 * sizeof(WORD);
 			break;
 		default:
-			dprintf(_T("caption is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+			debugPrintf(_T("caption is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 			pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 			break;
 	}
 
 	// Font
 	if (pTemplate->style & (DS_SETFONT | DS_SHELLFONT)) {
-		dprintf(_T("   Font: \"%ls\", %i pt.\n"), (wchar_t*)(pTemplateDataIn + 2 + 2 * sizeof(WORD)), *((WORD*)pTemplateDataIn));
+		debugPrintf(_T("   Font: \"%ls\", %i pt.\n"), (wchar_t*)(pTemplateDataIn + 2 + 2 * sizeof(WORD)), *((WORD*)pTemplateDataIn));
 		pTemplateDataIn += 2 + 2 * sizeof(WORD);
 		pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 	}
 
 	// Controls
-	dprintf(_T("   %i controls used.\n"), pTemplate->cDlgItems);
+	debugPrintf(_T("   %i controls used.\n"), pTemplate->cDlgItems);
 	for (int i = 0; i < pTemplate->cDlgItems; i++) {
 		pTemplateDataIn = (char*)(((UINT32)pTemplateDataIn + sizeof(DWORD) - 1) & ~(sizeof(DWORD) - 1));
 
-		dprintf(_T("      control %02i, ID is %05i, pos %03ix%03i, size %03ix%03i\n"), i, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->id, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->x, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->y, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cx, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cy);
+		debugPrintf(_T("      control %02i, ID is %05i, pos %03ix%03i, size %03ix%03i\n"), i, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->id, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->x, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->y, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cx, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cy);
 
 		pTemplateDataIn = (char*)(((UINT32)pTemplateDataIn + sizeof(DLGITEMTEMPLATEEX) + sizeof(WORD) - 1) & ~(sizeof(WORD) - 1));
 
-		dprintf(_T("         "));
+		debugPrintf(_T("         "));
 
 		// Class
 		switch (*((WORD*)pTemplateDataIn)) {
@@ -651,11 +651,11 @@ void ParseDlgTemplateEx(const DLGTEMPLATEEX* pTemplate)
 				pTemplateDataIn += 1 * sizeof(WORD);
 				break;
 			case 0xFFFF:
-				dprintf(_T("class is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+				debugPrintf(_T("class is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 				pTemplateDataIn += 2 * sizeof(WORD);
 				break;
 			default:
-				dprintf(_T("class is \"%ls\", "), (wchar_t*)pTemplateDataIn);
+				debugPrintf(_T("class is \"%ls\", "), (wchar_t*)pTemplateDataIn);
 				pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 				break;
 		}
@@ -666,10 +666,10 @@ void ParseDlgTemplateEx(const DLGTEMPLATEEX* pTemplate)
 			pTemplateDataIn += 4;
 		}
 
-		dprintf(_T("title is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+		debugPrintf(_T("title is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 		pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 		if (*((WORD*)pTemplateDataIn)) {
-			dprintf(_T("         %i bytes of extra data present.\n"), *((WORD*)pTemplateDataIn));
+			debugPrintf(_T("         %i bytes of extra data present.\n"), *((WORD*)pTemplateDataIn));
 		}
 		pTemplateDataIn += sizeof(WORD) + *((WORD*)pTemplateDataIn);
 	}
@@ -685,7 +685,7 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 	char* pTemplateDataOutSync = NULL;
 
 #ifdef PRINT_TRANSLATION_INFO
-	dprintf(_T("Translating dialogex template:\n"));
+	debugPrintf(_T("Translating dialogex template:\n"));
 #endif
 
 	pTemplateDataOut = (char*)malloc(26);
@@ -695,20 +695,20 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 
 #ifdef PRINT_TRANSLATION_INFO
  #if 0
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
 	char* pData = (char*)pTemplate;
 	for (int i = 0; i < 16; i++) {
 		for (int j = 0; j < 4; j++) {
 			for (int k = 0; k < 4; k++) {
 				unsigned int n = *pData;
-				dprintf(_T("%02X"), n & 255);
+				debugPrintf(_T("%02X"), n & 255);
 				pData++;
 			}
-			dprintf(_T(" "));
+			debugPrintf(_T(" "));
 		}
-		dprintf(_T("\n"));
+		debugPrintf(_T("\n"));
 	}
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
  #endif
 #endif
 
@@ -719,13 +719,13 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 			break;
 		case 0xFFFF:
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("   menu is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+			debugPrintf(_T("   menu is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 #endif
 			pTemplateDataIn += 2 * sizeof(WORD);
 			break;
 		default:
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("   menu is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+			debugPrintf(_T("   menu is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 #endif
 			pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 			break;
@@ -740,13 +740,13 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 			break;
 		case 0xFFFF:
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("   class is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+			debugPrintf(_T("   class is %04X.\n"), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 #endif
 			pTemplateDataIn += 2 * sizeof(WORD);
 			break;
 		default:
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("   class is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+			debugPrintf(_T("   class is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 #endif
 			pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 			break;
@@ -756,11 +756,11 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 
 	// Caption
 #ifdef PRINT_TRANSLATION_INFO
-	dprintf(_T("   "));
+	debugPrintf(_T("   "));
 #endif
 	if (*((WORD*)pTemplateDataIn) == 0xFFFF) {
 #ifdef PRINT_TRANSLATION_INFO
-		dprintf(_T("icon is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+		debugPrintf(_T("icon is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 #endif
 		pTemplateDataIn += 2 * sizeof(WORD);
 	}
@@ -777,7 +777,7 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 			break;
 		default:
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("caption is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+			debugPrintf(_T("caption is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 #endif
 			pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 			break;
@@ -787,7 +787,7 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 	// Font
 	if (pTemplate->style & (DS_SETFONT | DS_SHELLFONT)) {
 #ifdef PRINT_TRANSLATION_INFO
-		dprintf(_T("   Font: \"%ls\", %i pt.\n"), (wchar_t*)(pTemplateDataIn + 2 + 2 * sizeof(WORD)), *((WORD*)pTemplateDataIn));
+		debugPrintf(_T("   Font: \"%ls\", %i pt.\n"), (wchar_t*)(pTemplateDataIn + 2 + 2 * sizeof(WORD)), *((WORD*)pTemplateDataIn));
 #endif
 		pTemplateDataIn += 2 + 2 * sizeof(WORD);
 
@@ -804,7 +804,7 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 
 	// Controls
 #ifdef PRINT_TRANSLATION_INFO
-	dprintf(_T("   %i controls used.\n"), pTemplate->cDlgItems);
+	debugPrintf(_T("   %i controls used.\n"), pTemplate->cDlgItems);
 #endif
 	for (int i = 0; i < pTemplate->cDlgItems; i++) {
 
@@ -814,13 +814,13 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 		pTemplateDataIn = pTemplateDataInSync = (char*)(((INT_PTR)pTemplateDataIn + sizeof(DWORD) - 1) & ~(sizeof(DWORD) - 1));
 
 #ifdef PRINT_TRANSLATION_INFO
-		dprintf(_T("      control %02i, ID is %05i, pos %03ix%03i, size %03ix%03i\n"), i, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->id, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->x, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->y, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cx, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cy);
+		debugPrintf(_T("      control %02i, ID is %05i, pos %03ix%03i, size %03ix%03i\n"), i, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->id, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->x, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->y, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cx, ((DLGITEMTEMPLATEEX*)pTemplateDataIn)->cy);
 #endif
 
 		pTemplateDataIn = (char*)(((INT_PTR)pTemplateDataIn + sizeof(DLGITEMTEMPLATEEX) + sizeof(WORD) - 1) & ~(sizeof(WORD) - 1));
 
 #ifdef PRINT_TRANSLATION_INFO
-		dprintf(_T("         "));
+		debugPrintf(_T("         "));
 #endif
 
 		// Class
@@ -830,13 +830,13 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 				break;
 			case 0xFFFF:
 #ifdef PRINT_TRANSLATION_INFO
-				dprintf(_T("class is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
+				debugPrintf(_T("class is %04X, "), *((UINT16*)pTemplateDataIn + sizeof(WORD)));
 #endif
 				pTemplateDataIn += 2 * sizeof(WORD);
 				break;
 			default:
 #ifdef PRINT_TRANSLATION_INFO
-				dprintf(_T("class is \"%ls\", "), (wchar_t*)pTemplateDataIn);
+				debugPrintf(_T("class is \"%ls\", "), (wchar_t*)pTemplateDataIn);
 #endif
 				pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 				break;
@@ -856,13 +856,13 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 		}
 
 #ifdef PRINT_TRANSLATION_INFO
-		dprintf(_T("title is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+		debugPrintf(_T("title is \"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 #endif
 		pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 		pTemplateDataInSync = pTemplateDataIn;
 #ifdef PRINT_TRANSLATION_INFO
 		if (*((WORD*)pTemplateDataIn)) {
-			dprintf(_T("         %i bytes of extra data present.\n"), *((WORD*)pTemplateDataIn));
+			debugPrintf(_T("         %i bytes of extra data present.\n"), *((WORD*)pTemplateDataIn));
 		}
 #endif
 		pTemplateDataIn += sizeof(WORD) + *((WORD*)pTemplateDataIn);
@@ -871,13 +871,13 @@ DLGTEMPLATE* TranslateDlgTemplateEx(const DLGTEMPLATEEX* pTemplate, const Locali
 	CATCH_UP;
 
 #ifdef PRINT_TRANSLATION_INFO
-	dprintf(_T("Parsing translated template:\n"));
+	debugPrintf(_T("Parsing translated template:\n"));
 
 	if (((DLGTEMPLATEEX*)pTemplate)->signature == 0xFFFF) {
 		ParseDlgTemplateEx((DLGTEMPLATEEX*)pTemplateDataOut);
 	}
 
-	dprintf(_T("Done.\n"));
+	debugPrintf(_T("Done.\n"));
 #endif
 
 	return (DLGTEMPLATE*)pTemplateDataOut;
@@ -914,20 +914,20 @@ void ParseMenuTemplate(const MENUTEMPLATE* pTemplate)
 	char* pTemplateDataIn = (char*)pTemplate + sizeof(MENUITEMTEMPLATEHEADER);
 
 #if 0
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
 	char* pData = (char*)pTemplate;
 	for (int i = 0; i < 16; i++) {
 		for (int j = 0; j < 4; j++) {
 			for (int k = 0; k < 4; k++) {
 				unsigned int n = *pData;
-				dprintf(_T("%02X"), n & 255);
+				debugPrintf(_T("%02X"), n & 255);
 				pData++;
 			}
-			dprintf(_T(" "));
+			debugPrintf(_T(" "));
 		}
-		dprintf(_T("\n"));
+		debugPrintf(_T("\n"));
 	}
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
 #endif
 
 	int i = 0;
@@ -942,18 +942,18 @@ void ParseMenuTemplate(const MENUTEMPLATE* pTemplate)
 				bLastPopup = true;
 				bracketcnt--;
 			}
-			dprintf(_T("   popup %03i "), i);
+			debugPrintf(_T("   popup %03i "), i);
 			pTemplateDataIn += sizeof(WORD);
 		} else {
 			if (((MENUITEMTEMPLATE*)pTemplateDataIn)->mtOption & MF_END) {
 				bLastItem = true;
 				bracketcnt--;
 			}
-			dprintf(_T("   item %03i ID is %05i "), i, ((MENUITEMTEMPLATE*)pTemplateDataIn)->mtID);
+			debugPrintf(_T("   item %03i ID is %05i "), i, ((MENUITEMTEMPLATE*)pTemplateDataIn)->mtID);
 			pTemplateDataIn += sizeof(WORD) * 2;
 		}
 
-		dprintf(_T("\"%ls\".\n"), ((wchar_t*)pTemplateDataIn));
+		debugPrintf(_T("\"%ls\".\n"), ((wchar_t*)pTemplateDataIn));
 		pTemplateDataIn += wcslen((wchar_t*)pTemplateDataIn) * sizeof(wchar_t) + sizeof(wchar_t);
 	} while (i++ < 1024 && (!(bLastPopup && bLastItem) || bracketcnt > 0));
 }
@@ -968,7 +968,7 @@ MENUTEMPLATE* TranslateMenuTemplate(const MENUTEMPLATE* pTemplate, const Localis
 	char* pTemplateDataOutSync = NULL;
 
 #ifdef PRINT_TRANSLATION_INFO
-	dprintf(_T("Translating menu template:\n"));
+	debugPrintf(_T("Translating menu template:\n"));
 #endif
 
 	pTemplateDataOut = (char*)malloc(sizeof(MENUITEMTEMPLATEHEADER));
@@ -978,20 +978,20 @@ MENUTEMPLATE* TranslateMenuTemplate(const MENUTEMPLATE* pTemplate, const Localis
 
 #ifdef PRINT_TRANSLATION_INFO
  #if 0
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
 	char* pData = (char*)pTemplate;
 	for (int i = 0; i < 16; i++) {
 		for (int j = 0; j < 4; j++) {
 			for (int k = 0; k < 4; k++) {
 				unsigned int n = *pData;
-				dprintf(_T("%02X"), n & 255);
+				debugPrintf(_T("%02X"), n & 255);
 				pData++;
 			}
-			dprintf(_T(" "));
+			debugPrintf(_T(" "));
 		}
-		dprintf(_T("\n"));
+		debugPrintf(_T("\n"));
 	}
-	dprintf(_T("\n"));
+	debugPrintf(_T("\n"));
  #endif
 #endif
 
@@ -1008,7 +1008,7 @@ MENUTEMPLATE* TranslateMenuTemplate(const MENUTEMPLATE* pTemplate, const Localis
 				bracketcnt--;
 			}
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("   popup %03i "), i);
+			debugPrintf(_T("   popup %03i "), i);
 #endif
 			pTemplateDataIn += sizeof(WORD);
 		} else {
@@ -1017,14 +1017,14 @@ MENUTEMPLATE* TranslateMenuTemplate(const MENUTEMPLATE* pTemplate, const Localis
 				bracketcnt--;
 			}
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("   item %03i ID is %05i "), i, ((MENUITEMTEMPLATE*)pTemplateDataIn)->mtID);
+			debugPrintf(_T("   item %03i ID is %05i "), i, ((MENUITEMTEMPLATE*)pTemplateDataIn)->mtID);
 #endif
 			pTemplateDataIn += sizeof(WORD) * 2;
 		}
 
 		CATCH_UP;
 #ifdef PRINT_TRANSLATION_INFO
-		dprintf(_T("\"%ls\".\n"), (wchar_t*)pTemplateDataIn);
+		debugPrintf(_T("\"%ls\".\n"), (wchar_t*)pTemplateDataIn);
 #endif
 		if (pLocaliseInfo->pControlInfo[i] && pLocaliseInfo->pControlInfo[i]->szCaption[0]) {
 			wchar_t* pszHotkey = NULL;
@@ -1047,9 +1047,9 @@ MENUTEMPLATE* TranslateMenuTemplate(const MENUTEMPLATE* pTemplate, const Localis
 	CATCH_UP;
 
 #ifdef PRINT_TRANSLATION_INFO
-	dprintf(_T("Parsing translated template:\n"));
+	debugPrintf(_T("Parsing translated template:\n"));
 	ParseMenuTemplate((MENUTEMPLATE*)pTemplateDataOut);
-	dprintf(_T("Done.\n"));
+	debugPrintf(_T("Done.\n"));
 #endif
 
 	return (MENUTEMPLATE*)pTemplateDataOut;
@@ -1075,7 +1075,7 @@ TCHAR* FBALoadStringEx(HINSTANCE hInstance, UINT uID, bool bTranslate)
 		if (FBAResourceInfo[uID].pResourceTranslation) {
 
 #if 1 && defined (PRINT_TRANSLATION_INFO)
-			dprintf(_T("string %5i: \"%ls\"\n"), uID, (TCHAR*)FBAResourceInfo[uID].pResourceTranslation);
+			debugPrintf(_T("string %5i: \"%ls\"\n"), uID, (TCHAR*)FBAResourceInfo[uID].pResourceTranslation);
 #endif
 
 			return (TCHAR*)FBAResourceInfo[uID].pResourceTranslation;
@@ -1094,7 +1094,7 @@ TCHAR* FBALoadStringEx(HINSTANCE hInstance, UINT uID, bool bTranslate)
 		}
 
 #if 1 && defined (PRINT_TRANSLATION_INFO)
-		dprintf(_T("string %5i: \"%ls\"\n"), uID, *pwsz ? pwsz + 1 : pwsz);
+		debugPrintf(_T("string %5i: \"%ls\"\n"), uID, *pwsz ? pwsz + 1 : pwsz);
 #endif
 
 #if defined (UNICODE) && defined (_MSC_VER)
@@ -1271,7 +1271,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 			}
 
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("version\n"), nTemplateVersion);
+			debugPrintf(_T("version\n"), nTemplateVersion);
 #endif
 
 			s = t;
@@ -1287,7 +1287,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 			nFBACodepage = wcstol(s, &t, 0);
 
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("codepage\n"), nFBACodepage);
+			debugPrintf(_T("codepage\n"), nFBACodepage);
 #endif
 
 			s = t;
@@ -1305,7 +1305,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 			unsigned int nID = wcstol(s, &t, 0);
 
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("menu %i\n"), nID);
+			debugPrintf(_T("menu %i\n"), nID);
 #endif
 			s = t;
 
@@ -1336,7 +1336,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 			unsigned int nID = wcstol(s, &t, 0);
 
 #ifdef PRINT_TRANSLATION_INFO
-			dprintf(_T("dialog %i\n"), nID);
+			debugPrintf(_T("dialog %i\n"), nID);
 #endif
 			s = t;
 
@@ -1396,7 +1396,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 				{
 					TCHAR szFormat[256];
 					_stprintf(szFormat, _T("string %%5i \"%%.%ils\"\n"), szEnd - szQuote);
-					dprintf(szFormat, nID, szQuote);
+					debugPrintf(szFormat, nID, szQuote);
 				}
 #endif
 
@@ -1468,7 +1468,7 @@ static int FBALocaliseParseFile(TCHAR* pszFilename)
 					memcpy(CurrentResource.pControlInfo[n]->szCaption, szQuote, QUOTE_MAX * sizeof(TCHAR));
 				}
 
-//				dprintf(_T("   - %ls\n"), pCurrentResource->pControlInfo[n]->szCaption);
+//				debugPrintf(_T("   - %ls\n"), pCurrentResource->pControlInfo[n]->szCaption);
 
 			}
 
@@ -1589,7 +1589,7 @@ int FBALocaliseInit(TCHAR* pszTemplate)
 	if (pszTemplate == NULL || _tcslen(pszTemplate) == 0) {
 
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T(" ** Translation disabled\n"));
+		debugPrintf(_T(" ** Translation disabled\n"));
 #endif
 
 		szLocalisationTemplate[0] = _T('\0');
@@ -1608,7 +1608,7 @@ int FBALocaliseInit(TCHAR* pszTemplate)
 	if (nRet > 0) {
 
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T(" ** Translation initialisation failed\n"));
+		debugPrintf(_T(" ** Translation initialisation failed\n"));
 #endif
 
 		return 1;
@@ -1617,7 +1617,7 @@ int FBALocaliseInit(TCHAR* pszTemplate)
 	if (nRet < 0) {
 
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T(" ** Translation disabled\n"));
+		debugPrintf(_T(" ** Translation disabled\n"));
 #endif
 
 		FBALocaliseExit();
@@ -1629,7 +1629,7 @@ int FBALocaliseInit(TCHAR* pszTemplate)
 	}
 
 #ifdef PRINT_DEBUG_INFO
-	dprintf(_T(" ** Translation initialised\n"));
+	debugPrintf(_T(" ** Translation initialised\n"));
 #endif
 
 	if (pszTemplate) {

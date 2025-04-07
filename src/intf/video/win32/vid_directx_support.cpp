@@ -162,7 +162,7 @@ int VidSSetupGamma(IDirectDrawSurface7* pSurf)
 	if (FAILED(pSurf->QueryInterface(IID_IDirectDrawGammaControl, (void**)&pGammaControl))) {
 		pGammaControl = NULL;
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Warning: Couldn't use hardware gamma controls.\n"));
+		debugPrintf(_T("  * Warning: Couldn't use hardware gamma controls.\n"));
 #endif
 
 		return 1;
@@ -919,7 +919,7 @@ static int VidSInitShortMsg(int nFlags)
 
 	if (FAILED(pDD->CreateSurface(&ddsd, &pShortMsgSurf, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create OSD texture.\n"));
+		debugPrintf(_T("  * Error: Couldn't create OSD texture.\n"));
 #endif
 		return 1;
 	}
@@ -956,7 +956,7 @@ static int VidSInitStatus(int nFlags)
 
 	if (FAILED(pDD->CreateSurface(&ddsd, &pStatusSurf, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create OSD texture.\n"));
+		debugPrintf(_T("  * Error: Couldn't create OSD texture.\n"));
 #endif
 		return 1;
 	}
@@ -1017,7 +1017,7 @@ static int VidSInitChat(int /*nFlags*/)
 
 	if (FAILED(pDD->CreateSurface(&ddsd, &pChatSurf, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create Chat texture.\n"));
+		debugPrintf(_T("  * Error: Couldn't create Chat texture.\n"));
 #endif
 		return 1;
 	}
@@ -1056,7 +1056,7 @@ static int VidSInitTV(int nFlags)
 
 	if (FAILED(pDD->CreateSurface(&ddsd, &pTVSurf, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create TV texture.\n"));
+		debugPrintf(_T("  * Error: Couldn't create TV texture.\n"));
 #endif
 		return 1;
 	}
@@ -1105,7 +1105,7 @@ static int VidSInitEdit(int nFlags)
 
 	if (FAILED(pDD->CreateSurface(&ddsd, &pEditSurf, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create OSD texture.\n"));
+		debugPrintf(_T("  * Error: Couldn't create OSD texture.\n"));
 #endif
 		return 1;
 	}
@@ -1118,7 +1118,7 @@ static int VidSInitEdit(int nFlags)
 int VidSInitOSD(int nFlags)
 {
 #ifdef PRINT_DEBUG_INFO
-//	dprintf(_T(" ** OSD initialised.\n"));
+//	debugPrintf(_T(" ** OSD initialised.\n"));
 #endif
 
 	if (pDD == NULL) {

@@ -1495,7 +1495,7 @@ static int joypad_set(lua_State *L) {
 			else {
 				lua_joypads[i] = lua_tonumber(L, -1);
 			}
-//			dprintf(_T("*JOYPAD*: '%s' : %d\n"),_AtoT(bii.szName),lua_joypads[i]);
+//			debugPrintf(_T("*JOYPAD*: '%s' : %d\n"),_AtoT(bii.szName),lua_joypads[i]);
 		}
 		lua_pop(L,1);
 	}
@@ -4263,7 +4263,7 @@ UINT32 FBA_LuaReadJoypad() {
 					*bii.pVal = lua_joypads[i];
 				}
 			}
-//			dprintf(_T("*READ_JOY*: '%s' %d: "),_AtoT(bii.szName),lua_joypads[i]);
+//			debugPrintf(_T("*READ_JOY*: '%s' %d: "),_AtoT(bii.szName),lua_joypads[i]);
 		}
 
 		lua_joypads_used = 0;
@@ -4307,7 +4307,7 @@ void FBA_LuaGui(unsigned char *s, int width, int height, int bpp, int pitch) {
 	if (!LUA || !bDrvOkay/* || !luaRunning*/)
 		return;
 
-//	dprintf(_T("*LUA GUI START*: x:%d y:%d d:%d p:%d\n"),width,height,bpp,pitch);
+//	debugPrintf(_T("*LUA GUI START*: x:%d y:%d d:%d p:%d\n"),width,height,bpp,pitch);
 
 	// First, check if we're being called by anybody
 	lua_getfield(LUA, LUA_REGISTRYINDEX, guiCallbackTable);

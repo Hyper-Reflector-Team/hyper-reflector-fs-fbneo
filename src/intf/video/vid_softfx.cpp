@@ -367,7 +367,7 @@ int VidSoftFXInit(int nBlitter, int nRotate)
         }
 
 #ifdef PRINT_DEBUG_INFO
-   	dprintf(_T("  * SoftFX initialised: using %s in %i-bit mode.\n"), SoftFXInfo[nSoftFXBlitter].pszName, nVidImageDepth);
+   	debugPrintf(_T("  * SoftFX initialised: using %s in %i-bit mode.\n"), SoftFXInfo[nSoftFXBlitter].pszName, nVidImageDepth);
 #endif
 
 	return 0;

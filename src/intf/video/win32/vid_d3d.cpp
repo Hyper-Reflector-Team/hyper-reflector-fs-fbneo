@@ -636,7 +636,7 @@ static int vidCreateGameSurfaces()
 	if (!bRenderToTexture) {
 
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Warning: Device can't render to textures. Using fall-back method for pre-scale/feedback.\n"));
+		debugPrintf(_T("  * Warning: Device can't render to textures. Using fall-back method for pre-scale/feedback.\n"));
 #endif
 
 		RELEASE(pEmuImage[1]);
@@ -654,7 +654,7 @@ static int vidCreateGameSurfaces()
 
 		if (FAILED(pDD->CreateSurface(&ddsd, &pEmuImage[1], NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create secondary game surface(s) for pre-scale/feedback.\n"));
+			debugPrintf(_T("  * Error: Couldn't create secondary game surface(s) for pre-scale/feedback.\n"));
 #endif
 			return 1;
 		}
@@ -672,7 +672,7 @@ static int vidCreateGameSurfaces()
 
 		if (FAILED(pDD->CreateSurface(&ddsd, &pEmuImage[3], NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create secondary game surface(s) for pre-scale/feedback.\n"));
+			debugPrintf(_T("  * Error: Couldn't create secondary game surface(s) for pre-scale/feedback.\n"));
 #endif
 			return 1;
 		}
@@ -704,7 +704,7 @@ static int vidCreateGameSurfaces()
 
 		if (FAILED(pDD->CreateSurface(&ddsd, &pEmuImage[2], NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create secondary game surface for transfer.\n"));
+			debugPrintf(_T("  * Error: Couldn't create secondary game surface for transfer.\n"));
 #endif
 			return 1;
 		}
@@ -739,7 +739,7 @@ static int vidCreateGameSurfaces()
 
 	if (FAILED(pDD->CreateSurface(&ddsd, &pEmuImage[0], NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create game texture surface.\n"));
+		debugPrintf(_T("  * Error: Couldn't create game texture surface.\n"));
 #endif
 		return 1;
 	}
@@ -956,7 +956,7 @@ static int vidCreateEffectsSurfaces()
 
 		if (FAILED(pDD->CreateSurface(&ddsd, &pScanlineTexture[i], NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create scanline texture.\n"));
+			debugPrintf(_T("  * Error: Couldn't create scanline texture.\n"));
 #endif
 			return 1;
 		}
@@ -989,7 +989,7 @@ static int vidCreateEffectsSurfaces()
 
 		if (FAILED(pDD->CreateSurface(&ddsd, &pRGBEffectTexture, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create RGB effects surface.\n"));
+			debugPrintf(_T("  * Error: Couldn't create RGB effects surface.\n"));
 #endif
 			return 1;
 		}
@@ -1194,18 +1194,18 @@ static BOOL PASCAL MyEnumDisplayDrivers(GUID FAR* pGuid, LPSTR pszDesc, LPSTR /*
 	}
 
 	if (nCurrentDriver == 0) {
-		dprintf(_T("    %s\n"), pszDesc);
+		debugPrintf(_T("    %s\n"), pszDesc);
 	} else {
 		MONITORINFOEX mi;
 		mi.cbSize = sizeof(mi);
 
 		GetMonitorInfo(hMonitor, (MONITORINFO*)&mi);
 
-		dprintf(_T("    Display %d (%s on %s"), nCurrentDriver, mi.szDevice, pszDesc);
+		debugPrintf(_T("    Display %d (%s on %s"), nCurrentDriver, mi.szDevice, pszDesc);
 		if (mi.dwFlags & MONITORINFOF_PRIMARY) {
-			dprintf(_T(", primary"));
+			debugPrintf(_T(", primary"));
 		}
-		dprintf(_T(")\n"));
+		debugPrintf(_T(")\n"));
 	}
 
 	nCurrentDriver++;
@@ -1217,7 +1217,7 @@ static BOOL PASCAL MyEnumDisplayDrivers(GUID FAR* pGuid, LPSTR pszDesc, LPSTR /*
 #if 0
 static HRESULT CALLBACK MyEnumDevicesCallback(LPSTR lpDeviceDescription, LPSTR /*lpDeviceName*/, LPD3DDEVICEDESC7, LPVOID)
 {
-	dprintf(_T("    %s\n"), lpDeviceDescription);
+	debugPrintf(_T("    %s\n"), lpDeviceDescription);
 
 	return DDENUMRET_OK;
 }
@@ -1239,7 +1239,7 @@ static int vidInit()
 #if 1 && defined(PRINT_DEBUG_INFO)
 	nCurrentDriver = 0;
 	memset(&MyGuid, 0, sizeof(GUID));
-	dprintf(_T(" ** Enumerating available DirectDraw drivers:\n"));
+	debugPrintf(_T(" ** Enumerating available DirectDraw drivers:\n"));
 	_DirectDrawEnumerateEx(MyEnumDisplayDrivers, NULL, DDENUM_ATTACHEDSECONDARYDEVICES | DDENUM_DETACHEDSECONDARYDEVICES | DDENUM_NONDISPLAYDEVICES);
 #endif
 
@@ -1251,14 +1251,14 @@ static int vidInit()
 	// Get pointer to D3D device
 	if (FAILED(pDD->QueryInterface(IID_IDirect3D7, (void**)&pD3D))) {
 #ifdef PRINT_DEBUG_INFO
-	   	dprintf(_T("  * Error: Couldn't access Direct3D.\n"));
+	   	debugPrintf(_T("  * Error: Couldn't access Direct3D.\n"));
 #endif
 		vidExit();
 		return 1;
 	}
 
 #if 0 && defined(PRINT_DEBUG_INFO)
-	dprintf(_T(" ** Enumerating available 3D devices:\n"));
+	debugPrintf(_T(" ** Enumerating available 3D devices:\n"));
 	pD3D->EnumDevices(MyEnumDevicesCallback, NULL);
 #endif
 
@@ -1343,10 +1343,10 @@ static int vidInit()
 		memset(&ddsCaps2, 0, sizeof(ddsCaps2));
 		ddsCaps2.dwCaps = DDSCAPS_PRIMARYSURFACE;
 
-		dprintf(_T(" ** Starting Direct3D7 blitter.\n"));
+		debugPrintf(_T(" ** Starting Direct3D7 blitter.\n"));
 
 		if (SUCCEEDED(pDD->GetAvailableVidMem(&ddsCaps2, &dwTotal, &dwFree))) {
-			dprintf(_T("  * Initialising video: Total video memory minus display surface: %.2fMB.\n"), (double)dwTotal / (1024 * 1024));
+			debugPrintf(_T("  * Initialising video: Total video memory minus display surface: %.2fMB.\n"), (double)dwTotal / (1024 * 1024));
 		}
 	}
 #endif
@@ -1354,7 +1354,7 @@ static int vidInit()
 	if (bVidTripleBuffer) {
 		if (vidInitBuffers(1)) {				// Try to make triple buffer
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Warning: Couldn't allocate a triple-buffering surface.\n"));
+			debugPrintf(_T("  * Warning: Couldn't allocate a triple-buffering surface.\n"));
 #endif
 		}
 	}
@@ -1365,7 +1365,7 @@ static int vidInit()
 
 	if (pPrimarySurf == NULL) {					// No primary surface, fail
 #ifdef PRINT_DEBUG_INFO
-	   	dprintf(_T("  * Error: Couldn't create primary surface.\n"));
+	   	debugPrintf(_T("  * Error: Couldn't create primary surface.\n"));
 #endif
 		vidExit();
 		return 1;
@@ -1493,26 +1493,26 @@ static int vidInit()
 #ifdef USE_D3D_REFERENCE_DEVICE
 	if (FAILED(pD3D->CreateDevice(IID_IDirect3DRefDevice, pBackbuffer, &pD3DDevice))) {
  #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't access Direct3D Reference device.\n"));
+		debugPrintf(_T("  * Error: Couldn't access Direct3D Reference device.\n"));
  #endif
 		vidExit();
 		return 1;
 	} else {
-		dprintf(_T("  * Using Direct3D Reference device.\n"));
+		debugPrintf(_T("  * Using Direct3D Reference device.\n"));
 	}
 #else
 	if (bUse3DProjection) {
 		if (FAILED(pD3D->CreateDevice(IID_IDirect3DTnLHalDevice, pBackbuffer, &pD3DDevice))) {
 			pD3DDevice = NULL;
  #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Warning: Couldn't get TnL 3D hardware, falling back to software TnL.\n"));
+			debugPrintf(_T("  * Warning: Couldn't get TnL 3D hardware, falling back to software TnL.\n"));
  #endif
 		}
 	}
 	if (pD3DDevice == NULL) {
 		if (FAILED(pD3D->CreateDevice(IID_IDirect3DHALDevice, pBackbuffer, &pD3DDevice))) {
  #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't access 3D hardware.\n"));
+			debugPrintf(_T("  * Error: Couldn't access 3D hardware.\n"));
  #endif
 			vidExit();
 			return 1;
@@ -1529,7 +1529,7 @@ static int vidInit()
 
 #ifdef PRINT_DEBUG_INFO
 	if (!bMultiTexturing) {
-		dprintf(_T("  * Warning: Using fall-back method for rendering scanlines.\n"));
+		debugPrintf(_T("  * Warning: Using fall-back method for rendering scanlines.\n"));
 	}
 #endif
 
@@ -1540,7 +1540,7 @@ static int vidInit()
 
 #ifdef PRINT_DEBUG_INFO
 	if (nScanlineOp != D3DTOP_ADDSMOOTH) {
-		dprintf(_T("  * Warning: Using fall-back method for blending scanlines.\n"));
+		debugPrintf(_T("  * Warning: Using fall-back method for blending scanlines.\n"));
 	}
 #endif
 
@@ -1553,7 +1553,7 @@ static int vidInit()
 	if (nPreScaleEffect) {
 		if (VidSoftFXInit(nPreScaleEffect, 0)) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't initialise software SoftFX.\n"));
+			debugPrintf(_T("  * Error: Couldn't initialise software SoftFX.\n"));
 #endif
 			vidExit();
 			return 1;
@@ -1568,7 +1568,7 @@ static int vidInit()
 
 	if (FAILED(pD3DDevice->SetViewport(&Viewport))) {
 #ifdef PRINT_DEBUG_INFO
-	   	dprintf(_T("  * Error: Couldn't set initial viewport.\n"));
+	   	debugPrintf(_T("  * Error: Couldn't set initial viewport.\n"));
 #endif
 		vidExit();
 		return 1;
@@ -1650,7 +1650,7 @@ static int vidInit()
 
 	if (Update3DScreen()) {
 #ifdef PRINT_DEBUG_INFO
-	   	dprintf(_T("  * Error: Couldn't initialise 3D geometry.\n"));
+	   	debugPrintf(_T("  * Error: Couldn't initialise 3D geometry.\n"));
 #endif
 		vidExit();
 		return 1;
@@ -1678,21 +1678,21 @@ static int vidInit()
 		ddsCaps2.dwCaps = DDSCAPS_PRIMARYSURFACE;
 
 		if (SUCCEEDED(pDD->GetAvailableVidMem(&ddsCaps2, &dwTotal, &dwFree))) {
-			dprintf(_T("  * Initialisation complete: %.2fMB video memory free.\n"), (double)dwFree / (1024 * 1024));
-			dprintf(_T("    Displaying and rendering in %i-bit mode, emulation running in %i-bit mode.\n"), nVidScrnDepth, nVidImageDepth);
+			debugPrintf(_T("  * Initialisation complete: %.2fMB video memory free.\n"), (double)dwFree / (1024 * 1024));
+			debugPrintf(_T("    Displaying and rendering in %i-bit mode, emulation running in %i-bit mode.\n"), nVidScrnDepth, nVidImageDepth);
 			if (nVidFullscreen) {
-				dprintf(_T("    Running in fullscreen mode (%i x %i), "), nVidScrnWidth, nVidScrnHeight);
+				debugPrintf(_T("    Running in fullscreen mode (%i x %i), "), nVidScrnWidth, nVidScrnHeight);
 				if (bUseTriplebuffer) {
-					dprintf(_T("using a triple buffer.\n"));
+					debugPrintf(_T("using a triple buffer.\n"));
 				} else {
 					if (bUsePageflip) {
-						dprintf(_T("using a double buffer.\n"));
+						debugPrintf(_T("using a double buffer.\n"));
 					} else {
-						dprintf(_T("using BltFast() to transfer the final image.\n"));
+						debugPrintf(_T("using BltFast() to transfer the final image.\n"));
 					}
 				}
 			} else {
-				dprintf(_T("    Running in windowed mode, using Blt() to transfer the final image.\n"));
+				debugPrintf(_T("    Running in windowed mode, using Blt() to transfer the final image.\n"));
 			}
 		}
 	}
@@ -2296,7 +2296,7 @@ static int vidFrame(bool bRedraw)			// bRedraw = 0
 	ProfileProfileEnd(2);
 	ProfileProfileEnd(1);
 
-	dprintf(_T("burn %.2lfms; blit %.2lf; effect %.2lf\n"), ProfileProfileReadAverage(0), ProfileProfileReadAverage(1), ProfileProfileReadAverage(2));
+	debugPrintf(_T("burn %.2lfms; blit %.2lf; effect %.2lf\n"), ProfileProfileReadAverage(0), ProfileProfileReadAverage(1), ProfileProfileReadAverage(2));
 #endif
 
 	return 0;

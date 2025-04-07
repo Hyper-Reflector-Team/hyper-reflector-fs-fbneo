@@ -375,12 +375,12 @@ static int dx9SurfaceInit()
 
 	if (FAILED(pD3DDevice->CreateOffscreenPlainSurface(nVidImageWidth, nVidImageHeight, nFormat, D3DPOOL_DEFAULT, &pSurface, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create surface.\n"));
+		debugPrintf(_T("  * Error: Couldn't create surface.\n"));
 #endif
 		return 1;
 	}
 #ifdef PRINT_DEBUG_INFO
-	dprintf(_T("  * Allocated a %i x %i (%s) surface.\n"), nVidImageWidth, nVidImageHeight, TextureFormatString(nFormat));
+	debugPrintf(_T("  * Allocated a %i x %i (%s) surface.\n"), nVidImageWidth, nVidImageHeight, TextureFormatString(nFormat));
 #endif
 
 	nTextureWidth = GetTextureSize(nGameImageWidth);
@@ -388,12 +388,12 @@ static int dx9SurfaceInit()
 
 	if (FAILED(pD3DDevice->CreateTexture(nTextureWidth, nTextureHeight, 1, D3DUSAGE_RENDERTARGET, nFormat, D3DPOOL_DEFAULT, &pTexture, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't create texture.\n"));
+		debugPrintf(_T("  * Error: Couldn't create texture.\n"));
 #endif
 		return 1;
 	}
 #ifdef PRINT_DEBUG_INFO
-	dprintf(_T("  * Allocated a %i x %i (%s) image texture.\n"), nTextureWidth, nTextureHeight, TextureFormatString(nFormat));
+	debugPrintf(_T("  * Allocated a %i x %i (%s) image texture.\n"), nTextureWidth, nTextureHeight, TextureFormatString(nFormat));
 #endif
 
 	return 0;
@@ -427,12 +427,12 @@ static int dx9EffectSurfaceInit()
 
 		if (FAILED(pD3DDevice->CreateTexture(1024, 1, 1, D3DUSAGE_RENDERTARGET, nFormat, D3DPOOL_DEFAULT, &pEffectTexture, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create effects texture.\n"));
+			debugPrintf(_T("  * Error: Couldn't create effects texture.\n"));
 #endif
 			return 1;
 		}
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Allocated a %i x %i (%s) LUT texture.\n"), 1024, 1, TextureFormatString(nFormat));
+		debugPrintf(_T("  * Allocated a %i x %i (%s) LUT texture.\n"), 1024, 1, TextureFormatString(nFormat));
 #endif
 	}
 
@@ -461,12 +461,12 @@ static int dx9EffectSurfaceInit()
 
 		if (FAILED(pD3DDevice->CreateTexture(nIntermediateTextureWidth, nIntermediateTextureHeight, 1, D3DUSAGE_RENDERTARGET, nFormat, D3DPOOL_DEFAULT, &pIntermediateTexture, NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create intermediate texture.\n"));
+			debugPrintf(_T("  * Error: Couldn't create intermediate texture.\n"));
 #endif
 			return 1;
 		}
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Allocated a %i x %i (%s) intermediate texture.\n"), nIntermediateTextureWidth, nIntermediateTextureHeight, TextureFormatString(nFormat));
+		debugPrintf(_T("  * Allocated a %i x %i (%s) intermediate texture.\n"), nIntermediateTextureWidth, nIntermediateTextureHeight, TextureFormatString(nFormat));
 #endif
 	}
 
@@ -506,19 +506,19 @@ static int dx9EffectSurfaceInit()
 
 		if (FAILED(pD3DDevice->CreateTexture(nSize, nSize, 1, D3DUSAGE_DYNAMIC, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &(pScanlineTexture[i]), NULL))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create texture.\n"));
+			debugPrintf(_T("  * Error: Couldn't create texture.\n"));
 #endif
 			return 1;
 		}
 		if (FAILED(pScanlineTexture[i]->GetSurfaceLevel(0, &pSurf))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't get texture surface.\n"));
+			debugPrintf(_T("  * Error: Couldn't get texture surface.\n"));
 #endif
 		}
 
 		if (FAILED(D3DXLoadSurfaceFromMemory(pSurf, NULL, &rect, scandata[i], D3DFMT_X8R8G8B8, nSize * sizeof(int), NULL, &rect, D3DX_FILTER_NONE, 0))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: D3DXLoadSurfaceFromMemory failed.\n"));
+			debugPrintf(_T("  * Error: D3DXLoadSurfaceFromMemory failed.\n"));
 #endif
 		}
 
@@ -624,7 +624,7 @@ int dx9GeometryInit()
 
 			if (FAILED(pVB[y]->Lock(0, 4 * sizeof(D3DLVERTEX2), (void**)&pVertexData, 0))) {
 #ifdef PRINT_DEBUG_INFO
-				dprintf(_T("  * Error: Couldn't create vertex buffer.\n"));
+				debugPrintf(_T("  * Error: Couldn't create vertex buffer.\n"));
 #endif
 				return 1;
 			}
@@ -654,7 +654,7 @@ int dx9GeometryInit()
 
 		if (FAILED(pIntermediateVB->Lock(0, 4 * sizeof(D3DLVERTEX2), (void**)&pVertexData, 0))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create vertex buffer.\n"));
+			debugPrintf(_T("  * Error: Couldn't create vertex buffer.\n"));
 #endif
 			return 1;
 		}
@@ -691,8 +691,8 @@ int dx9EffectInit()
 	if (FAILED(D3DXCreateEffectFromResource(pD3DDevice, NULL, MAKEINTRESOURCE(ID_DX9EFFECT), NULL /* d3dxm */, NULL, D3DXSHADER_ENABLE_BACKWARDS_COMPATIBILITY, NULL, &pEffect, &pErrorBuffer))) {
 #endif
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't compile effect.\n"));
-		dprintf(_T("\n%hs\n\n"), pErrorBuffer->GetBufferPointer());
+		debugPrintf(_T("  * Error: Couldn't compile effect.\n"));
+		debugPrintf(_T("\n%hs\n\n"), pErrorBuffer->GetBufferPointer());
 #endif
 		goto HANDLE_ERROR;
 	}
@@ -745,7 +745,7 @@ int dx9EffectInit()
 	hTechnique = pEffect->GetTechniqueByName(pszTechnique);
 	if (FAILED(pEffect->SetTechnique(hTechnique))) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't set technique.\n"));
+		debugPrintf(_T("  * Error: Couldn't set technique.\n"));
 #endif
 		goto HANDLE_ERROR;
 	}
@@ -762,15 +762,15 @@ int dx9EffectInit()
 		if (FAILED(D3DXCompileShaderFromResource(NULL, MAKEINTRESOURCE(ID_DX9EFFECT), NULL, NULL, (DX9_SHADERPRECISION < 4 && !bUsePS14) ? "genWeightTex20" : "genWeightTex14", "tx_1_0", 0, &pEffectShaderBuffer, &pErrorBuffer, NULL))) {
 #endif
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't compile shader.\n"));
-			dprintf(_T("\n%hs\n\n"), pErrorBuffer->GetBufferPointer());
+			debugPrintf(_T("  * Error: Couldn't compile shader.\n"));
+			debugPrintf(_T("\n%hs\n\n"), pErrorBuffer->GetBufferPointer());
 #endif
 			goto HANDLE_ERROR;
 		}
 
 		if (FAILED(D3DXCreateTextureShader((DWORD*)(pEffectShaderBuffer->GetBufferPointer()), &pEffectShader))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't create texture shader.\n"));
+			debugPrintf(_T("  * Error: Couldn't create texture shader.\n"));
 #endif
 			RELEASE(pEffectShaderBuffer);
 
@@ -814,7 +814,7 @@ static int dx9Init()
 #endif
 
 #ifdef PRINT_DEBUG_INFO
-	dprintf(_T("*** Initialising Direct3D 9 blitter.\n"));
+	debugPrintf(_T("*** Initialising Direct3D 9 blitter.\n"));
 #endif
 
 	hVidWnd = hScrnWnd;								// Use Screen window for video
@@ -828,7 +828,7 @@ static int dx9Init()
 	}
 	if (pD3D == NULL) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("  * Error: Couldn't initialise Direct3D.\n"));
+		debugPrintf(_T("  * Error: Couldn't initialise Direct3D.\n"));
 #endif
 		dx9Exit();
 		return 1;
@@ -1000,14 +1000,14 @@ static int dx9Init()
 
 #ifdef PRINT_DEBUG_INFO
 	{
-		dprintf(_T("  * Initialisation complete: %.2lfMB texture memory free (total).\n"), (double)pD3DDevice->GetAvailableTextureMem() / (1024 * 1024));
-		dprintf(_T("    Displaying and rendering in %i-bit mode, emulation running in %i-bit mode.\n"), nVidScrnDepth, nVidImageDepth);
+		debugPrintf(_T("  * Initialisation complete: %.2lfMB texture memory free (total).\n"), (double)pD3DDevice->GetAvailableTextureMem() / (1024 * 1024));
+		debugPrintf(_T("    Displaying and rendering in %i-bit mode, emulation running in %i-bit mode.\n"), nVidScrnDepth, nVidImageDepth);
 		if (nVidFullscreen) {
-			dprintf(_T("    Running in fullscreen mode (%i x %i), "), nVidScrnWidth, nVidScrnHeight);
-			dprintf(_T("using a %s buffer.\n"), bVidTripleBuffer ? _T("triple") : _T("double"));
+			debugPrintf(_T("    Running in fullscreen mode (%i x %i), "), nVidScrnWidth, nVidScrnHeight);
+			debugPrintf(_T("using a %s buffer.\n"), bVidTripleBuffer ? _T("triple") : _T("double"));
 		}
 		else {
-			dprintf(_T("    Running in windowed mode, using D3DSWAPEFFECT_COPY to present the image.\n"));
+			debugPrintf(_T("    Running in windowed mode, using D3DSWAPEFFECT_COPY to present the image.\n"));
 		}
 	}
 #endif
@@ -1094,7 +1094,7 @@ static int dx9Render()
 
 		if (FAILED(pSurface->LockRect(&lr, NULL, 0))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't lock surface.\n"));
+			debugPrintf(_T("  * Error: Couldn't lock surface.\n"));
 #endif
 			return 1;
 		}
@@ -1123,14 +1123,14 @@ static int dx9Render()
 
 		if (FAILED(pTexture->GetSurfaceLevel(0, &pDest))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't get texture surface.\n"));
+			debugPrintf(_T("  * Error: Couldn't get texture surface.\n"));
 			return 1;
 #endif
 		}
 
 		if (FAILED(pD3DDevice->StretchRect(pSurface, &rect, pDest, &rect, D3DTEXF_NONE))) {
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Error: Couldn't copy image.\n"));
+			debugPrintf(_T("  * Error: Couldn't copy image.\n"));
 #endif
 		}
 

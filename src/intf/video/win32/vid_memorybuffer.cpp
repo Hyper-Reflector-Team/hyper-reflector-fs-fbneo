@@ -13,7 +13,7 @@ bool LoadMemoryBufferFromFile(MemoryBuffer &buffer, const char *file)
 		return true;
 	}
 #ifdef PRINT_DEBUG_INFO
-	dprintf(_T("LoadMemoryBufferFromFile: can't open file %s\n"), ANSIToTCHAR(file,0,0));
+	debugPrintf(_T("LoadMemoryBufferFromFile: can't open file %s\n"), ANSIToTCHAR(file,0,0));
 #endif
 
 	return false;

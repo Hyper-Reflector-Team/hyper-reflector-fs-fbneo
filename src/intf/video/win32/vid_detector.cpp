@@ -19,13 +19,13 @@ bool LoadMemoryBufferDetector(MemoryBuffer &buffer, const char *file, bool force
 {
 	if (force_disk) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("Load DetectorMemoryBuffer from file: %s\n"), ANSIToTCHAR(file,0,0));
+		debugPrintf(_T("Load DetectorMemoryBuffer from file: %s\n"), ANSIToTCHAR(file,0,0));
 #endif
 		return LoadMemoryBufferFromFile(buffer, file);
 	}
 	else {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T("Load DetectorMemoryBuffer from internal buffer: %s\n"), ANSIToTCHAR(file,0,0));
+		debugPrintf(_T("Load DetectorMemoryBuffer from internal buffer: %s\n"), ANSIToTCHAR(file,0,0));
 #endif
 		for (int i = 0; detector_buffers[i].size > 0; i++) {
 			if (!_stricmp(detector_buffers[i].name, file)) {
@@ -35,7 +35,7 @@ bool LoadMemoryBufferDetector(MemoryBuffer &buffer, const char *file, bool force
 		}
 #ifdef PRINT_DEBUG_INFO
 		if (buffer.len == 0) {
-			dprintf(_T("Can't load DetectorMemoryBuffer: %s\n"), ANSIToTCHAR(file,0,0));
+			debugPrintf(_T("Can't load DetectorMemoryBuffer: %s\n"), ANSIToTCHAR(file,0,0));
 		}
 #endif
 		return buffer.len > 0;

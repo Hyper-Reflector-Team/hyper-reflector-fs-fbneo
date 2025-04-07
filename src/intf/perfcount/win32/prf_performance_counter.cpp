@@ -32,7 +32,7 @@ int cntInit()
 	}
 
 #ifdef PRINT_DEBUG_INFO
-   	dprintf(_T("*** PerformanceCounter profiler initialised (timer frequency is %.2lf MHz).\n"), (double)f.QuadPart / 1000000.0);
+   	debugPrintf(_T("*** PerformanceCounter profiler initialised (timer frequency is %.2lf MHz).\n"), (double)f.QuadPart / 1000000.0);
 #endif
 
 	return 0;

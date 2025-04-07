@@ -37,8 +37,8 @@ int VidEffect::Load(const char *_filename)
   if (FAILED(D3DXCreateEffectFromFile(mD3DDevice, filename, NULL, NULL, D3DXSHADER_ENABLE_BACKWARDS_COMPATIBILITY, NULL, &mEffect, &mErrorBuffer)))
   {
     if (mErrorBuffer) {
-      dprintf(_T("  * Error: Couldn't compile effect.\n"));
-      dprintf(_T("\n%hs\n\n"), mErrorBuffer->GetBufferPointer());
+      debugPrintf(_T("  * Error: Couldn't compile effect.\n"));
+      debugPrintf(_T("\n%hs\n\n"), mErrorBuffer->GetBufferPointer());
     }
     return 1;
   }

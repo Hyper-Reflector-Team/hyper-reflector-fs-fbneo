@@ -268,9 +268,9 @@ static BOOL PASCAL MyEnumDisplayDrivers(GUID FAR* pGuid, LPSTR pszDesc, LPSTR /*
 	}
 
 	if (nCurrentDriver == 0) {
-		dprintf(_T("    %s\n"), pszDesc);
+		debugPrintf(_T("    %s\n"), pszDesc);
 	} else {
-		dprintf(_T("    Display %d (on %s)\n"), nCurrentDriver, pszDesc);
+		debugPrintf(_T("    Display %d (on %s)\n"), nCurrentDriver, pszDesc);
 	}
 
 	nCurrentDriver++;
@@ -284,7 +284,7 @@ static int vidInit()
 	hVidWnd = hScrnWnd;								// Use Screen window for video
 
 #ifdef PRINT_DEBUG_INFO
-	dprintf(_T("  * Enumerating available drivers:\n"));
+	debugPrintf(_T("  * Enumerating available drivers:\n"));
 	nWantDriver = 0;
 	nCurrentDriver = 0;
 	_DirectDrawEnumerateEx(MyEnumDisplayDrivers, NULL, DDENUM_ATTACHEDSECONDARYDEVICES | DDENUM_DETACHEDSECONDARYDEVICES | DDENUM_NONDISPLAYDEVICES);
@@ -370,18 +370,18 @@ static int vidInit()
 		memset(&ddsCaps2, 0, sizeof(ddsCaps2));
 		ddsCaps2.dwCaps = DDSCAPS_PRIMARYSURFACE;
 
-		dprintf(_T(" ** Starting DirectDraw7 blitter.\n"));
+		debugPrintf(_T(" ** Starting DirectDraw7 blitter.\n"));
 
 		if (SUCCEEDED(DtoDD->GetAvailableVidMem(&ddsCaps2, &dwTotal, &dwFree))) {
-			dprintf(_T("  * Initialising video: Total video memory minus display surface: %.2fMB.\n"), (double)dwTotal / (1024 * 1024));
+			debugPrintf(_T("  * Initialising video: Total video memory minus display surface: %.2fMB.\n"), (double)dwTotal / (1024 * 1024));
 		}
 
 		if (bDrvOkay) {
 			if (BurnDrvGetFlags() & BDF_ORIENTATION_FLIPPED) {
 				if (nRotateGame & 2) {
-					dprintf(_T("  * Using graphics hardware to rotate the image 180 degrees.\n"));
+					debugPrintf(_T("  * Using graphics hardware to rotate the image 180 degrees.\n"));
 				} else {
-					dprintf(_T("  * Warning: Graphics hardware does not support mirroring blits.\n    Image orientation will be incorrect.\n"));
+					debugPrintf(_T("  * Warning: Graphics hardware does not support mirroring blits.\n    Image orientation will be incorrect.\n"));
 				}
 			}
 		}
@@ -392,7 +392,7 @@ static int vidInit()
 		if (DtoPrimInit(1)) {			// Try to make triple buffer
 
 #ifdef PRINT_DEBUG_INFO
-			dprintf(_T("  * Warning: Couldn't allocate a triple-buffering surface.\n"));
+			debugPrintf(_T("  * Warning: Couldn't allocate a triple-buffering surface.\n"));
 #endif
 
 			// If we fail, fail entirely and make a normal buffer
@@ -404,7 +404,7 @@ static int vidInit()
 		// No primary surface yet, so try normal
 		if (DtoPrimInit(0)) {
 #ifdef PRINT_DEBUG_INFO
-	   	dprintf(_T("  * Error: Couldn't create primary surface.\n"));
+	   	debugPrintf(_T("  * Error: Couldn't create primary surface.\n"));
 #endif
 
 			vidExit();
@@ -436,21 +436,21 @@ static int vidInit()
 		ddsCaps2.dwCaps = DDSCAPS_PRIMARYSURFACE;
 
 		if (SUCCEEDED(DtoDD->GetAvailableVidMem(&ddsCaps2, &dwTotal, &dwFree))) {
-			dprintf(_T("  * Initialisation complete: %.2fMB video memory free.\n"), (double)dwFree / (1024 * 1024));
-			dprintf(_T("    Displaying and rendering in %i-bit mode, emulation running in %i-bit mode.\n"), nVidScrnDepth, nVidImageDepth);
+			debugPrintf(_T("  * Initialisation complete: %.2fMB video memory free.\n"), (double)dwFree / (1024 * 1024));
+			debugPrintf(_T("    Displaying and rendering in %i-bit mode, emulation running in %i-bit mode.\n"), nVidScrnDepth, nVidImageDepth);
 			if (nUseSys) {
-				dprintf(_T("    Blitting directly from system memory.\n"));
+				debugPrintf(_T("    Blitting directly from system memory.\n"));
 			} else {
-				dprintf(_T("    Transferring the image to video memory before blitting.\n"));
+				debugPrintf(_T("    Transferring the image to video memory before blitting.\n"));
 			}
 			if (nVidFullscreen) {
-				dprintf(_T("    Running in fullscreen mode (%i x %i)"), nVidScrnWidth, nVidScrnHeight);
+				debugPrintf(_T("    Running in fullscreen mode (%i x %i)"), nVidScrnWidth, nVidScrnHeight);
 				if (DtoBack != NULL) {
-					dprintf(_T(", using a triple buffer"));
+					debugPrintf(_T(", using a triple buffer"));
 				}
-				dprintf(_T(".\n"));
+				debugPrintf(_T(".\n"));
 			} else {
-				dprintf(_T("    Running in windowed mode.\n"));
+				debugPrintf(_T("    Running in windowed mode.\n"));
 			}
 		}
 	}

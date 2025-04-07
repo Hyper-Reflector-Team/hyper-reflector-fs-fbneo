@@ -71,8 +71,8 @@ int AppDirectory()
 	_tcsncpy(szPath, szCmd, nLen);
 	SetCurrentDirectory(szPath);		// Finally set the current directory to be the application's directory
 
-	dprintf(szPath);
-	dprintf(_T("\n"));
+	debugPrintf(szPath);
+	debugPrintf(_T("\n"));
 
 	return 0;
 }
@@ -271,7 +271,7 @@ void EnableHighResolutionTiming()
 
 	if (bEnableHighResTimer) {
 #ifdef PRINT_DEBUG_INFO
-		dprintf(_T(" ** Enabling High-Resolution system timer.\n"));
+		debugPrintf(_T(" ** Enabling High-Resolution system timer.\n"));
 #endif
 
 		if (timeGetDevCaps(&hTCaps, sizeof(hTCaps)) == TIMERR_NOERROR) {

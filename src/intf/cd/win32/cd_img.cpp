@@ -194,7 +194,7 @@ static int cdimgParseSubFile()
 		 !IsFileExt(filename_sub, _T(".img")) &&
 		 !IsFileExt(filename_sub, _T(".sub"))))
 	{
-		dprintf(_T("*** Bad image: %s\n"), filename_sub);
+		debugPrintf(_T("*** Bad image: %s\n"), filename_sub);
 		return 1;
 	}
 
@@ -203,7 +203,7 @@ static int cdimgParseSubFile()
 	//bprintf(0, _T("Image file: %s\n"),cdimgTOC->Image);
 	if (_waccess(cdimgTOC->Image, 4) == -1)
 	{
-		dprintf(_T("*** Bad image: %s\n"), cdimgTOC->Image);
+		debugPrintf(_T("*** Bad image: %s\n"), cdimgTOC->Image);
 		return 1;
 	}
 
@@ -212,7 +212,7 @@ static int cdimgParseSubFile()
 	h = _wfopen(filename_sub, _T("rb"));
 	if (h == 0)
 	{
-		dprintf(_T("*** Bad image: %s\n"), filename_sub);
+		debugPrintf(_T("*** Bad image: %s\n"), filename_sub);
 		return 1;
 	}
 
@@ -248,7 +248,7 @@ static int cdimgParseSubFile()
 			track = bcd(Q->track);
 
 			if (track == track_linear) {
-				//dprintf(_T("  - Track %i found starting at %02X:%02X:%02X\n"), track, Q->MSFabs.M, Q->MSFabs.S, Q->MSFabs.F);
+				//debugPrintf(_T("  - Track %i found starting at %02X:%02X:%02X\n"), track, Q->MSFabs.M, Q->MSFabs.S, Q->MSFabs.F);
 				//bprintf(0, _T("              contrl: %X  track %X(%d)   indx %X\n"),Q->Control,Q->track,track,Q->index);
 
 				cdimgTOC->TrackData[track - 1].Control = Q->Control; // >> 4;
@@ -470,7 +470,7 @@ static int cdimgInit()
 	{
 		if (cdimgParseCueFile())
 		{
-			dprintf(_T("*** Couldn't parse .cue file\n"));
+			debugPrintf(_T("*** Couldn't parse .cue file\n"));
 			cdimgExit();
 
 			return 1;
@@ -481,7 +481,7 @@ static int cdimgInit()
 	{
 		if (cdimgParseSubFile())
 		{
-			dprintf(_T("*** Couldn't parse .sub file\n"));
+			debugPrintf(_T("*** Couldn't parse .sub file\n"));
 			cdimgExit();
 
 			return 1;
@@ -490,7 +490,7 @@ static int cdimgInit()
 	}
 	else
 	{
-		dprintf(_T("*** Couldn't find .img / .bin file\n"));
+		debugPrintf(_T("*** Couldn't find .img / .bin file\n"));
 		cdimgExit();
 
 		return 1;
@@ -518,7 +518,7 @@ static int cdimgInit()
 						/* BurnDrvFindMedium(buf + 40); */
 					}
 					else
-						dprintf(_T("*** Bad CD!\n"));
+						debugPrintf(_T("*** Bad CD!\n"));
 				}
 			}
 
@@ -605,7 +605,7 @@ static int cdimgPlay(UINT8 M, UINT8 S, UINT8 F)
 	const UINT8 address[] = { 0, M, S, F };
 
 	const UINT8* displayaddress = dinkLBAToMSF(cdimgMSFToLBA(address));
-	dprintf(_T("    play %02i:%02i:%02i\n"), displayaddress[1], displayaddress[2], displayaddress[3]);
+	debugPrintf(_T("    play %02i:%02i:%02i\n"), displayaddress[1], displayaddress[2], displayaddress[3]);
 
 	return cdimgPlayLBA(cdimgMSFToLBA(address));
 }
@@ -629,7 +629,7 @@ static int cdimgLoadSector(int LBA, char* pBuffer)
 
 		if (fseek(cdimgFile, (LBA - cd_pregap) * 2352, SEEK_SET))
 		{
-			dprintf(_T("*** couldn't seek (LBA %08u)\n"), LBA);
+			debugPrintf(_T("*** couldn't seek (LBA %08u)\n"), LBA);
 
 			//cdimgStop(); // stopping here will break ssrpg
 
@@ -639,7 +639,7 @@ static int cdimgLoadSector(int LBA, char* pBuffer)
 		CDEmuStatus = reading;
 	}
 
-	//dprintf(_T("    reading LBA %08i 0x%08X"), LBA, ftell(cdimgFile));
+	//debugPrintf(_T("    reading LBA %08i 0x%08X"), LBA, ftell(cdimgFile));
 
 	cdimgLBA = cdimgMSFToLBA(cdimgTOC->TrackData[0].Address) + (ftell(cdimgFile) + 2351) / 2352 - cd_pregap;
 
@@ -647,13 +647,13 @@ static int cdimgLoadSector(int LBA, char* pBuffer)
 
 	if (status)
 	{
-		dprintf(_T("*** couldn't read from file\n"));
+		debugPrintf(_T("*** couldn't read from file\n"));
 
 		cdimgStop();
 
 		return 0;
 	}
-	// dprintf(_T("    [ %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X ]\n"), pBuffer[0], pBuffer[1], pBuffer[2], pBuffer[3], pBuffer[4], pBuffer[5], pBuffer[6], pBuffer[7], pBuffer[8], pBuffer[9], pBuffer[10], pBuffer[11], pBuffer[12], pBuffer[13], pBuffer[14], pBuffer[15]);
+	// debugPrintf(_T("    [ %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X ]\n"), pBuffer[0], pBuffer[1], pBuffer[2], pBuffer[3], pBuffer[4], pBuffer[5], pBuffer[6], pBuffer[7], pBuffer[8], pBuffer[9], pBuffer[10], pBuffer[11], pBuffer[12], pBuffer[13], pBuffer[14], pBuffer[15]);
 
 	cdimgLBA++;
 
@@ -720,7 +720,7 @@ static UINT8* cdimgReadTOC(int track)
 		TOCEntry[3] = cdimgTOC->TrackData[track - 1].Control >> 4;
 	}
 
-	// dprintf(_T("    track %02i - %02x:%02x:%02x\n"), track, TOCEntry[0], TOCEntry[1], TOCEntry[2]);
+	// debugPrintf(_T("    track %02i - %02x:%02x:%02x\n"), track, TOCEntry[0], TOCEntry[1], TOCEntry[2]);
 
 	return TOCEntry;
 }
@@ -768,7 +768,7 @@ static UINT8* cdimgReadQChannel()
 				QChannelData[7] = cdimgTOC->TrackData[cdimgTrack].Control;
 			}
 
-			// dprintf(_T("    Q %02x %02x %02x:%02x:%02x %02x:%02x:%02x\n"), QChannel[cdimgLBA].track, QChannel[cdimgLBA].index, QChannel[cdimgLBA].MSFrel.M, QChannel[cdimgLBA].MSFrel.S, QChannel[cdimgLBA].MSFrel.F, QChannel[cdimgLBA].MSFabs.M, QChannel[cdimgLBA].MSFabs.S, QChannel[cdimgLBA].MSFabs.F);
+			// debugPrintf(_T("    Q %02x %02x %02x:%02x:%02x %02x:%02x:%02x\n"), QChannel[cdimgLBA].track, QChannel[cdimgLBA].index, QChannel[cdimgLBA].MSFrel.M, QChannel[cdimgLBA].MSFrel.S, QChannel[cdimgLBA].MSFrel.F, QChannel[cdimgLBA].MSFabs.M, QChannel[cdimgLBA].MSFabs.S, QChannel[cdimgLBA].MSFabs.F);
 
 			break;
 		}
@@ -807,10 +807,10 @@ static int cdimgGetSoundBuffer(short* buffer, int samples)
 	extern int counter;
 	if (counter) {
 		const UINT8* displayaddress = dinkLBAToMSF(cdimgLBA);
-		dprintf(_T("  index  %02i:%02i:%02i"), displayaddress[1], displayaddress[2], displayaddress[3]);
+		debugPrintf(_T("  index  %02i:%02i:%02i"), displayaddress[1], displayaddress[2], displayaddress[3]);
 		INT32 endt = cdimgMSFToLBA(cdimgTOC->TrackData[cdimgTrack + 1 /* next track */].Address);
 		const UINT8* displayaddressend = dinkLBAToMSF(endt);
-		dprintf(_T("    end  %02i:%02i:%02i\n"), displayaddressend[1], displayaddressend[2], displayaddressend[3]);
+		debugPrintf(_T("    end  %02i:%02i:%02i\n"), displayaddressend[1], displayaddressend[2], displayaddressend[3]);
 	}
 #endif
 

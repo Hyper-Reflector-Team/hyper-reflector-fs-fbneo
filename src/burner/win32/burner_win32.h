@@ -83,7 +83,7 @@ INT32 DDCore_Init();
          break;
 
 // Macro used for re-initialiging video/sound/input
-// #define POST_INITIALISE_MESSAGE { dprintf(_T("*** (re-) initialising - %s %i\n"), _T(__FILE__), __LINE__); PostMessage(NULL, WM_APP + 0, 0, 0); }
+// #define POST_INITIALISE_MESSAGE { debugPrintf(_T("*** (re-) initialising - %s %i\n"), _T(__FILE__), __LINE__); PostMessage(NULL, WM_APP + 0, 0, 0); }
 #define POST_INITIALISE_MESSAGE PostMessage(NULL, WM_APP + 0, 0, 0)
 
 // ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ char *utf8_from_wstring(const WCHAR *s);
 #define utf8_from_tstring utf8_from_astring
 #endif // _UNICODE
 
-int dprintf(TCHAR* pszFormat, ...);					// Use instead of printf() in the UI
+int debugPrintf(TCHAR* pszFormat, ...);					// Use instead of printf() in the UI
 
 void MonitorAutoCheck();
 

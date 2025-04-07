@@ -2366,7 +2366,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lP
 					TvItem.mask = TVIF_PARAM | TVIF_STATE | TVIF_CHILDREN;
 					SendMessage(hSelList, TVM_GETITEM, 0, (LPARAM)&TvItem);
 
-//					dprintf(_T("  - Item (%i×%i) - (%i×%i) %hs\n"), lplvcd->nmcd.rc.left, lplvcd->nmcd.rc.top, lplvcd->nmcd.rc.right, lplvcd->nmcd.rc.bottom, ((NODEINFO*)TvItem.lParam)->pszROMName);
+//					debugPrintf(_T("  - Item (%i×%i) - (%i×%i) %hs\n"), lplvcd->nmcd.rc.left, lplvcd->nmcd.rc.top, lplvcd->nmcd.rc.right, lplvcd->nmcd.rc.bottom, ((NODEINFO*)TvItem.lParam)->pszROMName);
 
 					// Set the foreground and background colours unless the item is highlighted
 					if (!(TvItem.state & (TVIS_SELECTED | TVIS_DROPHILITED))) {

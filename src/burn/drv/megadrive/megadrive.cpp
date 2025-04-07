@@ -646,7 +646,7 @@ static UINT32 CheckDMA(void)
   }
 
   //elprintf(EL_VDPDMA, "~Dma %i op=%i can=%i burn=%i [%i]", Pico.m.dma_xfers, dma_op1, xfers_can, burn, SekCyclesDone());
-  //dprintf("~aim: %i, cnt: %i", SekCycleAim, SekCycleCnt);
+  //debugPrintf("~aim: %i, cnt: %i", SekCycleAim, SekCycleCnt);
   //bprintf(0, _T("burn[%d]"), burn);
   return burn;
 }
@@ -669,7 +669,7 @@ static void DmaSlow(INT32 len)
 	source |= RamVReg->reg[0x16] <<  9;
 	source |= RamVReg->reg[0x17] << 17;
 
-  //dprintf("DmaSlow[%i] %06x->%04x len %i inc=%i blank %i [%i|%i]", Pico.video.type, source, a, len, inc,
+  //debugPrintf("DmaSlow[%i] %06x->%04x len %i inc=%i blank %i [%i|%i]", Pico.video.type, source, a, len, inc,
   //         (Pico.video.status&8)||!(Pico.video.reg[1]&0x40), Pico.m.scanline, SekCyclesDone());
 
 	dma_xfers += len;
@@ -719,7 +719,7 @@ static void DmaSlow(INT32 len)
 		break;
 
 	case 3: // cram
-		//dprintf("DmaSlow[%i] %06x->%04x len %i inc=%i blank %i [%i|%i]", Pico.video.type, source, a, len, inc,
+		//debugPrintf("DmaSlow[%i] %06x->%04x len %i inc=%i blank %i [%i|%i]", Pico.video.type, source, a, len, inc,
 		//         (Pico.video.status&8)||!(Pico.video.reg[1]&0x40), Pico.m.scanline, SekCyclesDone());
 		for(a2 = a&0x7f; len; len--) {
 			if (psolarmode && fromrom) {
@@ -773,7 +773,7 @@ static void DmaCopy(INT32 len)
 	UINT8 inc = RamVReg->reg[0xf];
 	INT32 source;
 
-	//dprintf("DmaCopy len %i [%i|%i]", len, Pico.m.scanline, SekCyclesDone());
+	//debugPrintf("DmaCopy len %i [%i|%i]", len, Pico.m.scanline, SekCyclesDone());
 
 	RamVReg->status |= 2; // dma busy
 	dma_xfers += len;
@@ -804,7 +804,7 @@ static void DmaFill(INT32 data)
 	UINT16 a = RamVReg->addr;
 	UINT8 inc = RamVReg->reg[0xf];
 
-	//dprintf("DmaFill len %i inc %i [%i|%i]", len, inc, Pico.m.scanline, SekCyclesDone());
+	//debugPrintf("DmaFill len %i inc %i [%i|%i]", len, inc, Pico.m.scanline, SekCyclesDone());
 
 	// from Charles MacDonald's genvdp.txt:
 	// Write lower byte to address specified
@@ -843,7 +843,7 @@ static void CommandChange()
 	addr  = (cmd >> 16) & 0x3fff;
 	addr |= (cmd << 14) & 0xc000;
 	RamVReg->addr = (UINT16)addr;
-	//dprintf("addr set: %04x", addr);
+	//debugPrintf("addr set: %04x", addr);
 
 	// Check for dma:
 	if (cmd & 0x80) {
@@ -1048,14 +1048,14 @@ static void __fastcall MegadriveVideoWriteWord(UINT32 sekAddress, UINT16 wordVal
             	break;
 			case 3:
 				//Pico.m.dirtyPal = 1;
-				//dprintf("w[%i] @ %04x, inc=%i [%i|%i]", Pico.video.type, a, Pico.video.reg[0xf], Pico.m.scanline, SekCyclesDone());
+				//debugPrintf("w[%i] @ %04x, inc=%i [%i|%i]", Pico.video.type, a, Pico.video.reg[0xf], Pico.m.scanline, SekCyclesDone());
 				CalcCol((RamVReg->addr >> 1) & 0x003f, wordValue);
 				break;
 			case 5:
 				RamSVid[(RamVReg->addr >> 1) & 0x003f] = BURN_ENDIAN_SWAP_INT16(wordValue);
 				break;
 			}
-			//dprintf("w[%i] @ %04x, inc=%i [%i|%i]", Pico.video.type, a, Pico.video.reg[0xf], Pico.m.scanline, SekCyclesDone());
+			//debugPrintf("w[%i] @ %04x, inc=%i [%i|%i]", Pico.video.type, a, Pico.video.reg[0xf], Pico.m.scanline, SekCyclesDone());
 			//AutoIncrement();
 			RamVReg->addr += RamVReg->reg[0xf];
 		}
@@ -4279,7 +4279,7 @@ static void DrawAllSprites(INT32 *hcache, INT32 maxwidth, INT32 prio, INT32 sh)
 		return;
 	}
 	if(rs&0x11) {
-		//dprintf("PrepareSprites(%i) [%i]", (rs>>4)&1, scan);
+		//debugPrintf("PrepareSprites(%i) [%i]", (rs>>4)&1, scan);
 		PrepareSprites(rs&0x10);
 		rendstatus=rs&~0x11;
 	}
@@ -4308,7 +4308,7 @@ static void DrawAllSprites(INT32 *hcache, INT32 maxwidth, INT32 prio, INT32 sh)
 		sy = (pack <<16)>>16;
 		row = scan-sy;
 
-		//dprintf("x: %i y: %i %ix%i", sx, sy, (pack>>28)<<3, (pack>>21)&0x38);
+		//debugPrintf("x: %i y: %i %ix%i", sx, sy, (pack>>28)<<3, (pack>>21)&0x38);
 
 		if(sx == -0x77) sx1seen |= 1; // for masking mode 2
 
@@ -4341,7 +4341,7 @@ static void DrawAllSprites(INT32 *hcache, INT32 maxwidth, INT32 prio, INT32 sh)
 		}
 
 		// accurate sprites
-		//dprintf("P:%i",((sx>>15)&1));
+		//debugPrintf("P:%i",((sx>>15)&1));
 		if(rs&4) {
 			// might need to skip this sprite
 			if((pack2&0x8000) ^ (prio<<15)) continue;

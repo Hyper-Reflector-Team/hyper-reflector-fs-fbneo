@@ -68,12 +68,12 @@ int NetworkInitInput()
 
 //#if defined FBA_DEBUG
 #if 1
-	dprintf(_T("  * Network inputs configured as follows --\n"));
+	debugPrintf(_T("  * Network inputs configured as follows --\n"));
 	for (int j = 0; j < MAXPLAYER; j++) {
-		dprintf(_T("    p%d offset %d, inputs %d.\n"), j + 1, nPlayerOffset[j], nPlayerInputs[j]);
+		debugPrintf(_T("    p%d offset %d, inputs %d.\n"), j + 1, nPlayerOffset[j], nPlayerInputs[j]);
 	}
-	dprintf(_T("    common offset %d, inputs %d.\n"), nConstOffsets, nConstInputs);
-	dprintf(_T("    dip offset %d, inputs %d.\n"), nDIPOffset, nDIPInputs);
+	debugPrintf(_T("    common offset %d, inputs %d.\n"), nConstOffsets, nConstInputs);
+	debugPrintf(_T("    dip offset %d, inputs %d.\n"), nDIPOffset, nDIPInputs);
 #endif
 
 	return 0;

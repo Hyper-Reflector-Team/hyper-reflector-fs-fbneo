@@ -32,7 +32,7 @@ static int FBAPopupLog()
 			break;
 	}
 
-	dprintf(_T("*** %s message:\n"), pszTypeEnglish);
+	debugPrintf(_T("*** %s message:\n"), pszTypeEnglish);
 
 	for (TCHAR* szText = pszBufferEnglish; ; ) {
 		int nLen;
@@ -42,7 +42,7 @@ static int FBAPopupLog()
 		if (nLen) {
 			TCHAR szFormat[16];
 			_stprintf(szFormat, _T("    %%.%is\n"), nLen);
-			dprintf(szFormat, szText);
+			debugPrintf(szFormat, szText);
 		}
 
 		if (!szText[nLen]) {

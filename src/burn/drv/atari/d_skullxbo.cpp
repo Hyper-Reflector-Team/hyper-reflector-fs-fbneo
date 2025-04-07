@@ -10,7 +10,7 @@
 #include "atarijsa.h"
 
 #define DEBUG_TXT 0
-#define dprintf(...) do { if (DEBUG_TXT) { bprintf(__VA_ARGS__); }} while (0)
+#define debugPrintf(...) do { if (DEBUG_TXT) { bprintf(__VA_ARGS__); }} while (0)
 
 static UINT8 *AllMem;
 static UINT8 *MemEnd;
@@ -123,7 +123,7 @@ static void __fastcall skullxbo_main_write_word(UINT32 address, UINT16 data)
 	}
 
 	if ((address & 0xfff800) == 0xff0000) {
-		dprintf(0, _T("--moset bank.w %X. (line %d)\n"), address, scanline);
+		debugPrintf(0, _T("--moset bank.w %X. (line %d)\n"), address, scanline);
 		//partial_update();
 		atarimo_set_bank(0, (address >> 10) & 1);
 		mobank = (address >> 10) & 1;
@@ -168,7 +168,7 @@ static void __fastcall skullxbo_main_write_word(UINT32 address, UINT16 data)
 		GenericTilemapSetScrollX(0, scrollx);
 		atarimo_set_xscroll(0, scrollx);
 		scrollx_raw = data;
-		dprintf(0, _T("scrollX.w %d   (line: %d)\n"), scrollx, scanline);
+		debugPrintf(0, _T("scrollX.w %d   (line: %d)\n"), scrollx, scanline);
 		return;
 	}
 
@@ -192,7 +192,7 @@ static void __fastcall skullxbo_main_write_word(UINT32 address, UINT16 data)
 		GenericTilemapSetScrollY(0, scrolly);
 		atarimo_set_yscroll(0, scrolly);
 		scrolly_raw = data;
-		dprintf(0, _T("scrollY.w %d   (line: %d)\n"), scrolly, line);
+		debugPrintf(0, _T("scrollY.w %d   (line: %d)\n"), scrolly, line);
 		return;
 	}
 
@@ -222,7 +222,7 @@ static void __fastcall skullxbo_main_write_byte(UINT32 address, UINT8 data)
 	}
 
 	if ((address & 0xfff800) == 0xff0000) {
-		dprintf(0, _T("--moset bank.b %X. (line %d)\n"), address, scanline);
+		debugPrintf(0, _T("--moset bank.b %X. (line %d)\n"), address, scanline);
 		//partial_update();
 		atarimo_set_bank(0, (address >> 10) & 1);
 		mobank = (address >> 10) & 1;
@@ -261,7 +261,7 @@ static void __fastcall skullxbo_main_write_byte(UINT32 address, UINT8 data)
 	}
 
 	if ((address & 0xff1d80) == 0xff1c80) {
-		dprintf(0, _T("wb xscrollx??? %X\n"), data);
+		debugPrintf(0, _T("wb xscrollx??? %X\n"), data);
 		// scrollx
 		return;
 	}
@@ -278,7 +278,7 @@ static void __fastcall skullxbo_main_write_byte(UINT32 address, UINT8 data)
 	}
 
 	if ((address & 0xfff800) == 0xff4000) {
-		dprintf(0, _T("wb yscrolly??? %X\n"), data);
+		debugPrintf(0, _T("wb yscrolly??? %X\n"), data);
 		INT32 line = (scanline > nScreenHeight) ? 0 : scanline;
 		scrolly = (data >> 7) - line;
 		return;
@@ -622,7 +622,7 @@ static void copy_sprites()
 {
 	//INT32 minx, maxx, miny, maxy;
 	//GenericTilesGetClip(&minx, &maxx, &miny, &maxy);
-	//dprintf(0, _T("numrecs: %d\n"), rectlist.numrects);
+	//debugPrintf(0, _T("numrecs: %d\n"), rectlist.numrects);
 
 	for (INT32 r = 0; r < rectlist.numrects; r++, rectlist.rect++)
 	{
@@ -670,7 +670,7 @@ static void DrvDrawBegin()
 		DrvRecalc = 1; // force!!
 	}
 
-	dprintf(2, _T("             --  new frame  --\n"));
+	debugPrintf(2, _T("             --  new frame  --\n"));
 
 	lastline = 0;
 
@@ -683,7 +683,7 @@ static void partial_update()
 
 	if (scanline < 0 || scanline > nScreenHeight || scanline == lastline || lastline > scanline) return;
 
-	dprintf(0, _T("%07d: partial %d - %d.    scrollx %d   scrolly %d\n"), nCurrentFrame, lastline, scanline, scrollx, scrolly);
+	debugPrintf(0, _T("%07d: partial %d - %d.    scrollx %d   scrolly %d\n"), nCurrentFrame, lastline, scanline, scrollx, scrolly);
 
 	GenericTilesSetClip(0, nScreenWidth, lastline, scanline);
 	AtariMoRender(0, &rectlist);
@@ -721,7 +721,7 @@ static void skullxbo_scanline_update()
 
 	if (scanline == 0)
 	{
-		dprintf(0, _T("scrollY_set.A at line 0: %d\n"), scrolly);
+		debugPrintf(0, _T("scrollY_set.A at line 0: %d\n"), scrolly);
 
 		GenericTilemapSetScrollY(0, scrolly);
 		atarimo_set_yscroll(0, scrolly);
@@ -738,7 +738,7 @@ static void skullxbo_scanline_update()
 				//partial_update(); // causes trouble in cutscene-transitions
 			}
 			scrolly = ((data >> 7) - (scanline - 8)) & 0x1ff;
-			dprintf(0, _T("scrollY_set.B at line %d: %d\n"), scanline, scrolly);
+			debugPrintf(0, _T("scrollY_set.B at line %d: %d\n"), scanline, scrolly);
 			scrolly_raw = data;
 
 			if (scanline == 0 || scanline == 8) {
@@ -823,7 +823,7 @@ static INT32 DrvFrame()
 		cpu_halted = 0;
 
 		if (scanline >= 0 && scanline == do_scanline_irq) { // 6th
-			dprintf(0, _T("-->scanline irq @ line %d.\n"), scanline);
+			debugPrintf(0, _T("-->scanline irq @ line %d.\n"), scanline);
 			scanline+=2;
 			partial_update();
 

@@ -325,7 +325,7 @@ static INT32 img_process(IMAGE* img, UINT32 width, UINT32 height, INT32 /*preset
 	// Control the radius of the blur based on sharpness and image reduction
 	double b = presetdata[preset].sharpness / (8.0 * ratio);
 
-//	dprintf(_T("    %3ix%3i -> %3ix%3i %0.4lf %0.4lf\n"), img->width, img->height, sized_img.width, sized_img.height, ratio, b);
+//	debugPrintf(_T("    %3ix%3i -> %3ix%3i %0.4lf %0.4lf\n"), img->width, img->height, sized_img.width, sized_img.height, ratio, b);
 	if (b > 1.5) { b = 1.5; }
 	b = pow(b, 2.0);
 

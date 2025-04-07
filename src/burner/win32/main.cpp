@@ -328,7 +328,7 @@ static int __cdecl AppDebugPrintf(int nStatus, TCHAR* pszFormat, ...)
 }
 #endif
 
-int dprintf(TCHAR* pszFormat, ...)
+int debugPrintf(TCHAR* pszFormat, ...)
 {
 #if defined (FBNEO_DEBUG)
 	va_list vaFormat;
