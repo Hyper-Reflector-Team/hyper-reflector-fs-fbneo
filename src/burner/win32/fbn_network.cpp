@@ -2,10 +2,15 @@
 
 const int MAXPLAYER = 4;
 
-// This is how we are deciding offsets for the inputs.
-// Each frame we are going to send inputs for all players, but only one of them is actually filled out.
-static int nPlayerInputs[MAXPLAYER], nCommonInputs, nDIPInputs;
-static int nPlayerOffset[MAXPLAYER], nCommonOffset, nDIPOffset;
+// The counts of each type of input.
+static int nPlayerInputs[MAXPLAYER];
+static int nConstInputs;
+static int nDIPInputs;
+
+// The offsets into the arrays as accessed by: BurnDrvGetInputInfo(i) where the types of inputs are located.
+static int nPlayerOffset[MAXPLAYER];
+static int nConstOffsets;
+static int nDIPOffset;
 
 const int INPUTSIZE = 8 * (4 + 8);				// We are assuming a max of eight bytes of input for up to 12 players.
 static unsigned char nControls[INPUTSIZE];
@@ -51,12 +56,12 @@ int NetworkInitInput()
 		nPlayerInputs[j] = i - nPlayerOffset[j];
 	}
 
-	nCommonOffset = i;
+	nConstOffsets = i;
 	while ((bii.nType & BIT_GROUP_CONSTANT) == 0 && i < nGameInpCount){
 		i++;
 		BurnDrvGetInputInfo(&bii, i);
 	};
-	nCommonInputs = i - nCommonOffset;
+	nConstInputs = i - nConstOffsets;
 
 	nDIPOffset = i;
 	nDIPInputs = nGameInpCount - nDIPOffset;
@@ -67,7 +72,7 @@ int NetworkInitInput()
 	for (int j = 0; j < MAXPLAYER; j++) {
 		dprintf(_T("    p%d offset %d, inputs %d.\n"), j + 1, nPlayerOffset[j], nPlayerInputs[j]);
 	}
-	dprintf(_T("    common offset %d, inputs %d.\n"), nCommonOffset, nCommonInputs);
+	dprintf(_T("    common offset %d, inputs %d.\n"), nConstOffsets, nConstInputs);
 	dprintf(_T("    dip offset %d, inputs %d.\n"), nDIPOffset, nDIPInputs);
 #endif
 
@@ -91,8 +96,8 @@ int NetworkGetInput()
 			nControls[j >> 3] |= (1 << (j & 7));
 		}
 	}
-	for (i = 0; i < nCommonInputs; i++, j++) {
-		BurnDrvGetInputInfo(&bii, i + nCommonOffset);
+	for (i = 0; i < nConstInputs; i++, j++) {
+		BurnDrvGetInputInfo(&bii, i + nConstOffsets);
 		bool allow_reset = !strcmp(BurnDrvGetTextA(DRV_NAME), "sf2hf") && kNetVersion >= NET_VERSION_RESET_SF2HF;
 		bool can_tilt = !kNetGame || strcmp(bii.szName, "Tilt");
 		bool can_reset = !kNetGame || VidOverlayCanReset() || (strcmp(bii.szName, "Reset") && strcmp(bii.szName, "Diagnostic") && strcmp(bii.szName, "Service") && strcmp(bii.szName, "Test")) || allow_reset;
@@ -146,8 +151,8 @@ int NetworkGetInput()
 			}
 		}
 	}
-	for (i = 0; i < nCommonInputs; i++, j++) {
-		BurnDrvGetInputInfo(&bii, i + nCommonOffset);
+	for (i = 0; i < nConstInputs; i++, j++) {
+		BurnDrvGetInputInfo(&bii, i + nConstOffsets);
 		if (nControls[j >> 3] & (1 << (j & 7))) {
 			*bii.pVal = 0x01;
 		} else {
@@ -187,10 +192,10 @@ int NetworkGetInput()
 				}
 			}
 
-			for (i = 0; i < nCommonInputs; i++, j++) {
+			for (i = 0; i < nConstInputs; i++, j++) {
 #if 0
 				// Allow other players to use common inputs
-				BurnDrvGetInputInfo(&bii, i + nCommonOffset);
+				BurnDrvGetInputInfo(&bii, i + nConstOffsets);
 				if (nControls[j >> 3] & (1 << (j & 7))) {
 					*bii.pVal |= 0x01;
 				}
