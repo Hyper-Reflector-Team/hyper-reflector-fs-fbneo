@@ -57,7 +57,7 @@ int NetworkInitInput()
 	}
 
 	nConstOffsets = i;
-	while ((bii.nType & BIT_GROUP_CONSTANT) == 0 && i < nGameInpCount){
+	while ((bii.nType & BIT_GROUP_CONSTANT) == 0 && i < nGameInpCount) {
 		i++;
 		BurnDrvGetInputInfo(&bii, i);
 	};
@@ -66,15 +66,17 @@ int NetworkInitInput()
 	nDIPOffset = i;
 	nDIPInputs = nGameInpCount - nDIPOffset;
 
-//#if defined FBA_DEBUG
-#if 1
+	// NOTE: All of the above code is making big assumptions about where the data actually is.
+	// Granted the conventions of the driver defs in FBNEO support this, but it is still a bad
+	// practice.  New input system will resolve this for us.
+
+
 	debugPrintf(_T("  * Network inputs configured as follows --\n"));
 	for (int j = 0; j < MAXPLAYER; j++) {
 		debugPrintf(_T("    p%d offset %d, inputs %d.\n"), j + 1, nPlayerOffset[j], nPlayerInputs[j]);
 	}
 	debugPrintf(_T("    common offset %d, inputs %d.\n"), nConstOffsets, nConstInputs);
 	debugPrintf(_T("    dip offset %d, inputs %d.\n"), nDIPOffset, nDIPInputs);
-#endif
 
 	return 0;
 }
@@ -116,7 +118,8 @@ int NetworkGetInput()
 			if (bii.nType & BIT_GROUP_ANALOG) {
 				nControls[j++] = *bii.pShortVal >> 8;
 				nControls[j++] = *bii.pShortVal & 0xFF;
-			} else {
+			}
+			else {
 				nControls[j++] = *bii.pVal;
 			}
 		}
@@ -146,7 +149,8 @@ int NetworkGetInput()
 		if (bii.nType == BIT_DIGITAL) {
 			if (nControls[j >> 3] & (1 << (j & 7))) {
 				*bii.pVal = 0x01;
-			} else {
+			}
+			else {
 				*bii.pVal = 0x00;
 			}
 		}
@@ -155,7 +159,8 @@ int NetworkGetInput()
 		BurnDrvGetInputInfo(&bii, i + nConstOffsets);
 		if (nControls[j >> 3] & (1 << (j & 7))) {
 			*bii.pVal = 0x01;
-		} else {
+		}
+		else {
 			*bii.pVal = 0x00;
 		}
 	}
@@ -178,7 +183,7 @@ int NetworkGetInput()
 		*bii.pVal = nControls[j];
 	}
 
-   // Decode other player's input blocks
+	// Decode other player's input blocks
 	for (int l = 1; l < MAXPLAYER; l++) {
 		if (nPlayerInputs[l]) {
 			for (i = 0, j = k * (l << 3); i < nPlayerInputs[l]; i++, j++) {
@@ -186,7 +191,8 @@ int NetworkGetInput()
 				if (bii.nType == BIT_DIGITAL) {
 					if (nControls[j >> 3] & (1 << (j & 7))) {
 						*bii.pVal = 0x01;
-					} else {
+					}
+					else {
 						*bii.pVal = 0x00;
 					}
 				}
@@ -216,7 +222,7 @@ int NetworkGetInput()
 				}
 			}
 
-// TEST if this is needed for both players?
+			// TEST if this is needed for both players?
 #if 1
 			// For a DIP switch to be set to 1, ALL players must set it
 			for (i = 0; i < nDIPInputs; i++, j++) {
@@ -226,6 +232,6 @@ int NetworkGetInput()
 #endif
 		}
 	}
-	
+
 	return 0;
 }
