@@ -94,6 +94,7 @@ int NetworkGetInput()
 	// Pack all DIP switches + common controls + Player 1 controls.
 	for (i = 0, j = 0; i < nPlayerInputs[0]; i++, j++) {
 		BurnDrvGetInputInfo(&bii, i + nPlayerOffset[0]);
+		UINT jIndex = j >> 3;
 		if (*bii.pVal && bii.nType == BIT_DIGITAL) {
 			nControls[j >> 3] |= (1 << (j & 7));
 		}
@@ -111,7 +112,8 @@ int NetworkGetInput()
 	// Convert j to byte count (>> 3 == / 8)
 	j = (j + 7) >> 3;
 
-	// Analog controls/constants
+	// Analog controls/constants.
+	// These also get one byte each, which makes sense because they need to encode more data.
 	for (i = 0; i < nPlayerInputs[0]; i++) {
 		BurnDrvGetInputInfo(&bii, i + nPlayerOffset[0]);
 		if (*bii.pVal && bii.nType != BIT_DIGITAL) {
@@ -125,7 +127,9 @@ int NetworkGetInput()
 		}
 	}
 
-	// DIP switches
+	// DIP switches		-- For some reason, DIP switches each get a full byte, but everything else gets a bit....
+	// Seems like these could also be backed into bits, but maybe we don't because the offset it unclear,
+	// and there are relatively few DIPS for any given game....
 	for (i = 0; i < nDIPInputs; i++, j++) {
 		BurnDrvGetInputInfo(&bii, i + nDIPOffset);
 		nControls[j] = *bii.pVal;
@@ -185,6 +189,7 @@ int NetworkGetInput()
 
 	// Decode other player's input blocks
 	for (int l = 1; l < MAXPLAYER; l++) {
+		// Only decode if there is a player for this game.
 		if (nPlayerInputs[l]) {
 			for (i = 0, j = k * (l << 3); i < nPlayerInputs[l]; i++, j++) {
 				BurnDrvGetInputInfo(&bii, i + nPlayerOffset[l]);

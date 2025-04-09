@@ -691,17 +691,16 @@ void QuarkRunIdle(int ms)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-bool QuarkGetInput(void *values, int size, int playerIndex)
+bool QuarkGetInput(void *values, int isize, int playerIndex)
 {
-	//ggpo_add_local_input(ggpo, playerIndex, values, size);
+	//ggpo_add_local_input(ggpo, playerIndex, values, isize);
 
 	// NOTE: Playercount is being used to set buffer sizes, etc. in the FC-GGPO lib....
 	// This is also where the local + sync inputs are going.....
 	// NOTE: I don't think that we need to send 'playercount' anymore.....
 
 	// NOTE: This call is handling both the addition of the local inputs, and the sync call....
-	int playerCount = 4;
-	bool res = ggpo_synchronize_input(ggpo, values, size, playerCount) == GGPO_OK;
+	bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
 	return res;
 }
 

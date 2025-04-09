@@ -23,15 +23,15 @@ GameInput::init(int iframe, char *ibits, int isize, int offset)
 }
 
 void
-GameInput::init(int iframe, char *ibits, int isize)
+GameInput::init(int iframe, char *values, int isize)
 {
    ASSERT(isize);
    ASSERT(isize <= GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS);
    frame = iframe;
    size = isize;
    memset(bits, 0, sizeof(bits));
-   if (ibits) {
-      memcpy(bits, ibits, isize);
+   if (values) {
+      memcpy(bits, values, isize);
    }
 }
 

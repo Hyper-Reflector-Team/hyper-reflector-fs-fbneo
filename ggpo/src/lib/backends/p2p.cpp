@@ -10,7 +10,10 @@
 
  // TEMP:  Using assumed player and input sizes for now.
 static const uint16 PLAYER_COUNT = 4;
-static const uint16 INPUT_SIZE = 20;
+
+// NOTE: This is the input size that 3s uses.  We should not have a hard-coded way of doing this,
+// or we should actually probably just change the way we do the asserts....
+static const uint16 INPUT_SIZE = 5;
 
 
 static const int RECOMMENDATION_INTERVAL = 240;
@@ -319,10 +322,9 @@ Peer2PeerBackend::AddPlayer(GGPOPlayer* player,
 // -------------------------------------------------------------------------------------------------------------------
 // NOTE: We already know what our player index is so we don't have to pass it in.
 // That could be different if we had two local players, but we can figure that out later....
-GGPOErrorCode Peer2PeerBackend::AddLocalInput(uint16 playerIndex, void* values, int size) {
+GGPOErrorCode Peer2PeerBackend::AddLocalInput(uint16 playerIndex, void* values, int isize) {
 
 	GameInput input;
-	// GGPOErrorCode result;
 
 	if (_sync.InRollback()) {
 		return GGPO_ERRORCODE_IN_ROLLBACK;
@@ -331,12 +333,7 @@ GGPOErrorCode Peer2PeerBackend::AddLocalInput(uint16 playerIndex, void* values, 
 		return GGPO_ERRORCODE_NOT_SYNCHRONIZED;
 	}
 
-	//result = PlayerHandleToQueue(player, &queue);
-	//if (!GGPO_SUCCEEDED(result)) {
-	//	return result;
-	//}
-
-	input.init(-1, (char*)values, size);
+	input.init(-1, (char*)values, isize);
 
 	// Feed the input for the current frame into the synchronzation layer.
 	if (!_sync.AddLocalInput(playerIndex, input)) {
@@ -363,21 +360,21 @@ GGPOErrorCode Peer2PeerBackend::AddLocalInput(uint16 playerIndex, void* values, 
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-GGPOErrorCode Peer2PeerBackend::SyncInput(void* values, int size, int playerCount) {
+GGPOErrorCode Peer2PeerBackend::SyncInput(void* values, int isize, int playerCount) {
 	// Wait until we've started to return inputs.
 	if (_synchronizing) {
 		return GGPO_ERRORCODE_NOT_SYNCHRONIZED;
 	}
 
 	// TODO: Check for error + return code.....
-	GGPOErrorCode code = AddLocalInput(_PlayerIndex, values, size);
+	GGPOErrorCode code = AddLocalInput(_PlayerIndex, values, isize);
 	if (code != GGPO_OK) {
 		return code;
 	}
 
 	// NOTE: We aren't doing anything with the flags... I think the system is probably using the event codes
 	// to handle this kind of thing......
-	_sync.SynchronizeInputs(values, size);
+	_sync.SynchronizeInputs(values, isize * playerCount);
 
 	// The disconnect flags tell us who isn't connected anymore....   
 	//if (disconnect_flags) {
@@ -433,6 +430,7 @@ Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpProtocol::Event& evt, int queue)
 	switch (evt.type) {
 	case UdpProtocol::Event::Input:
 		if (!_local_connect_status[queue].disconnected) {
+
 			int current_remote_frame = _local_connect_status[queue].last_frame;
 			int new_remote_frame = evt.u.input.input.frame;
 			ASSERT(current_remote_frame == -1 || new_remote_frame == (current_remote_frame + 1));

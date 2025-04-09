@@ -8,7 +8,10 @@
 #ifndef _BITVECTOR_H
 #define _BITVECTOR_H
 
-#define BITVECTOR_NIBBLE_SIZE 8
+// This functionally defined the total number of possible bits.
+// Anything that is < (2 ^ BITVECTOR_NIBBLE_SIZE) is acceptable.
+// Seems kind of arbitrary, but I'm sure there is a reason.... maybe some weird optimization....
+static const size_t BITVECTOR_NIBBLE_SIZE = 8;
 
 void BitVector_SetBit(uint8 *vector, int *offset);
 void BitVector_ClearBit(uint8 *vector, int *offset);
