@@ -15,7 +15,7 @@
  // 2^BITVECTOR_NIBBLE_SIZE (see bitvector.h)
 
 static const uint16 GAMEINPUT_MAX_BYTES = 7;
-static const uint16 GAMEINPUT_MAX_PLAYERS = 4;
+static const uint16 GAMEINPUT_MAX_PLAYERS = 4;		// NOTE: This probably need to be 2?
 
 struct GameInput {
 	enum Constants {

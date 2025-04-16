@@ -43,7 +43,7 @@ extern "C" {
 
 	typedef struct GGPOSession GGPOSession;
 
-	typedef int GGPOPlayerHandle;
+	typedef uint16 GGPOPlayerHandle;
 
 	typedef enum {
 		GGPO_PLAYERTYPE_LOCAL,
@@ -78,7 +78,7 @@ extern "C" {
 	typedef struct GGPOPlayer {
 		int               size;
 		GGPOPlayerType    type;
-		int               player_num;
+		uint16            player_num;			// TODO: Convert to zero-based index.
 		union {
 			struct {
 			} local;

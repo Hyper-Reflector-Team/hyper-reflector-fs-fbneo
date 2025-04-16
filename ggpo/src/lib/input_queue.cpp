@@ -192,8 +192,7 @@ InputQueue::AddInput(GameInput &input)
     * These next two lines simply verify that inputs are passed in 
     * sequentially by the user, regardless of frame delay.
     */
-   ASSERT(_last_user_added_frame == GameInput::NullFrame ||
-          input.frame == _last_user_added_frame + 1);
+   ASSERT(_last_user_added_frame == GameInput::NullFrame || input.frame == _last_user_added_frame + 1);
    _last_user_added_frame = input.frame;
 
    /*

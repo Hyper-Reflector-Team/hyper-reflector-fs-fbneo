@@ -41,10 +41,9 @@ protected:
 
    // [OBSOLETE]
    // NOTE: Having special functions to add / minus some number to an index will be removed.
-   // It is a bit extra especially since we won't support spectators on the P2P backend.
-   GGPOPlayerHandle QueueToPlayerHandle(int queue) { return (GGPOPlayerHandle)(queue + 1); }
+   GGPOPlayerHandle QueueToPlayerHandle(uint16 playerIndex) { return playerIndex; }
    GGPOPlayerHandle QueueToSpectatorHandle(int queue) { return (GGPOPlayerHandle)(queue + 1000); } /* out of range of the player array, basically */
-   void DisconnectPlayerQueue(int queue, int syncto);
+   void DisconnectPlayerQueue(uint16 queue, int syncto);
    void PollSyncEvents(void);
    void PollUdpProtocolEvents(void);
    void CheckInitialSync(void);
@@ -53,9 +52,9 @@ protected:
    void AddRemotePlayer(char *remoteip, uint16 reportport, int queue);
    GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
    virtual void OnSyncEvent(Sync::Event &e) { }
-   virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, GGPOPlayerHandle handle);
-   virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, int queue);
-   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, int queue);
+   virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, uint16 playerIndex);
+   virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, uint16 queue);
+   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, uint16 queue);
 
 protected:
    GGPOSessionCallbacks  _callbacks;
