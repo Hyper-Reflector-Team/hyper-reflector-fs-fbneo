@@ -1584,7 +1584,9 @@
       <Message>Doing Custom Stuff!</Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>XCOPY "$(SolutionDir)$(Configuration)\$(TargetName)$(TargetExt)" "../../build" /Y /D</Command>
+      <Command>if not exist "..\..\build" ( mkdir "..\..\build" )
+
+XCOPY "$(SolutionDir)$(Configuration)\$(TargetName)$(TargetExt)" "../../build" /Y /D</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Make sure ui/ folder + data is available.</Message>
