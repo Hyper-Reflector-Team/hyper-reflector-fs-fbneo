@@ -51,7 +51,7 @@ public:
          struct {
             int         disconnect_timeout;
          } network_interrupted;
-      } u;
+      } u;			// REFACTOR: Rename this to 'data'
 
       UdpProtocol::Event(Type t = Unknown) : type(t) { }
    };

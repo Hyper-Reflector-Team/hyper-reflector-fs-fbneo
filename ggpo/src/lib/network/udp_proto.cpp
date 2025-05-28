@@ -80,7 +80,7 @@ UdpProtocol::Init(Udp* udp,
   do {
     _magic_number = (uint16)rand();
   } while (_magic_number == 0);
-  poll.RegisterLoop(this);
+  poll.RegisterLoopSink(this);
 }
 
 void
@@ -282,8 +282,8 @@ UdpProtocol::SendMsg(UdpMsg* msg)
   _last_send_time = Platform::GetCurrentTimeMS();
   _bytes_sent += msg->PacketSize();
 
-  msg->hdr.magic = _magic_number;
-  msg->hdr.sequence_number = _next_send_seq++;
+  msg->header.magic = _magic_number;
+  msg->header.sequence_number = _next_send_seq++;
 
   _send_queue.push(QueueEntry(Platform::GetCurrentTimeMS(), _peer_addr, msg));
   PumpSendQueue();
@@ -304,7 +304,10 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
 {
   bool handled = false;
   typedef bool (UdpProtocol::* DispatchFn)(UdpMsg* msg, int len);
-  static const DispatchFn table[] = {
+
+  // NOTE:  A table of function pointers is used so that the values from UdpMsg::MsgType
+  // can be used to index into this.
+  static const DispatchFn msgHandlers[] = {
      &UdpProtocol::OnInvalid,             /* Invalid */
      &UdpProtocol::OnSyncRequest,         /* SyncRequest */
      &UdpProtocol::OnSyncReply,           /* SyncReply */
@@ -316,10 +319,10 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
   };
 
   // filter out messages that don't match what we expect
-  uint16 seq = msg->hdr.sequence_number;
-  if (msg->hdr.type != UdpMsg::SyncRequest &&
-    msg->hdr.type != UdpMsg::SyncReply) {
-    if (msg->hdr.magic != _remote_magic_number) {
+  uint16 seq = msg->header.sequence_number;
+  if (msg->header.type != UdpMsg::SyncRequest &&
+    msg->header.type != UdpMsg::SyncReply) {
+    if (msg->header.magic != _remote_magic_number) {
       LogMsg("recv rejecting", msg);
       return;
     }
@@ -335,11 +338,11 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
 
   _next_recv_seq = seq;
   LogMsg("recv", msg);
-  if (msg->hdr.type >= ARRAY_SIZE(table)) {
+  if (msg->header.type >= ARRAY_SIZE(msgHandlers)) {
     OnInvalid(msg, len);
   }
   else {
-    handled = (this->*(table[msg->hdr.type]))(msg, len);
+    handled = (this->*(msgHandlers[msg->header.type]))(msg, len);
   }
   if (handled) {
     _last_recv_time = Platform::GetCurrentTimeMS();
@@ -419,7 +422,7 @@ UdpProtocol::Log(const char* fmt, ...)
 void
 UdpProtocol::LogMsg(const char* prefix, UdpMsg* msg)
 {
-  switch (msg->hdr.type) {
+  switch (msg->header.type) {
   case UdpMsg::SyncRequest:
     Log("%s sync-request (%d).\n", prefix,
       msg->u.sync_request.random_request);
@@ -468,9 +471,9 @@ UdpProtocol::OnInvalid(UdpMsg* msg, int len)
 bool
 UdpProtocol::OnSyncRequest(UdpMsg* msg, int len)
 {
-  if (_remote_magic_number != 0 && msg->hdr.magic != _remote_magic_number) {
+  if (_remote_magic_number != 0 && msg->header.magic != _remote_magic_number) {
     Log("Ignoring sync request from unknown endpoint (%d != %d).\n",
-      msg->hdr.magic, _remote_magic_number);
+      msg->header.magic, _remote_magic_number);
     return false;
   }
   UdpMsg* reply = new UdpMsg(UdpMsg::SyncReply);
@@ -484,7 +487,7 @@ UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
 {
   if (_current_state != Syncing) {
     Log("Ignoring SyncReply while not synching.\n");
-    return msg->hdr.magic == _remote_magic_number;
+    return msg->header.magic == _remote_magic_number;
   }
 
   if (msg->u.sync_reply.random_reply != _state.sync.random) {
@@ -504,7 +507,7 @@ UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
     QueueEvent(UdpProtocol::Event(UdpProtocol::Event::Synchronzied));
     _current_state = Running;
     _last_received_input.frame = -1;
-    _remote_magic_number = msg->hdr.magic;
+    _remote_magic_number = msg->header.magic;
   }
   else {
     UdpProtocol::Event evt(UdpProtocol::Event::Synchronizing);
@@ -733,7 +736,7 @@ UdpProtocol::PumpSendQueue()
     }
     if (_oop_percent && !_oo_packet.msg && ((rand() % 100) < _oop_percent)) {
       int delay = rand() % (_send_latency * 10 + 1000);
-      Log("creating rogue oop (seq: %d  delay: %d)\n", entry.msg->hdr.sequence_number, delay);
+      Log("creating rogue oop (seq: %d  delay: %d)\n", entry.msg->header.sequence_number, delay);
       _oo_packet.send_time = Platform::GetCurrentTimeMS() + delay;
       _oo_packet.msg = entry.msg;
       _oo_packet.dest_addr = entry.dest_addr;

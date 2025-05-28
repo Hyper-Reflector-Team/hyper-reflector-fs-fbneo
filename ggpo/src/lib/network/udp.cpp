@@ -51,12 +51,12 @@ Udp::~Udp(void)
    }
 }
 
-void Udp::Init(uint16 port, PollManager *poll, Callbacks *callbacks)
+void Udp::Init(uint16 port, PollManager *pollMgr, Callbacks *callbacks)
 {
    _callbacks = callbacks;
 
-   _poll = poll;
-   _poll->RegisterLoop(this);
+   _pollMgr = pollMgr;
+   _pollMgr->RegisterLoopSink(this);
 
    Log("binding udp socket to port %d.\n", port);
    _socket = CreateSocket(port, 0);

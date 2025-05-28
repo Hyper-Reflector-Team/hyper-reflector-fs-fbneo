@@ -27,9 +27,9 @@ class PollManager {
 public:
 	PollManager(void);
 	void RegisterHandle(IPollSink* sink, HANDLE h, void* cookie = NULL);
-	void RegisterMsgLoop(IPollSink* sink, void* cookie = NULL);
-	void RegisterPeriodic(IPollSink* sink, int interval, void* cookie = NULL);
-	void RegisterLoop(IPollSink* sink, void* cookie = NULL);
+	void RegisterMsgSink(IPollSink* sink, void* cookie = NULL);
+	void RegisterPeriodicSink(IPollSink* sink, int interval, void* cookie = NULL);
+	void RegisterLoopSink(IPollSink* sink, void* cookie = NULL);
 
 	void Run();
 	bool Pump(int timeout);

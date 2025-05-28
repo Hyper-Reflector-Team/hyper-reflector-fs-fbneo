@@ -28,25 +28,30 @@ PollManager::RegisterHandle(IPollSink* sink, HANDLE h, void* cookie)
 	_handle_count++;
 }
 
+// ------------------------------------------------------------------------------------------------------------------
 // NOTE: Not used...
-void PollManager::RegisterMsgLoop(IPollSink* sink, void* cookie)
+void PollManager::RegisterMsgSink(IPollSink* sink, void* cookie)
 {
 	_msg_sinks.push_back(PollSinkCallback(sink, cookie));
 }
 
+// ------------------------------------------------------------------------------------------------------------------
 // NOTE: Not used...
-void PollManager::RegisterPeriodic(IPollSink* sink, int interval, void* cookie)
+void PollManager::RegisterPeriodicSink(IPollSink* sink, int interval, void* cookie)
 {
 	_periodic_sinks.push_back(PollPeriodicSinkCallback(sink, cookie, interval));
 }
 
-void PollManager::RegisterLoop(IPollSink* sink, void* cookie)
+// ------------------------------------------------------------------------------------------------------------------
+void PollManager::RegisterLoopSink(IPollSink* sink, void* cookie)
 {
 	_loop_sinks.push_back(PollSinkCallback(sink, cookie));
 }
 
 
 // ------------------------------------------------------------------------------------------------------------------
+// OBSOLETE: Running the pump like this will just make everything super slow....
+// Not really sure what the purpose of this might be....
 void PollManager::Run()
 {
 	while (Pump(100)) {

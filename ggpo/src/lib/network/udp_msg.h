@@ -34,8 +34,8 @@ struct UdpMsg
    struct {
       uint16         magic;
       uint16         sequence_number;
-      uint8          type;            /* packet type */
-   } hdr;
+      uint8          type;            /* packet type.  Corresponds to: 'MsgType' enum */
+   } header;
    union {
       struct {
          uint32      random_request;  /* please reply back with this random data */
@@ -77,13 +77,13 @@ struct UdpMsg
 
 public:
    int PacketSize() {
-      return sizeof(hdr) + PayloadSize();
+      return sizeof(header) + PayloadSize();
    }
 
    int PayloadSize() {
       int size;
 
-      switch (hdr.type) {
+      switch (header.type) {
       case SyncRequest:   return sizeof(u.sync_request);
       case SyncReply:     return sizeof(u.sync_reply);
       case QualityReport: return sizeof(u.quality_report);
@@ -101,7 +101,7 @@ public:
       return 0;
    }
 
-   UdpMsg(MsgType t) { hdr.type = (uint8)t; }
+   UdpMsg(MsgType t) { header.type = (uint8)t; }
 };
 
 #pragma pack(pop)

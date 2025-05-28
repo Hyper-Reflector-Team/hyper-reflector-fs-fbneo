@@ -28,12 +28,12 @@ SpectatorBackend::SpectatorBackend(GGPOSessionCallbacks *cb,
    /*
     * Initialize the UDP port
     */
-   _udp.Init(localport, &_poll, this);
+   _udp.Init(localport, &_pollMgr, this);
 
    /*
     * Init the host endpoint
     */
-   _host.Init(&_udp, _poll, 0, hostip, hostport, NULL);
+   _host.Init(&_udp, _pollMgr, 0, hostip, hostport, NULL);
    _host.Synchronize();
 
    /*
@@ -49,7 +49,7 @@ SpectatorBackend::~SpectatorBackend()
 GGPOErrorCode
 SpectatorBackend::DoPoll(int timeout)
 {
-   _poll.Pump(0);
+   _pollMgr.Pump(0);
 
    PollUdpProtocolEvents();
    return GGPO_OK;

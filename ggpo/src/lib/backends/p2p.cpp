@@ -63,7 +63,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
 	/*
 	 * Initialize the UDP port
 	 */
-	_udp.Init(localport, &_poll, this);
+	_udp.Init(localport, &_pollMgr, this);
 
 	_endpoints = new UdpProtocol[_num_players];
 	memset(_local_connect_status, 0, sizeof(_local_connect_status));
@@ -125,7 +125,7 @@ Peer2PeerBackend::AddRemotePlayer(char* ip,
 	 */
 	_synchronizing = true;
 
-	_endpoints[queue].Init(&_udp, _poll, queue, ip, port, _local_connect_status);
+	_endpoints[queue].Init(&_udp, _pollMgr, queue, ip, port, _local_connect_status);
 	_endpoints[queue].SetDisconnectTimeout(_disconnect_timeout);
 	_endpoints[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
 	_endpoints[queue].Synchronize();
@@ -145,7 +145,7 @@ GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip,
 	}
 	int queue = _num_spectators++;
 
-	_spectators[queue].Init(&_udp, _poll, queue + 1000, ip, port, _local_connect_status);
+	_spectators[queue].Init(&_udp, _pollMgr, queue + 1000, ip, port, _local_connect_status);
 	_spectators[queue].SetDisconnectTimeout(_disconnect_timeout);
 	_spectators[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
 	_spectators[queue].Synchronize();
@@ -156,7 +156,7 @@ GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip,
 GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
 {
 	if (!_sync.InRollback()) {
-		_poll.Pump(0);
+		_pollMgr.Pump(0);
 
 		PollUdpProtocolEvents();
 
