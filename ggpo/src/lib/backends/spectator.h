@@ -46,7 +46,7 @@ protected:
 
 protected:
    GGPOSessionCallbacks  _callbacks;
-   Poll                  _poll;
+   PollManager                  _poll;
    Udp                   _udp;
    UdpProtocol           _host;
    bool                  _synchronizing;

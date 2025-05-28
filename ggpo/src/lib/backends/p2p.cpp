@@ -153,8 +153,7 @@ GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip,
 	return GGPO_OK;
 }
 
-GGPOErrorCode
-Peer2PeerBackend::DoPoll(int timeout)
+GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
 {
 	if (!_sync.InRollback()) {
 		_poll.Pump(0);

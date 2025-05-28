@@ -51,8 +51,7 @@ Udp::~Udp(void)
    }
 }
 
-void
-Udp::Init(uint16 port, Poll *poll, Callbacks *callbacks)
+void Udp::Init(uint16 port, PollManager *poll, Callbacks *callbacks)
 {
    _callbacks = callbacks;
 
@@ -78,8 +77,8 @@ Udp::SendTo(char *buffer, int len, int flags, struct sockaddr *dst, int destlen)
    Log("sent packet length %d to %s:%d (ret:%d).\n", len, inet_ntop(AF_INET, (void *)&to->sin_addr, dst_ip, ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res);
 }
 
-bool
-Udp::OnLoopPoll(void *cookie)
+// ----------------------------------------------------------------------------------------------------------
+bool Udp::OnLoopPoll(void *cookie)
 {
    uint8          recv_buf[MAX_UDP_PACKET_SIZE];
    sockaddr_in    recv_addr;

@@ -95,6 +95,8 @@ public:
          size += (u.input.num_bits + 7) / 8;
          return size;
       }
+
+	  // lol, and ASSERT(false) instead of throwing on default, lol.
       ASSERT(false);
       return 0;
    }

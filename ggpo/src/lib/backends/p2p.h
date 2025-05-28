@@ -58,10 +58,12 @@ protected:
 
 protected:
    GGPOSessionCallbacks  _callbacks;
-   Poll                  _poll;
+   PollManager           _poll;
    Sync                  _sync;
    Udp                   _udp;
    UdpProtocol           *_endpoints;
+
+   // NOTE: Spectators will likely be removed from this backend...
    UdpProtocol           _spectators[GGPO_MAX_SPECTATORS];
    int                   _num_spectators;
    int                   _input_size;

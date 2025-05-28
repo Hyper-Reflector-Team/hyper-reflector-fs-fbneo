@@ -11,20 +11,20 @@
 extern "C" {
 #endif
 
-typedef enum {
-   GGPOCLIENT_GAMEEVENT_STARTING                     = 6000,
-   GGPOCLIENT_GAMEEVENT_PLAYER_1                     = 6002,
-   GGPOCLIENT_GAMEEVENT_PLAYER_2                     = 6003,
-   GGPOCLIENT_GAMEEVENT_PLAYER_3                     = 6004,
-   GGPOCLIENT_GAMEEVENT_PLAYER_4                     = 6005,
-   GGPOCLIENT_GAMEEVENT_PLAYER_1_SCORE               = 6006,
-   GGPOCLIENT_GAMEEVENT_PLAYER_2_SCORE               = 6007,
-   GGPOCLIENT_GAMEEVENT_PLAYER_3_SCORE               = 6008,
-   GGPOCLIENT_GAMEEVENT_PLAYER_4_SCORE               = 6009,
-   GGPOCLIENT_GAMEEVENT_WINNER                       = 6010,
-   GGPOCLIENT_GAMEEVENT_FINISHED                     = 6011,
-   GGPOCLIENT_GAMEEVENT_LAST
-} GGPOClientGameEventType;
+//typedef enum {
+//   GGPOCLIENT_GAMEEVENT_STARTING                     = 6000,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_1                     = 6002,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_2                     = 6003,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_3                     = 6004,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_4                     = 6005,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_1_SCORE               = 6006,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_2_SCORE               = 6007,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_3_SCORE               = 6008,
+//   GGPOCLIENT_GAMEEVENT_PLAYER_4_SCORE               = 6009,
+//   GGPOCLIENT_GAMEEVENT_WINNER                       = 6010,
+//   GGPOCLIENT_GAMEEVENT_FINISHED                     = 6011,
+//   GGPOCLIENT_GAMEEVENT_LAST
+//} GGPOClientGameEventType;
 
 
 typedef enum {
@@ -45,11 +45,13 @@ ggpo_is_client_eventcode(int code)
    return code >= GGPOCLIENT_EVENTCODE_FIRST && code <= GGPOCLIENT_EVENTCODE_LAST;
 }
 
-static inline bool
-ggpo_is_client_gameevent(int code)
-{
-   return code >= GGPOCLIENT_GAMEEVENT_STARTING && code <= GGPOCLIENT_GAMEEVENT_LAST;
-}
+// OBSOLETE:
+// This was marked as deprecated, so I am removing it and the enum as well.
+//static inline bool
+//ggpo_is_client_gameevent(int code)
+//{
+//   return code >= GGPOCLIENT_GAMEEVENT_STARTING && code <= GGPOCLIENT_GAMEEVENT_LAST;
+//}
 
 typedef struct {
    GGPOClientEventCode code;

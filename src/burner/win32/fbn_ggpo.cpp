@@ -143,20 +143,20 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent *info)
 	return true;
 }
 
-bool __cdecl ggpo_on_client_game_callback(GGPOClientEvent *info)
-{
-	// DEPRECATED
-	return true;
-}
+//bool __cdecl ggpo_on_client_game_callback(GGPOClientEvent *info)
+//{
+//	// DEPRECATED
+//	return true;
+//}
 
 bool __cdecl ggpo_on_event_callback(GGPOEvent *info)
 {
 	if (ggpo_is_client_eventcode(info->code)) {
 		return ggpo_on_client_event_callback((GGPOClientEvent *)info);
 	}
-	if (ggpo_is_client_gameevent(info->code)) {
-		return ggpo_on_client_game_callback((GGPOClientEvent *)info);
-	}
+	//if (ggpo_is_client_gameevent(info->code)) {
+	//	return ggpo_on_client_game_callback((GGPOClientEvent *)info);
+	//}
 	switch (info->code) {
 	case GGPO_EVENTCODE_CONNECTED_TO_PEER:
 		VidOverlaySetSystemMessage(_T("Connected to Peer"));
