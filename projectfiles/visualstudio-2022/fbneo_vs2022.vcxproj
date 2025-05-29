@@ -234,8 +234,6 @@
     <ClInclude Include="..\..\src\cpu\z80\z80.h" />
     <ClInclude Include="..\..\src\cpu\z80\z80daisy.h" />
     <ClInclude Include="..\..\src\cpu\z80_intf.h" />
-    <ClInclude Include="..\..\src\dep\ggpo\include\ggponet_legacy.h" />
-    <ClInclude Include="..\..\src\dep\ggpo\include\ggpo_perfmon.h" />
     <ClInclude Include="..\..\src\dep\libs\lib7z\7z.h" />
     <ClInclude Include="..\..\src\dep\libs\lib7z\7zAlloc.h" />
     <ClInclude Include="..\..\src\dep\libs\lib7z\7zBuf.h" />

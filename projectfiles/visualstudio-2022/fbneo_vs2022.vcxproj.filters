@@ -844,9 +844,6 @@
     <ClInclude Include="..\..\src\burn\drv\neogeo\neogeo.h">
       <Filter>Burn\drv\neogeo</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\dep\ggpo\include\ggponet_legacy.h">
-      <Filter>ggpo_legacy</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\burner\dynhuff.h">
       <Filter>burner</Filter>
     </ClInclude>
@@ -951,9 +948,6 @@
     </ClInclude>
     <ClInclude Include="..\..\ggpo\src\include\ggponet.h">
       <Filter>ggpo</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\dep\ggpo\include\ggpo_perfmon.h">
-      <Filter>ggpo_legacy</Filter>
     </ClInclude>
     <ClInclude Include="..\..\ggpo\src\include\ggpo_perfmon.h">
       <Filter>ggpo</Filter>
@@ -4480,9 +4474,6 @@
     </Filter>
     <Filter Include="cpus\tms34">
       <UniqueIdentifier>{58a8a59e-3592-4b83-a5b9-c64619a0465e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ggpo_legacy">
-      <UniqueIdentifier>{9b469397-4895-4ae7-bac9-6769a50078fc}</UniqueIdentifier>
     </Filter>
     <Filter Include="ggpo">
       <UniqueIdentifier>{a53d90cb-c1be-4b49-acd2-2b3ace4309be}</UniqueIdentifier>
