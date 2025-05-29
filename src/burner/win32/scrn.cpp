@@ -2436,12 +2436,6 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			}
 			break;
 
-		case MENU_WWW_FIGHTCADE:
-			if (!nVidFullscreen) {
-				ShellExecute(NULL, _T("open"), _T("https://www.fightcade.com/"), NULL, NULL, SW_SHOWNORMAL);
-			}
-			break;
-
 		case MENU_SHOW_FPS:
 			bShowFPS = (bShowFPS > 0) ? 0: 1;
 			break;

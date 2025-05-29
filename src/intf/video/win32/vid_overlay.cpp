@@ -985,7 +985,7 @@ void VidOverlayInit(IDirect3DDevice9Ex *device)
 		wsprintf(temp, _T("ui/rank%d.png"), i);
 		badges_spr[i].Init(temp, &renderer);
 	}
-	DeleteFileA("fightcade/started.inf");
+	DeleteFileA("system/started.inf");
 
 #ifdef TEST_OVERLAY
 	VidOverlaySetGameInfo(_T("Bender#2,10"), _T("Iori#3,8"), false, 10, 0);
@@ -997,7 +997,6 @@ void VidOverlayInit(IDirect3DDevice9Ex *device)
 	VidOverlayAddChatLine(_T("System"), _T("Too much buttons pressed, autofire detected?"));
 	VidOverlayAddChatLine(_T("Bender"), _T("lorem ipsum chat text"));
 	VidOverlayAddChatLine(_T("Bender"), _T("this is another lorem ipsum chat text, something longer and longer and longer"));
-	VidOverlayAddChatLine(_T("Iori"), _T("Jackie Chan will be best new addition to Fightcade!"));
 	VidOverlayAddChatLine(_T("Iori"), _T("Día Completo"));
 	VidOverlayAddChatLine(_T("Iori"), _T("test line 11, last line"));
 	VidOverlaySetSystemMessage(_T("System message"));
@@ -1054,7 +1053,7 @@ void VidOverlayRender(const RECT &dest, int gameWidth, int gameHeight, int scan_
 		static bool enabled = false;
 		if (!enabled) {
 			enabled = true;
-			VidOverlayAddChatLine(_T("System"), _T("Chat history will be saved to fightcade/chat_history.txt"));
+			VidOverlayAddChatLine(_T("System"), _T("Chat history will be saved to system/chat_history.txt"));
 		}
 	}
 
@@ -1647,38 +1646,38 @@ void VidOverlaySaveFiles(bool save_info, bool save_scores, bool save_characters,
 		if (game_ranked > 1) {
 			swprintf(vs, 256, _T("FT%d"), game_ranked);
 		}
-		saveVs.Save("fightcade/vs.txt", vs);
-		saveGame.Save("fightcade/game.txt", BurnDrvGetText(DRV_NAME));
-		saveType.Save("fightcade/gametype.txt", kNetSpectator ? _T("Spectator") : _T("Game"));
-		saveQuark.Save("fightcade/gamequark.txt", ANSIToTCHAR(kNetQuarkId, NULL, NULL));
-		saveP1name.Save("fightcade/p1name.txt", player1.name.str);
-		saveP2name.Save("fightcade/p2name.txt", player2.name.str);
-		saveP1rank.Save("fightcade/p1rank.txt", ranks[player1.rank]);
-		saveP2rank.Save("fightcade/p2rank.txt", ranks[player2.rank]);
-		saveP1country.Save("fightcade/p1country.txt", player1.country.str);
-		saveP2country.Save("fightcade/p2country.txt", player2.country.str);
+		saveVs.Save("system/vs.txt", vs);
+		saveGame.Save("system/game.txt", BurnDrvGetText(DRV_NAME));
+		saveType.Save("system/gametype.txt", kNetSpectator ? _T("Spectator") : _T("Game"));
+		saveQuark.Save("system/gamequark.txt", ANSIToTCHAR(kNetQuarkId, NULL, NULL));
+		saveP1name.Save("system/p1name.txt", player1.name.str);
+		saveP2name.Save("system/p2name.txt", player2.name.str);
+		saveP1rank.Save("system/p1rank.txt", ranks[player1.rank]);
+		saveP2rank.Save("system/p2rank.txt", ranks[player2.rank]);
+		saveP1country.Save("system/p1country.txt", player1.country.str);
+		saveP2country.Save("system/p2country.txt", player2.country.str);
 
 		char buf[64];
 		sprintf(buf, "ui/flags/%s.png", TCHARToANSI(player1.country.str, NULL, NULL));
-		DeleteFile(_T("fightcade/p1country.png"));
-		CopyFileContents(buf, "fightcade/p1country.png");
+		DeleteFile(_T("system/p1country.png"));
+		CopyFileContents(buf, "system/p1country.png");
 		sprintf(buf, "ui/flags/%s.png", TCHARToANSI(player2.country.str, NULL, NULL));
-		DeleteFile(_T("fightcade/p2country.png"));
-		CopyFileContents(buf, "fightcade/p2country.png");
+		DeleteFile(_T("system/p2country.png"));
+		CopyFileContents(buf, "system/p2country.png");
 	}
 	if (save_winner > 0) {
-		saveWinner.Save("fightcade/winner.txt", save_winner == 1 ? player1.name.str : player2.name.str);
+		saveWinner.Save("system/winner.txt", save_winner == 1 ? player1.name.str : player2.name.str);
 	}
 	if (save_scores) {
-		saveP1score.Save("fightcade/p1score.txt", player1.score.str);
-		saveP2score.Save("fightcade/p2score.txt", player2.score.str);
+		saveP1score.Save("system/p1score.txt", player1.score.str);
+		saveP2score.Save("system/p2score.txt", player2.score.str);
 	}
 	if (save_characters) {
 		if (wcslen(gameDetector.char1) > 0) {
-			saveP1character.Save("fightcade/p1character.txt", gameDetector.char1);
+			saveP1character.Save("system/p1character.txt", gameDetector.char1);
 		}
 		if (wcslen(gameDetector.char2) > 0) {
-			saveP2character.Save("fightcade/p2character.txt", gameDetector.char2);
+			saveP2character.Save("system/p2character.txt", gameDetector.char2);
 		}
 	}
 }
@@ -1689,7 +1688,7 @@ void VidOverlaySaveInfo()
 		static bool started = false;
 		if (!started) {
 			started = true;
-			VidOverlaySaveFile("fightcade/started.inf", _T("1"));
+			VidOverlaySaveFile("system/started.inf", _T("1"));
 		}
 	}
 }
@@ -1698,7 +1697,7 @@ void VidOverlaySaveChatHistory(const wchar_t *text)
 {
 	if (bVidSaveChatHistory && !kNetSpectator) {
 		if (text) {
-			FILE *f = fopen("fightcade/chat_history.txt", "at");
+			FILE *f = fopen("system/chat_history.txt", "at");
 			if (f) {
 				fwprintf(f, L"%ls", text);
 				fclose(f);

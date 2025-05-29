@@ -633,7 +633,6 @@
 #define MENU_WHATSNEW                  		10505
 #define MENU_WWW_NSFORUM					10506
 #define MENU_WWW_GITHUB						10507
-#define MENU_WWW_FIGHTCADE				10508
 #define MENU_WLOGSTART						10606
 #define MENU_WLOGEND						10607
 #define MENU_AUTOSWITCHFULL					10613

@@ -223,7 +223,7 @@ BEGIN
     CONTROL         BMP_ABOUT,IDC_STATIC,"Static",SS_BITMAP | SS_REALSIZEIMAGE | SS_SUNKEN,3,3,100,50
     CONTROL         "version",IDC_FBA_VER,"Static",SS_OWNERDRAW | WS_GROUP,83,65,269,10
     CONTROL         "specialbuild",IDC_SPECIALSTRING,"Static",SS_OWNERDRAW | WS_GROUP,83,73,269,10
-    LTEXT           "FightcadeFBNeo is a fork of FB Neo, based on parts of MAME && Final Burn.\n� 2004-2020, Team Fightcade.",IDC_STATIC,6,88,235,16,WS_DISABLED
+    LTEXT           "FS-FBNeo is a fork of FB Neo, based on parts of MAME && Final Burn.",IDC_STATIC,6,88,235,16,WS_DISABLED
     DEFPUSHBUTTON   "OK",IDOK,305,90,50,14
     PUSHBUTTON      "License",IDC_SHOWLICENSE,251,90,50,14
     CONTROL         "",IDC_LICENSE,"RICHEDIT20A",ES_MULTILINE | ES_READONLY | WS_VSCROLL | ES_NOIME,3,109,353,77, WS_EX_STATICEDGE | ES_EX_NOCALLOLEINIT
@@ -881,7 +881,7 @@ BEGIN
         MENUITEM "Load game...\tF6",					MENU_LOAD
 				POPUP "Lua Scripting..."
 					BEGIN
-					MENUITEM "Fightcade Training Mode",					ID_LUA_TRAINING
+					MENUITEM "Training Mode",					ID_LUA_TRAINING
 					MENUITEM SEPARATOR
 					MENUITEM "&New Lua Script Window...",					ID_LUA_OPEN
 					MENUITEM "&Close All Script Windows",					ID_LUA_CLOSE_ALL, GRAYED
@@ -985,7 +985,7 @@ BEGIN
         END
         */
         MENUITEM SEPARATOR
-				POPUP "Fightcade"
+				POPUP "Overlay + Chat"
 				BEGIN
 						MENUITEM "Display overlay",										MENU_OVERLAY
 						MENUITEM "Display bigger overlay",						MENU_BIG_OVERLAY
@@ -1283,7 +1283,6 @@ BEGIN
         MENUITEM "&What's New",					MENU_WHATSNEW
         MENUITEM SEPARATOR
         */
-			  MENUITEM "&Fightcade Homepage",				MENU_WWW_FIGHTCADE
 				MENUITEM "FB Neo Homepage",					  MENU_WWW_HOME
 				MENUITEM "FB Neo &Github",						MENU_WWW_GITHUB
         MENUITEM SEPARATOR

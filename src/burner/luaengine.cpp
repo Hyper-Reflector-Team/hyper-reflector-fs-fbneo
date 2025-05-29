@@ -311,14 +311,14 @@ static int fba_isonline(lua_State *L) {
 
 // fba.isreplay()
 //
-// Returns true when it's a fightcade replay
+// Returns true when it's a replay
 static int fba_isreplay(lua_State *L) {
 	return kNetSpectator;
 }
 
 // fba.takeover()
 //
-// Finishes a fightcade replay and returns inputs to the user
+// Finishes a replay and returns inputs to the user
 static int fba_takeover(lua_State *L) {
 	if (kNetSpectator) {
 		ggpo_close_session(ggpo);

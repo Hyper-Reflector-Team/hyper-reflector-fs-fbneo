@@ -1282,7 +1282,7 @@ void MenuEnableItems()
 		SetMenuItemInfo(GetSubMenu(hMenu, 2), MENU_AUDIO_OPTIONS, FALSE, &myMenuItemInfo);
 	}
 
-	// Fightcade: disable old blitters
+	// Disable old blitters
 	EnableMenuItem(hMenu, MENU_BLITTER_1, MF_GRAYED | MF_BYCOMMAND);
 	EnableMenuItem(hMenu, MENU_BLITTER_2, MF_GRAYED | MF_BYCOMMAND);
 	//EnableMenuItem(hMenu, MENU_BLITTER_4, MF_GRAYED | MF_BYCOMMAND);

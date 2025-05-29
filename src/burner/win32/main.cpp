@@ -721,7 +721,7 @@ static int AppInit()
 	// Load config for the application
 	ConfigAppLoad();
 
-	// @FC force fightcade application settings
+	// @FC force application settings
 	bSkipStartupCheck = 1; // skip startup check
 	bVidHardwareVertex = 1; // use hardware vertex
 	bVidMotionBlur = 0; // no motion blur please
@@ -1133,7 +1133,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int nShowCmd
 		{_T("roms")},
 		{_T("savestates")},
 		{_T("screenshots")},
-		{_T("fightcade")},
+		{_T("system")},
 #ifdef INCLUDE_AVI_RECORDING
 		{_T("avi")},
 #endif
