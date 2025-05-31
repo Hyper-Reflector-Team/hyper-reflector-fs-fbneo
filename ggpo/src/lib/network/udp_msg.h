@@ -11,97 +11,112 @@
 #define MAX_COMPRESSED_BITS       4096
 #define UDP_MSG_MAX_PLAYERS          4
 
+ // TODO: Share with main program / put this with defs elsewhere....
+const static UINT MAX_CHAT_SIZE = 128;	 // 128 characters is enough?
+
 #pragma pack(push, 1)
 
 struct UdpMsg
 {
-   enum MsgType {
-      Invalid       = 0,
-      SyncRequest   = 1,
-      SyncReply     = 2,
-      Input         = 3,
-      QualityReport = 4,
-      QualityReply  = 5,
-      KeepAlive     = 6,
-      InputAck      = 7,
-   };
+  enum MsgType {
+    Invalid = 0,
+    SyncRequest = 1,
+    SyncReply = 2,
+    Input = 3,
+    QualityReport = 4,
+    QualityReply = 5,
+    KeepAlive = 6,
+    InputAck = 7,
+    Chat = 8
+  };
 
-   struct connect_status {
-      unsigned int   disconnected:1;
-      int            last_frame:31;
-   };
+  struct connect_status {
+    unsigned int   disconnected : 1;
+    int            last_frame : 31;
+  };
 
-   struct {
-      uint16         magic;
-      uint16         sequence_number;
-      uint8          type;            /* packet type.  Corresponds to: 'MsgType' enum */
-   } header;
-   union {
-      struct {
-         uint32      random_request;  /* please reply back with this random data */
-         uint16      remote_magic;
-         uint8       remote_endpoint;
-      } sync_request;
-      
-      struct {
-         uint32      random_reply;    /* OK, here's your random data back */
-      } sync_reply;
-      
-      struct {
-         int8        frame_advantage; /* what's the other guy's frame advantage? */
-         uint32      ping;
-      } quality_report;
-      
-      struct {
-         uint32      pong;
-      } quality_reply;
+  struct {
+    uint16         magic;
+    uint16         sequence_number;
+    uint8          type;            /* packet type.  Corresponds to: 'MsgType' enum */
+  } header;
 
-      struct {
-         connect_status    peer_connect_status[UDP_MSG_MAX_PLAYERS];
+  union {
+    struct {
+      uint32      random_request;  /* please reply back with this random data */
+      uint16      remote_magic;
+      uint8       remote_endpoint;
+    } sync_request;
 
-         uint32            start_frame;
+    struct {
+      uint32      random_reply;    /* OK, here's your random data back */
+    } sync_reply;
 
-         int               disconnect_requested:1;
-         int               ack_frame:31;
+    struct {
+      int8        frame_advantage; /* what's the other guy's frame advantage? */
+      uint32      ping;
+    } quality_report;
 
-         uint16            num_bits;
-         uint8             input_size; // XXX: shouldn't be in every single packet!
-         uint8             bits[MAX_COMPRESSED_BITS]; /* must be last */
-      } input;
+    struct {
+      uint32      pong;
+    } quality_reply;
 
-      struct {
-         int               ack_frame:31;
-      } input_ack;
+    struct {
+      connect_status    peer_connect_status[UDP_MSG_MAX_PLAYERS];
 
-   } u;
+      uint32            start_frame;
+
+      int               disconnect_requested : 1;
+      int               ack_frame : 31;
+
+      uint16            num_bits;
+      uint8             input_size; // XXX: shouldn't be in every single packet!
+      uint8             bits[MAX_COMPRESSED_BITS]; /* must be last */
+    } input;
+
+    struct {
+      int               ack_frame : 31;
+    } input_ack;
+
+    struct {
+      char text[MAX_CHAT_SIZE];
+    } chat;
+
+  } u;
 
 public:
-   int PacketSize() {
-      return sizeof(header) + PayloadSize();
-   }
+  int PacketSize() {
+    return sizeof(header) + PayloadSize();
+  }
 
-   int PayloadSize() {
-      int size;
+  int PayloadSize() {
+    int size;
 
-      switch (header.type) {
-      case SyncRequest:   return sizeof(u.sync_request);
-      case SyncReply:     return sizeof(u.sync_reply);
-      case QualityReport: return sizeof(u.quality_report);
-      case QualityReply:  return sizeof(u.quality_reply);
-      case InputAck:      return sizeof(u.input_ack);
-      case KeepAlive:     return 0;
-      case Input:
-         size = (int)((char *)&u.input.bits - (char *)&u.input);
-         size += (u.input.num_bits + 7) / 8;
-         return size;
-      }
+    switch (header.type) {
+    case SyncRequest:   return sizeof(u.sync_request);
+    case SyncReply:     return sizeof(u.sync_reply);
+    case QualityReport: return sizeof(u.quality_report);
+    case QualityReply:  return sizeof(u.quality_reply);
+    case InputAck:      return sizeof(u.input_ack);
+    case KeepAlive:     return 0;
 
-	  // lol, and ASSERT(false) instead of throwing on default, lol.
-      ASSERT(false);
-      return 0;
-   }
+    case Input:
+      size = (int)((char*)&u.input.bits - (char*)&u.input);
+      size += (u.input.num_bits + 7) / 8;
+      return size;
 
-   UdpMsg(MsgType t) { header.type = (uint8)t; }
+    case Chat:
+      // Include one extra byte to ensure zero termination.
+      size = strnlen_s(u.chat.text, MAX_CHAT_SIZE) + 1;
+      return size;
+    }
+
+
+    ASSERT(false);
+    return 0;
+  }
+
+  UdpMsg(MsgType t) { header.type = (uint8)t; }
 };
 
 #pragma pack(pop)

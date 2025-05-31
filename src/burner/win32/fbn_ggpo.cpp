@@ -109,6 +109,7 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent *info)
 		VidOverlaySetSystemMessage(_T(""));
 		VidSSetSystemMessage(_T(""));
 		if (kNetSpectator) {
+      // NOTE: The net version could also be retrieved by accepting the V* chat command data....
 			kNetVersion = strlen(info->u.matchinfo.blurb) > 0 ? atoi(info->u.matchinfo.blurb) : NET_VERSION;
 			SetBurnFPS(pGameName, kNetVersion);
 		}
@@ -729,16 +730,22 @@ bool QuarkIncrementFrame()
 	return true;
 }
 
+// --------------------------------------------------------------------------------------------------------
 void QuarkSendChatText(char *text)
 {
 	QuarkSendChatCmd(text, 'T');
 }
 
+// --------------------------------------------------------------------------------------------------------
 void QuarkSendChatCmd(char *text, char cmd)
 {
-	char buffer[1024]; // command chat
+  // TODO: Use a single chat buffer vs. buffer per-call.
+	char buffer[MAX_CHAT_SIZE]; // command chat
+  memset(buffer, 0, MAX_CHAT_SIZE);
+
 	buffer[0] = cmd;
-	strncpy(&buffer[1], text, 1023);
+	strncpy(&buffer[1], text, 127);
+
 	ggpo_client_chat(ggpo, buffer);
 }
 
