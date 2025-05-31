@@ -481,8 +481,8 @@ Peer2PeerBackend::OnUdpProtocolSpectatorEvent(UdpProtocol::Event& evt, uint16 qu
   }
 }
 
-void
-Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHandle handle)
+// ----------------------------------------------------------------------------------------------------------
+void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHandle handle)
 {
   GGPOEvent info;
 
@@ -521,7 +521,22 @@ Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHandle h
     break;
 
   case UdpProtocol::Event::Chat:
-    Log("received a chat event!");
+    // Log("received a chat event!");
+
+    
+    const size_t MAX_NAME = 32;
+    char username[MAX_NAME];
+    char text[MAX_CHAT_SIZE];
+
+    sprintf_s(username, MAX_NAME, "player: %d", (handle - 1));
+    strcpy_s(text, evt.u.chat.text);
+
+    info.code = GGPO_EVENTCODE_CHAT;
+    info.u.chat.username = username;
+    info.u.chat.text = text;
+
+    _callbacks.on_event(&info);
+
 
     // info.code = 
 

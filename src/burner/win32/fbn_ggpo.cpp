@@ -80,6 +80,7 @@ void SetBurnFPS(const char *name, int version)
 	}
 }
 
+// [OBSOLETE] - This will be removed / parted out!
 bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent *info)
 {
 	switch (info->code)
@@ -94,23 +95,23 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent *info)
 		VidSSetSystemMessage(_T("Connected"));
 		break;
 
-	case GGPOCLIENT_EVENTCODE_RETREIVING_MATCHINFO:
-		VidOverlaySetSystemMessage(_T("Retrieving Match Info..."));
-		VidSSetSystemMessage(_T("Retrieving Match Info..."));
-		break;
-
 	case GGPOCLIENT_EVENTCODE_DISCONNECTED:
 		VidOverlaySetSystemMessage(_T("Disconnected!"));
 		VidSSetSystemMessage(_T("Disconnected!"));
 		QuarkFinishReplay();
 		break;
 
+  case GGPOCLIENT_EVENTCODE_RETREIVING_MATCHINFO:
+    VidOverlaySetSystemMessage(_T("Retrieving Match Info..."));
+    VidSSetSystemMessage(_T("Retrieving Match Info..."));
+    break;
+
 	case GGPOCLIENT_EVENTCODE_MATCHINFO: {
 		VidOverlaySetSystemMessage(_T(""));
 		VidSSetSystemMessage(_T(""));
 		if (kNetSpectator) {
       // NOTE: The net version could also be retrieved by accepting the V* chat command data....
-			kNetVersion = strlen(info->u.matchinfo.blurb) > 0 ? atoi(info->u.matchinfo.blurb) : NET_VERSION;
+			kNetVersion = strlen(info->u.matchinfo.netVersion) > 0 ? atoi(info->u.matchinfo.netVersion) : NET_VERSION;
 			SetBurnFPS(pGameName, kNetVersion);
 		}
 		TCHAR szUser1[128];
@@ -125,18 +126,18 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent *info)
 		VidSSetGameSpectators(info->u.spectator_count_changed.count);
 		break;
 
-	case GGPOCLIENT_EVENTCODE_CHAT:
-		if (strlen(info->u.chat.text) > 0) {
-			TCHAR szUser[128];
-			TCHAR szText[1024];
-			ANSIToTCHAR(info->u.chat.username, szUser, 128);
-			ANSIToTCHAR(info->u.chat.text, szText, 1024);
-			VidOverlayAddChatLine(szUser, szText);
-			TCHAR szTemp[128];
-			_sntprintf(szTemp, 128, _T("«%.32hs» "), info->u.chat.username);
-			VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
-		}
-		break;
+	//case GGPOCLIENT_EVENTCODE_CHAT:
+	//	if (strlen(info->u.chat.text) > 0) {
+	//		TCHAR szUser[128];
+	//		TCHAR szText[1024];
+	//		ANSIToTCHAR(info->u.chat.username, szUser, 128);
+	//		ANSIToTCHAR(info->u.chat.text, szText, 1024);
+	//		VidOverlayAddChatLine(szUser, szText);
+	//		TCHAR szTemp[128];
+	//		_sntprintf(szTemp, 128, _T("«%.32hs» "), info->u.chat.username);
+	//		VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
+	//	}
+	//	break;
 
 	default:
 		break;
@@ -152,9 +153,9 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent *info)
 
 bool __cdecl ggpo_on_event_callback(GGPOEvent *info)
 {
-	if (ggpo_is_client_eventcode(info->code)) {
-		return ggpo_on_client_event_callback((GGPOClientEvent *)info);
-	}
+	//if (ggpo_is_client_eventcode(info->code)) {
+	//	return ggpo_on_client_event_callback((GGPOClientEvent *)info);
+	//}
 	//if (ggpo_is_client_gameevent(info->code)) {
 	//	return ggpo_on_client_game_callback((GGPOClientEvent *)info);
 	//}
@@ -191,6 +192,21 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent *info)
 
 	case GGPO_EVENTCODE_TIMESYNC:
 		break;
+
+
+  case GGPO_EVENTCODE_CHAT:
+    if (strlen(info->u.chat.text) > 0) {
+      TCHAR szUser[128];
+      TCHAR szText[MAX_CHAT_SIZE];
+      ANSIToTCHAR(info->u.chat.username, szUser, 128);
+      ANSIToTCHAR(info->u.chat.text, szText, MAX_CHAT_SIZE);
+      VidOverlayAddChatLine(szUser, szText);
+      TCHAR szTemp[128];
+      _sntprintf(szTemp, 128, _T("«%.32hs» "), info->u.chat.username);
+      VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
+    }
+    break;
+
 
 	default:
 		break;

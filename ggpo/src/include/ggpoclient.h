@@ -26,7 +26,7 @@ extern "C" {
 //   GGPOCLIENT_GAMEEVENT_LAST
 //} GGPOClientGameEventType;
 
-
+// [OBSOLETE]
 typedef enum {
    GGPOCLIENT_EVENTCODE_FIRST                         = 5000,
    GGPOCLIENT_EVENTCODE_CONNECTING                    = 5000,
@@ -34,11 +34,12 @@ typedef enum {
    GGPOCLIENT_EVENTCODE_RETREIVING_MATCHINFO          = 5002,
    GGPOCLIENT_EVENTCODE_MATCHINFO                     = 5003,
    GGPOCLIENT_EVENTCODE_SPECTATOR_COUNT_CHANGED       = 5004,
-   GGPOCLIENT_EVENTCODE_CHAT                          = 5005,
+//   GGPOCLIENT_EVENTCODE_CHAT                          = 5005,
    GGPOCLIENT_EVENTCODE_DISCONNECTED                  = 5006,
    GGPOCLIENT_EVENTCODE_LAST
 } GGPOClientEventCode;
 
+// [OBSOLETE]
 static inline bool
 ggpo_is_client_eventcode(int code)
 {
@@ -53,13 +54,14 @@ ggpo_is_client_eventcode(int code)
 //   return code >= GGPOCLIENT_GAMEEVENT_STARTING && code <= GGPOCLIENT_GAMEEVENT_LAST;
 //}
 
+// [OBSOLETE]
 typedef struct {
    GGPOClientEventCode code;
    union {
       struct {
          char *p1;
          char *p2;
-         char *blurb;
+         char *netVersion;
       } matchinfo;
       struct {
          int count;
