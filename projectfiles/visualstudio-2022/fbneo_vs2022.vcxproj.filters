@@ -955,6 +955,9 @@
     <ClInclude Include="..\..\ggpo\src\include\ggpoclient.h">
       <Filter>ggpo</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\dep\libs\CLI11\CLI11.hpp">
+      <Filter>libs\CLI11</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\burn\burn.cpp">
@@ -4477,6 +4480,9 @@
     </Filter>
     <Filter Include="ggpo">
       <UniqueIdentifier>{a53d90cb-c1be-4b49-acd2-2b3ace4309be}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libs\CLI11">
+      <UniqueIdentifier>{76d31bba-49c0-4fdf-84f5-9d7686244899}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

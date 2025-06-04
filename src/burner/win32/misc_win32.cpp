@@ -26,8 +26,10 @@ BOOL DetectWindowsVersion()
 	return bIsWindowsXPorLater;
 }
 
-// Set the current directory to be the application's directory
-int AppDirectory()
+// ----------------------------------------------------------------------------------------------------------
+// Set the current directory to be the application's directory.
+// This also creates all sub-directories that are needed by the application.
+int InitializeDirectories()
 {
 	TCHAR szPath[MAX_PATH] = _T("");
 	int nLen = 0;
@@ -73,6 +75,31 @@ int AppDirectory()
 
 	debugPrintf(szPath);
 	debugPrintf(_T("\n"));
+
+
+  // Make sure there are roms and cfg subdirectories
+  TCHAR szDirs[][MAX_PATH] = {
+    {_T("config")},
+    {_T("config/games")},
+    {_T("config/ips")},
+    {_T("config/localisation")},
+    {_T("config/presets")},
+    {_T("recordings")},
+    {_T("roms")},
+    {_T("savestates")},
+    {_T("screenshots")},
+    {_T("system")},
+#ifdef INCLUDE_AVI_RECORDING
+    {_T("avi")},
+#endif
+    {_T("\0")} // END of list
+  };
+
+  for (int x = 0; szDirs[x][0] != '\0'; x++) {
+    CreateDirectory(szDirs[x], NULL);
+  }
+
+
 
 	return 0;
 }

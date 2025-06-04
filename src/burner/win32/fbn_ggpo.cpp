@@ -196,13 +196,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent *info)
 
   case GGPO_EVENTCODE_CHAT:
     if (strlen(info->u.chat.text) > 0) {
-      TCHAR szUser[128];
+      TCHAR szUser[MAX_CHAT_SIZE];
       TCHAR szText[MAX_CHAT_SIZE];
-      ANSIToTCHAR(info->u.chat.username, szUser, 128);
+      ANSIToTCHAR(info->u.chat.username, szUser, MAX_CHAT_SIZE);
       ANSIToTCHAR(info->u.chat.text, szText, MAX_CHAT_SIZE);
       VidOverlayAddChatLine(szUser, szText);
-      TCHAR szTemp[128];
-      _sntprintf(szTemp, 128, _T("«%.32hs» "), info->u.chat.username);
+      TCHAR szTemp[MAX_CHAT_SIZE];
+      _sntprintf(szTemp, MAX_CHAT_SIZE, _T("«%.32hs» "), info->u.chat.username);
       VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
     }
     break;

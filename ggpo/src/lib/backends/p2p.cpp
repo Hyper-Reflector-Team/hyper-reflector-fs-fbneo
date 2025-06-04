@@ -528,7 +528,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHan
     char username[MAX_NAME];
     char text[MAX_CHAT_SIZE];
 
-    sprintf_s(username, MAX_NAME, "player: %d", (handle - 1));
+    sprintf_s(username, MAX_NAME, "player: %u", (handle - 1));
     strcpy_s(text, evt.u.chat.text);
 
     info.code = GGPO_EVENTCODE_CHAT;

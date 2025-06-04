@@ -212,7 +212,7 @@ extern bool bEnableHighResTimer;
 extern bool bIsWindowsXPorGreater;
 extern bool bIsWindowsXP;
 BOOL DetectWindowsVersion();
-int AppDirectory();
+int InitializeDirectories();
 void UpdatePath(TCHAR* path);
 void RegisterExtensions(bool bCreateKeys);
 int GetClientScreenRect(HWND hWnd, RECT* pRect);
