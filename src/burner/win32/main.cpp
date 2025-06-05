@@ -974,7 +974,10 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   int argCount = __argc;
 
   std::string romName = "";
-  app.add_option("--rom", romName, "Name of ROM to load");
+  std::string scriptName = "";
+
+  auto romOption = app.add_option("--rom", romName, "Name of ROM to load");
+  auto scriptOption = app.add_option("--lua", scriptName, "LUA script file to execute.");
 
   // @@AAR:
   // There was some legacy code in there that was used to output lists of information.
@@ -1038,6 +1041,9 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   }
 
   // TODO: Handle general stuff here.... setting of lua scripts and so on.
+  if (scriptName != "") {
+    FBA_LoadLuaCode(scriptName.data());
+  }
 
 
   // Actually handle the commands here:
@@ -1046,178 +1052,43 @@ int ProcessCommandLine(LPSTR lpCmdLine)
     int res = HandleListInfoCommand(listOption);
     return res;
   }
-
-
   else if (directConnect->parsed())
   {
     directOps.romName = romName;
     int res = HandleDirectConnection(directOps);
     return res;
   }
+  else {
+    if (romName != "") {
+
+      // Command: load game
+      bQuietLoading = true;
+      INT32 i;
+      for (i = 0; i < nBurnDrvCount; i++) {
+        nBurnDrvActive = i;
+        if ((_tcscmp(BurnDrvGetText(DRV_NAME), ANSIToTCHAR(romName.data(), NULL, NULL)) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
+          if (DrvInit(i, true)) { // failed (bad romset, etc.)
+            nVidFullscreen = 0; // Don't get stuck in fullscreen mode
+          }
+          break;
+        }
+      }
+
+      bQuietLoading = false;
+
+      if (i == nBurnDrvCount) {
+        FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_UI_NOSUPPORT), romName.data(), _T(APP_TITLE));
+        FBAPopupDisplay(PUF_TYPE_ERROR);
+        return 1;
+      }
+    }
+
+  }
 
 
-  // Do these next!
+  // The rest of the CLI stuff that hasn't been re-implemented.
 
-  //      else if (_tcscmp(szOption, _T("-a")) == 0) {
-//        bVidArcaderes = 1;
-//      }
-//      else if (_tcscmp(szOption, _T("-w")) == 0) {
-//        bVidAutoSwitchFullDisable = true;
-//      }
-//      else if (_tcscmp(szOption, _T("-q")) == 0) {
-//        QuarkRecordReplay();
-//      }
-//    }
-// 
-//    else {
-//      if (wcsstr(szOption, _T(".lua")) != 0) {
-//        // Command: lua file
-//        FBA_LoadLuaCode(TCHARToANSI(szOption, NULL, NULL));
-//        bVidAutoSwitchFullDisable = true;
-//      }
-//      else if (wcsstr(szOption, _T(".fs")) != 0) {
-//        // Command: savestate
-//        if (BurnStateLoad(szOption, 1, &DrvInitCallback)) {
-//          return 1;
-//        }
-//      }
-//      else if (wcsstr(szOption, _T(".fr")) != 0) {
-//        // Command: record file
-//        if (StartReplay(szOption)) {
-//          return 1;
-//        }
-//      }
-//      else if (wcsstr(szOption, _T("quark:")) != 0) {
-//        // Command: quark netplay
-//        QuarkInit(szOption);
-//      }
-//      else {
-//        // Command: load game
-//        bQuietLoading = true;
-//        INT32 i;
-//        for (i = 0; i < nBurnDrvCount; i++) {
-//          nBurnDrvActive = i;
-//          if ((_tcscmp(BurnDrvGetText(DRV_NAME), szOption) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
-//            if (DrvInit(i, true)) { // failed (bad romset, etc.)
-//              nVidFullscreen = 0; // Don't get stuck in fullscreen mode
-//            }
-//            break;
-//          }
-//        }
-
-
-
-
-
-
-
-
-
-
-
-  // OK!
-  // return 0;
-
-
-
-
-  //// NOTE: All of this needs to be handled depending on the options that were parsed out....
-
-  //while (szCommand < szEnd) {
-  //  INT32 size = 0;
-  //  if (szCommand[0] == _T('"')) {
-  //    // quotes command
-  //    size++;
-  //    while (szCommand[size] != _T('"') && (szCommand + size) < szEnd) {
-  //      size++;
-  //    }
-  //    wcsncpy(szOption, szCommand + 1, size - 2);
-  //    szOption[size - 2] = 0;
-  //    size++;
-  //  }
-  //  else {
-  //    // regular command
-  //    while (szCommand[size] != _T(' ') && (szCommand + size) < szEnd) {
-  //      size++;
-  //    }
-  //    wcsncpy(szOption, szCommand, size);
-  //    szOption[size] = 0;
-  //  }
-  //  // skip whites
-  //  szCommand += size;
-  //  while (*szCommand == _T(' ') && szCommand < szEnd) {
-  //    szCommand++;
-  //  }
-
-  //  if (wcslen(szOption) > 0) {
-  //    if (szOption[0] == _T('-')) {
-  //      // Command: option
-  //      if (_tcscmp(szOption, _T("-listinfo")) == 0) {
-  //        write_datfile(DAT_ARCADE_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfomdonly")) == 0) {
-  //        write_datfile(DAT_MEGADRIVE_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfopceonly")) == 0) {
-  //        write_datfile(DAT_PCENGINE_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfotg16only")) == 0) {
-  //        write_datfile(DAT_TG16_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfosgxonly")) == 0) {
-  //        write_datfile(DAT_SGX_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfosg1000only")) == 0) {
-  //        write_datfile(DAT_SG1000_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfocolecoonly")) == 0) {
-  //        write_datfile(DAT_COLECO_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfosmsonly")) == 0) {
-  //        write_datfile(DAT_MASTERSYSTEM_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfoggonly")) == 0) {
-  //        write_datfile(DAT_GAMEGEAR_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfomsxonly")) == 0) {
-  //        write_datfile(DAT_MSX_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfospectrumonly")) == 0) {
-  //        write_datfile(DAT_SPECTRUM_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfonesonly")) == 0) {
-  //        write_datfile(DAT_NES_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listinfofdsonly")) == 0) {
-  //        write_datfile(DAT_FDS_ONLY, stdout);
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-listextrainfo")) == 0) {
-  //        int nWidth;
-  //        int nHeight;
-  //        int nAspectX;
-  //        int nAspectY;
-  //        for (INT32 i = 0; i < nBurnDrvCount; i++) {
-  //          nBurnDrvActive = i;
-  //          BurnDrvGetVisibleSize(&nWidth, &nHeight);
-  //          BurnDrvGetAspect(&nAspectX, &nAspectY);
-  //          printf("%s\t%ix%i\t%i:%i\t0x%08X\t\"%s\"\t%i\t%i\t%x\t%x\t\"%s\"\n", BurnDrvGetTextA(DRV_NAME), nWidth, nHeight, nAspectX, nAspectY, BurnDrvGetHardwareCode(), BurnDrvGetTextA(DRV_SYSTEM), BurnDrvIsWorking(), BurnDrvGetMaxPlayers(), BurnDrvGetGenreFlags(), BurnDrvGetFamilyFlags(), BurnDrvGetTextA(DRV_COMMENT));
-  //        }
-  //        return 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-a")) == 0) {
+    //      else if (_tcscmp(szOption, _T("-a")) == 0) {
   //        bVidArcaderes = 1;
   //      }
   //      else if (_tcscmp(szOption, _T("-w")) == 0) {
@@ -1227,12 +1098,8 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   //        QuarkRecordReplay();
   //      }
   //    }
+  // 
   //    else {
-  //      if (wcsstr(szOption, _T(".lua")) != 0) {
-  //        // Command: lua file
-  //        FBA_LoadLuaCode(TCHARToANSI(szOption, NULL, NULL));
-  //        bVidAutoSwitchFullDisable = true;
-  //      }
   //      else if (wcsstr(szOption, _T(".fs")) != 0) {
   //        // Command: savestate
   //        if (BurnStateLoad(szOption, 1, &DrvInitCallback)) {
@@ -1245,37 +1112,10 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   //          return 1;
   //        }
   //      }
-  //      else if (wcsstr(szOption, _T("quark:")) != 0) {
-  //        // Command: quark netplay
-  //        QuarkInit(szOption);
-  //      }
-  //      else {
-  //        // Command: load game
-  //        bQuietLoading = true;
-  //        INT32 i;
-  //        for (i = 0; i < nBurnDrvCount; i++) {
-  //          nBurnDrvActive = i;
-  //          if ((_tcscmp(BurnDrvGetText(DRV_NAME), szOption) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
-  //            if (DrvInit(i, true)) { // failed (bad romset, etc.)
-  //              nVidFullscreen = 0; // Don't get stuck in fullscreen mode
-  //            }
-  //            break;
-  //          }
-  //        }
 
-  //        bQuietLoading = false;
 
-  //        if (i == nBurnDrvCount) {
-  //          FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_UI_NOSUPPORT), szOption, _T(APP_TITLE));
-  //          FBAPopupDisplay(PUF_TYPE_ERROR);
-  //          return 1;
-  //        }
-  //      }
-  //    }
-  //  }
-  //}
 
-  // NOTE: This is an arbitrary place to pick it back up :)
+    // NOTE: This is an arbitrary place to pick it back up :)
   POST_INITIALISE_MESSAGE;
 
   if (!nVidFullscreen) {
