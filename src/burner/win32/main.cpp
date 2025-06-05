@@ -21,6 +21,7 @@
 
 #include <wininet.h>
 #include <winsock.h>
+#include <filesystem>
 
 #if defined (FBNEO_DEBUG)
 bool bDisableDebugConsole = true;
@@ -963,6 +964,21 @@ int HandleDirectConnection(DirectConnectionOptions& ops) {
   return res;
 }
 
+
+// ----------------------------------------------------------------------------------------------------------
+// Thanks to Pavel P @ https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+static bool ends_with(std::string_view str, std::string_view suffix)
+{
+  return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// ----------------------------------------------------------------------------------------------------------
+// Thanks to Pavel P @ https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+static bool starts_with(std::string_view str, std::string_view prefix)
+{
+  return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
+}
+
 // ----------------------------------------------------------------------------------------------------------
 int ProcessCommandLine(LPSTR lpCmdLine)
 {
@@ -976,8 +992,17 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   std::string romName = "";
   std::string scriptName = "";
 
-  auto romOption = app.add_option("--rom", romName, "Name of ROM to load");
-  auto scriptOption = app.add_option("--lua", scriptName, "LUA script file to execute.");
+  bool useArcadeResolution = false;
+  app.add_option("--rom", romName, "Name of ROM to load");
+  app.add_option("--lua", scriptName, "LUA script file to execute.");
+
+  bool recordFlag = false;
+  bool resFlag = false;
+  bool screenFlag = false;
+  app.add_flag("--rec", recordFlag, "Record replay.");
+  app.add_flag("-a", resFlag, "Use game resolution for fullscreen modes.");
+  app.add_flag("-w", screenFlag, "Disable auto switch to fullscreen on loading driver.");
+
 
   // @@AAR:
   // There was some legacy code in there that was used to output lists of information.
@@ -1015,6 +1040,12 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_option("-n,--name", directOps.playerName, "Your name")->required();
   directConnect->add_option("-d,--delay", directOps.frameDelay, "Frame delay.  1 is default");
 
+
+  std::string loadPath = "";
+  auto load = app.add_subcommand("load", "Load a game state (.fs), or replay file (.fr)");
+  load->add_option("-f,--file", loadPath, "Path of the file to load.");
+
+
   // Only allow one subcommand.
   app.require_subcommand(0, 1);
 
@@ -1045,8 +1076,21 @@ int ProcessCommandLine(LPSTR lpCmdLine)
     FBA_LoadLuaCode(scriptName.data());
   }
 
+  // Apply flags.
+  if (recordFlag) {
+    QuarkRecordReplay();
+  }
 
-  // Actually handle the commands here:
+  if (screenFlag) {
+    bVidAutoSwitchFullDisable = true;
+  }
+
+  if (resFlag) {
+    bVidArcaderes = 1;
+  }
+
+
+  // Handle subcommands, if any.
   if (list->parsed())
   {
     int res = HandleListInfoCommand(listOption);
@@ -1058,10 +1102,36 @@ int ProcessCommandLine(LPSTR lpCmdLine)
     int res = HandleDirectConnection(directOps);
     return res;
   }
+  else if (load->parsed())
+  {
+
+    if (!std::filesystem::exists(loadPath))
+    {
+      // TODO: Standard error dialog.
+      throw std::exception("File does not exist!");
+    }
+    if (ends_with(loadPath, ".fs")) {
+      if (BurnStateLoad(ANSIToTCHAR(loadPath.data(), NULL, NULL), 1, &DrvInitCallback)) {
+        return 0;
+      }
+    }
+    else if (ends_with(loadPath, ".fr"))
+    {
+      if (StartReplay(ANSIToTCHAR(loadPath.data(), NULL, NULL))) {
+        return 0;
+      }
+    }
+    else {
+      // Error dialog:
+      throw std::exception("File is not a state (.fs) or replay (.fr) file!");
+    }
+  }
+
   else {
+    // Default, load a rom if set....
+    // Load a rom.
     if (romName != "") {
 
-      // Command: load game
       bQuietLoading = true;
       INT32 i;
       for (i = 0; i < nBurnDrvCount; i++) {
@@ -1082,37 +1152,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
         return 1;
       }
     }
-
   }
-
-
-  // The rest of the CLI stuff that hasn't been re-implemented.
-
-    //      else if (_tcscmp(szOption, _T("-a")) == 0) {
-  //        bVidArcaderes = 1;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-w")) == 0) {
-  //        bVidAutoSwitchFullDisable = true;
-  //      }
-  //      else if (_tcscmp(szOption, _T("-q")) == 0) {
-  //        QuarkRecordReplay();
-  //      }
-  //    }
-  // 
-  //    else {
-  //      else if (wcsstr(szOption, _T(".fs")) != 0) {
-  //        // Command: savestate
-  //        if (BurnStateLoad(szOption, 1, &DrvInitCallback)) {
-  //          return 1;
-  //        }
-  //      }
-  //      else if (wcsstr(szOption, _T(".fr")) != 0) {
-  //        // Command: record file
-  //        if (StartReplay(szOption)) {
-  //          return 1;
-  //        }
-  //      }
-
 
 
     // NOTE: This is an arbitrary place to pick it back up :)
@@ -1125,6 +1165,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   return 0;
 }
 
+// ----------------------------------------------------------------------------------------------------------
 static void CreateSupportFolders()
 {
   TCHAR szSupportDirs[][MAX_PATH] = {
