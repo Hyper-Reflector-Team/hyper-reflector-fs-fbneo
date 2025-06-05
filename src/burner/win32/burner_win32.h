@@ -15,7 +15,7 @@
 
 #if defined (_UNICODE)
 #ifndef UNICODE
- #define UNICODE
+#define UNICODE
 #endif
 #endif
 
@@ -42,7 +42,7 @@ INT32 DDCore_Init();
 
 // Additions to the Cygwin/MinGW win32 headers
 #ifdef __GNUC__
- #include "mingw_win32.h"
+#include "mingw_win32.h"
 #endif
 
 #include "resource.h"
@@ -86,12 +86,28 @@ INT32 DDCore_Init();
 // #define POST_INITIALISE_MESSAGE { debugPrintf(_T("*** (re-) initialising - %s %i\n"), _T(__FILE__), __LINE__); PostMessage(NULL, WM_APP + 0, 0, 0); }
 #define POST_INITIALISE_MESSAGE PostMessage(NULL, WM_APP + 0, 0, 0)
 
+
+// Command line stuff.  Not a huge fan of this header file being a huge dumping ground.....
+struct DirectConnectionOptions {
+  std::string romName;
+  std::string localAddr = "";
+  std::string remoteAddr = "";
+  size_t playerNumber = 0;
+  std::string playerName = "";
+  size_t frameDelay = 1;
+};
+
+
 // ---------------------------------------------------------------------------
 
 // main.cpp
 #if defined (FBNEO_DEBUG)
 extern bool bDisableDebugConsole;                   // Disable debug console?
 #endif
+
+
+
+
 extern HINSTANCE hAppInst;							// Application Instance
 extern HANDLE hMainThread;							// Handle to the main thread
 extern long int nMainThreadID;						// ID of the main thread
@@ -127,11 +143,11 @@ extern OPENFILENAME ofn;
 /* const */ char* TCHARToANSI(const TCHAR* pszInString, char* pszOutString, int nOutSize);
 /* const */ TCHAR* ANSIToTCHAR(const char* pszString, TCHAR* pszOutString, int nOutSize);
 
-CHAR *astring_from_utf8(const char *s);
-char *utf8_from_astring(const CHAR *s);
+CHAR* astring_from_utf8(const char* s);
+char* utf8_from_astring(const CHAR* s);
 
-WCHAR *wstring_from_utf8(const char *s);
-char *utf8_from_wstring(const WCHAR *s);
+WCHAR* wstring_from_utf8(const char* s);
+char* utf8_from_wstring(const WCHAR* s);
 
 #ifdef _UNICODE
 #define tstring_from_utf8 wstring_from_utf8
@@ -272,8 +288,8 @@ int ScrnTitle();
 void SetPauseMode(bool bPause);
 int ActivateChat();
 void DeActivateChat();
-int BurnerLoadDriver(TCHAR *szDriverName);
-int StartFromReset(TCHAR *szDriverName);
+int BurnerLoadDriver(TCHAR* szDriverName);
+int StartFromReset(TCHAR* szDriverName);
 void PausedRedraw(void);
 void LuaOpenDialog();
 INT32 is_netgame_or_recording();
@@ -444,14 +460,17 @@ int NetworkGetInputSize();
 int NetworkGetInput();
 
 // fbn_ggpo.cpp
-void QuarkInit(TCHAR *connect);
+int InitDirectConnection(DirectConnectionOptions& ops);
+
+// [OBSOLETE]
+void QuarkInit(TCHAR* connect);
 void QuarkEnd();
 void QuarkTogglePerfMon();
 void QuarkRunIdle(int ms);
-bool QuarkGetInput(void *values, int size, int playerCount);
+bool QuarkGetInput(void* values, int size, int playerCount);
 bool QuarkIncrementFrame();
-void QuarkSendChatText(char *text);
-void QuarkSendChatCmd(char *text, char cmd);
+void QuarkSendChatText(char* text);
+void QuarkSendChatCmd(char* text, char cmd);
 void QuarkUpdateStats(double fps);
 void QuarkRecordReplay();
 void QuarkFinishReplay();
@@ -488,7 +507,7 @@ int ProgressDestroy();
 int GameInfoDialogCreate(HWND hParentWND, int nDrvSel);
 void LoadFavorites();
 void AddFavorite_Ext(UINT8 addf);
-INT32 CheckFavorites(char *name);
+INT32 CheckFavorites(char* name);
 
 // luaconsole.cpp
 extern HWND LuaConsoleHWnd;
@@ -533,7 +552,7 @@ void ResetPlaceHolder();
 // AVI recording
 
 // avi.cpp
-INT32 AviStart(const char *filename = NULL);
+INT32 AviStart(const char* filename = NULL);
 INT32 AviRecordFrame(INT32 bDraw);
 void AviStop();
 extern INT32 nAviStatus;

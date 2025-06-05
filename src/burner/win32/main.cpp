@@ -897,6 +897,72 @@ enum class EListOption : int {
   , extrainfo
 };
 
+
+// ----------------------------------------------------------------------------------------------------------
+int HandleListInfoCommand(EListOption listOption) {
+  if (listOption == EListOption::none) {
+    write_datfile(DAT_ARCADE_ONLY, stdout);
+  }
+  else if (listOption == EListOption::mdonly) {
+    write_datfile(DAT_MEGADRIVE_ONLY, stdout);
+  }
+  else if (listOption == EListOption::pceonly) {
+    write_datfile(DAT_PCENGINE_ONLY, stdout);
+  }
+  else if (listOption == EListOption::tg16only) {
+    write_datfile(DAT_TG16_ONLY, stdout);
+  }
+  else if (listOption == EListOption::sgxonly) {
+    write_datfile(DAT_SGX_ONLY, stdout);
+  }
+  else if (listOption == EListOption::sg1000only) {
+    write_datfile(DAT_SG1000_ONLY, stdout);
+  }
+  else if (listOption == EListOption::colecoonly) {
+    write_datfile(DAT_COLECO_ONLY, stdout);
+  }
+  else if (listOption == EListOption::smsonly) {
+    write_datfile(DAT_MASTERSYSTEM_ONLY, stdout);
+  }
+  else if (listOption == EListOption::ggonly) {
+    write_datfile(DAT_GAMEGEAR_ONLY, stdout);
+  }
+  else if (listOption == EListOption::msxonly) {
+    write_datfile(DAT_MSX_ONLY, stdout);
+  }
+  else if (listOption == EListOption::spectrumonly) {
+    write_datfile(DAT_SPECTRUM_ONLY, stdout);
+  }
+  else if (listOption == EListOption::nesonly) {
+    write_datfile(DAT_NES_ONLY, stdout);
+  }
+  else if (listOption == EListOption::fdsonly) {
+    write_datfile(DAT_FDS_ONLY, stdout);
+  }
+  else if (listOption == EListOption::extrainfo) {
+    int nWidth;
+    int nHeight;
+    int nAspectX;
+    int nAspectY;
+    for (INT32 i = 0; i < nBurnDrvCount; i++) {
+      nBurnDrvActive = i;
+      BurnDrvGetVisibleSize(&nWidth, &nHeight);
+      BurnDrvGetAspect(&nAspectX, &nAspectY);
+      printf("%s\t%ix%i\t%i:%i\t0x%08X\t\"%s\"\t%i\t%i\t%x\t%x\t\"%s\"\n", BurnDrvGetTextA(DRV_NAME), nWidth, nHeight, nAspectX, nAspectY, BurnDrvGetHardwareCode(), BurnDrvGetTextA(DRV_SYSTEM), BurnDrvIsWorking(), BurnDrvGetMaxPlayers(), BurnDrvGetGenreFlags(), BurnDrvGetFamilyFlags(), BurnDrvGetTextA(DRV_COMMENT));
+    }
+  }
+  return 0;
+}
+
+// ----------------------------------------------------------------------------------------------------------
+int HandleDirectConnection(DirectConnectionOptions& ops) {
+
+  // TODO: Validate the options.
+
+  int res = InitDirectConnection(ops);
+  return res;
+}
+
 // ----------------------------------------------------------------------------------------------------------
 int ProcessCommandLine(LPSTR lpCmdLine)
 {
@@ -938,17 +1004,13 @@ int ProcessCommandLine(LPSTR lpCmdLine)
 
 
   // Options to initiate a direct connection to another player.
+  DirectConnectionOptions  directOps;
   auto directConnect = app.add_subcommand("direct", "Initiate a direct connection to another player.");
-  std::string localAddr = "";
-  std::string remoteAddr = "";
-  size_t playerNumber = 0;
-  std::string playerName = "";
-  size_t frameDelay = 1;
-  directConnect->add_option("-l,--local", localAddr, "Local address");
-  directConnect->add_option("-r,--remote", remoteAddr, "Remote address");
-  directConnect->add_option("-p,--player", playerNumber, "Player number (1, 2, etc.)");
-  directConnect->add_option("-n,--name", playerName, "Your name");
-  directConnect->add_option("-d,--delay", frameDelay, "Frame delay.  1 is default");
+  directConnect->add_option("-l,--local", directOps.localAddr, "Local address");
+  directConnect->add_option("-r,--remote", directOps.remoteAddr, "Remote address");
+  directConnect->add_option("-p,--player", directOps.playerNumber, "Player number (1, 2, etc.)");
+  directConnect->add_option("-n,--name", directOps.playerName, "Your name");
+  directConnect->add_option("-d,--delay", directOps.frameDelay, "Frame delay.  1 is default");
 
   // Only allow one subcommand.
   app.require_subcommand(0, 1);
@@ -975,75 +1037,86 @@ int ProcessCommandLine(LPSTR lpCmdLine)
     return app.exit(e);
   }
 
+  // TODO: Handle general stuff here.... setting of lua scripts and so on.
+
 
   // Actually handle the commands here:
   if (list->parsed())
   {
-    if (listOption == EListOption::none) {
-      write_datfile(DAT_ARCADE_ONLY, stdout);
-    }
-    else if (listOption == EListOption::mdonly) {
-      write_datfile(DAT_MEGADRIVE_ONLY, stdout);
-    }
-    else if (listOption == EListOption::pceonly) {
-      write_datfile(DAT_PCENGINE_ONLY, stdout);
-    }
-    else if (listOption == EListOption::tg16only) {
-      write_datfile(DAT_TG16_ONLY, stdout);
-    }
-    else if (listOption == EListOption::sgxonly) {
-      write_datfile(DAT_SGX_ONLY, stdout);
-    }
-    else if (listOption == EListOption::sg1000only) {
-      write_datfile(DAT_SG1000_ONLY, stdout);
-    }
-    else if (listOption == EListOption::colecoonly) {
-      write_datfile(DAT_COLECO_ONLY, stdout);
-    }
-    else if (listOption == EListOption::smsonly) {
-      write_datfile(DAT_MASTERSYSTEM_ONLY, stdout);
-    }
-    else if (listOption == EListOption::ggonly) {
-      write_datfile(DAT_GAMEGEAR_ONLY, stdout);
-    }
-    else if (listOption == EListOption::msxonly) {
-      write_datfile(DAT_MSX_ONLY, stdout);
-    }
-    else if (listOption == EListOption::spectrumonly) {
-      write_datfile(DAT_SPECTRUM_ONLY, stdout);
-    }
-    else if (listOption == EListOption::nesonly) {
-      write_datfile(DAT_NES_ONLY, stdout);
-    }
-    else if (listOption == EListOption::fdsonly) {
-      write_datfile(DAT_FDS_ONLY, stdout);
-    }
-    else if (listOption == EListOption::extrainfo) {
-      int nWidth;
-      int nHeight;
-      int nAspectX;
-      int nAspectY;
-      for (INT32 i = 0; i < nBurnDrvCount; i++) {
-        nBurnDrvActive = i;
-        BurnDrvGetVisibleSize(&nWidth, &nHeight);
-        BurnDrvGetAspect(&nAspectX, &nAspectY);
-        printf("%s\t%ix%i\t%i:%i\t0x%08X\t\"%s\"\t%i\t%i\t%x\t%x\t\"%s\"\n", BurnDrvGetTextA(DRV_NAME), nWidth, nHeight, nAspectX, nAspectY, BurnDrvGetHardwareCode(), BurnDrvGetTextA(DRV_SYSTEM), BurnDrvIsWorking(), BurnDrvGetMaxPlayers(), BurnDrvGetGenreFlags(), BurnDrvGetFamilyFlags(), BurnDrvGetTextA(DRV_COMMENT));
-      }
-    }
-    return 0;
+    int res = HandleListInfoCommand(listOption);
+    return res;
   }
 
 
   else if (directConnect->parsed())
   {
-    throw std::exception("not implemented!");
+    directOps.romName = romName;
+    int res = HandleDirectConnection(directOps);
+    return res;
   }
-  int x = 10;
+
+
+  // Do these next!
+
+  //      else if (_tcscmp(szOption, _T("-a")) == 0) {
+//        bVidArcaderes = 1;
+//      }
+//      else if (_tcscmp(szOption, _T("-w")) == 0) {
+//        bVidAutoSwitchFullDisable = true;
+//      }
+//      else if (_tcscmp(szOption, _T("-q")) == 0) {
+//        QuarkRecordReplay();
+//      }
+//    }
+// 
+//    else {
+//      if (wcsstr(szOption, _T(".lua")) != 0) {
+//        // Command: lua file
+//        FBA_LoadLuaCode(TCHARToANSI(szOption, NULL, NULL));
+//        bVidAutoSwitchFullDisable = true;
+//      }
+//      else if (wcsstr(szOption, _T(".fs")) != 0) {
+//        // Command: savestate
+//        if (BurnStateLoad(szOption, 1, &DrvInitCallback)) {
+//          return 1;
+//        }
+//      }
+//      else if (wcsstr(szOption, _T(".fr")) != 0) {
+//        // Command: record file
+//        if (StartReplay(szOption)) {
+//          return 1;
+//        }
+//      }
+//      else if (wcsstr(szOption, _T("quark:")) != 0) {
+//        // Command: quark netplay
+//        QuarkInit(szOption);
+//      }
+//      else {
+//        // Command: load game
+//        bQuietLoading = true;
+//        INT32 i;
+//        for (i = 0; i < nBurnDrvCount; i++) {
+//          nBurnDrvActive = i;
+//          if ((_tcscmp(BurnDrvGetText(DRV_NAME), szOption) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
+//            if (DrvInit(i, true)) { // failed (bad romset, etc.)
+//              nVidFullscreen = 0; // Don't get stuck in fullscreen mode
+//            }
+//            break;
+//          }
+//        }
+
+
+
+
+
+
+
+
 
 
 
   // OK!
-  return 0;
+  // return 0;
 
 
 
