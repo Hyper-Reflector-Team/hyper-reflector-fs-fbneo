@@ -8,7 +8,7 @@ extern "C" {
 
 const size_t MAX_HOST = 128;
 
-GGPOSession* ggpo = NULL;
+GGPOSession* ggpo = nullptr;
 bool bSkipPerfmonUpdates = false;
 
 void QuarkInitPerfMon();

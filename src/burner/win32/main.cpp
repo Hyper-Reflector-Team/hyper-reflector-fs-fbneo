@@ -1007,9 +1007,9 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   DirectConnectionOptions  directOps;
   auto directConnect = app.add_subcommand("direct", "Initiate a direct connection to another player.");
   directConnect->add_option("-l,--local", directOps.localAddr, "Local address");
-  directConnect->add_option("-r,--remote", directOps.remoteAddr, "Remote address");
-  directConnect->add_option("-p,--player", directOps.playerNumber, "Player number (1, 2, etc.)");
-  directConnect->add_option("-n,--name", directOps.playerName, "Your name");
+  directConnect->add_option("-r,--remote", directOps.remoteAddr, "Remote address")->required();
+  directConnect->add_option("-p,--player", directOps.playerNumber, "Player number (1, 2, etc.)")->required()->check(CLI::Validator(CLI::Range(1, 4)));
+  directConnect->add_option("-n,--name", directOps.playerName, "Your name")->required();
   directConnect->add_option("-d,--delay", directOps.frameDelay, "Frame delay.  1 is default");
 
   // Only allow one subcommand.
