@@ -51,12 +51,16 @@ public:
         int         count;
       } synchronizing;
 
+      struct { 
+        char playerName[MAX_NAME_SIZE];
+      } connected;
+
       struct {
         int         disconnect_timeout;
       } network_interrupted;
 
       struct {
-        char		text[MAX_CHAT_SIZE];
+        char		text[MAX_GGPOCHAT_SIZE];
       } chat;
 
     } u;			// REFACTOR: Rename this to 'data'
@@ -94,6 +98,7 @@ public:
   void SetDisconnectTimeout(int timeout);
   void SetDisconnectNotifyStart(int timeout);
 
+  void SetPlayerName(char* playerName_);
 protected:
   enum State {
     Syncing,
@@ -212,6 +217,10 @@ protected:
    * Event queue
    */
   RingBuffer<UdpProtocol::Event, 64>  _event_queue;
+
+  // You name.  This will be exchanged with other peers on sync.
+  char _playerName[MAX_NAME_SIZE];
+
 };
 
 #endif

@@ -92,9 +92,9 @@ struct DirectConnectionOptions {
   std::string romName;
   std::string localAddr = "";
   std::string remoteAddr = "";
-  size_t playerNumber = 0;
+  UINT16 playerNumber = 0;
   std::string playerName = "";
-  size_t frameDelay = 1;
+  UINT16 frameDelay = 1;
 };
 
 

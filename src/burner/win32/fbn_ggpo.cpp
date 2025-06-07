@@ -582,7 +582,7 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   iDelay = ops.frameDelay;
   iSeed = 0;
 
-  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, ops.playerNumber - 1);
+  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, ops.playerNumber - 1, ops.playerName.data());
 
   ggpo_set_frame_delay(ggpo, ops.frameDelay);
   VidOverlaySetSystemMessage(_T("Connecting..."));
@@ -661,28 +661,30 @@ void QuarkInit(TCHAR* tconnect)
   //	FBA_LoadLuaCode("fbneo-training-mode/fbneo-training-mode.lua");
   //}
   if (strncmp(connect, "quark:direct", strlen("quark:direct")) == 0) {
-    // REFERENCE for sscanf: https://en.cppreference.com/w/c/io/fscanf
-    int scanCount = sscanf(connect, "quark:direct,%[^,],%d,%[^,],%d,%d,%d,%d", gameName, &localPort, remoteIp, &remotePort, &playerNumber, &delay, &ranked);
-    if (scanCount != 7) {
-      // TODO: Find the best way to handle bad CLI inputs.
-      // A proper CLI parser might be nice at some point too.
-      throw std::exception("bad command line!");
-    }
-    if (playerNumber < 1 || playerNumber > 2) {
-      throw std::exception("Invalid player number.  Use 1 or 2!");
-    }
+
+    throw std::exception("obsolete branch!  don't come here!");
+    //// REFERENCE for sscanf: https://en.cppreference.com/w/c/io/fscanf
+    //int scanCount = sscanf(connect, "quark:direct,%[^,],%d,%[^,],%d,%d,%d,%d", gameName, &localPort, remoteIp, &remotePort, &playerNumber, &delay, &ranked);
+    //if (scanCount != 7) {
+    //  // TODO: Find the best way to handle bad CLI inputs.
+    //  // A proper CLI parser might be nice at some point too.
+    //  throw std::exception("bad command line!");
+    //}
+    //if (playerNumber < 1 || playerNumber > 2) {
+    //  throw std::exception("Invalid player number.  Use 1 or 2!");
+    //}
 
 
-    kNetLua = 1;
-    bDirect = true;
-    iRanked = 0;
-    iPlayer = playerNumber;
-    iDelay = delay;
-    iSeed = 0;
-    // ggpo = ggpo_start_session(&cb, game, localPort, host, remotePort, playerNumber);
-    ggpo = ggpo_start_session(&cb, gameName, localPort, remoteIp, remotePort, playerNumber - 1);
-    ggpo_set_frame_delay(ggpo, delay);
-    VidOverlaySetSystemMessage(_T("Connecting..."));
+    //kNetLua = 1;
+    //bDirect = true;
+    //iRanked = 0;
+    //iPlayer = playerNumber;
+    //iDelay = delay;
+    //iSeed = 0;
+    //// ggpo = ggpo_start_session(&cb, game, localPort, host, remotePort, playerNumber);
+    //ggpo = ggpo_start_session(&cb, gameName, localPort, remoteIp, remotePort, playerNumber - 1);
+    //ggpo_set_frame_delay(ggpo, delay);
+    //VidOverlaySetSystemMessage(_T("Connecting..."));
   }
   /*
   else if (strncmp(connect, "quark:synctest", strlen("quark:synctest")) == 0) {
@@ -780,12 +782,6 @@ void QuarkRunIdle(int ms)
 // -------------------------------------------------------------------------------------------------------------------
 bool QuarkGetInput(void* values, int isize, int playerIndex)
 {
-  //ggpo_add_local_input(ggpo, playerIndex, values, isize);
-
-  // NOTE: Playercount is being used to set buffer sizes, etc. in the FC-GGPO lib....
-  // This is also where the local + sync inputs are going.....
-  // NOTE: I don't think that we need to send 'playercount' anymore.....
-
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
   bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
   return res;

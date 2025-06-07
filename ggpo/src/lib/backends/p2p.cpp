@@ -8,12 +8,7 @@
 #include "p2p.h"
 #include <algorithm>
 
- // TEMP:  Using assumed player and input sizes for now.
-static const uint16 PLAYER_COUNT = 2;
 
-// NOTE: This is the input size that 3s uses.  We should not have a hard-coded way of doing this,
-// or we should actually probably just change the way we do the asserts....
-static const uint16 INPUT_SIZE = 5;
 
 
 static const int RECOMMENDATION_INTERVAL = 240;
@@ -29,7 +24,8 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   uint16 localport,
   char* remoteIp,
   uint16 remotePort,
-  uint16 playerIndex)
+  uint16 playerIndex,
+  std::string playerName)
   :
   _num_players(PLAYER_COUNT),
   _input_size(INPUT_SIZE),
@@ -43,12 +39,13 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   _synchronizing = true;
   _next_recommended_sleep = 0;
 
-
-  // NOTE: This is all stuff that we will probably want to do for each backend.
+  // initialize base class members....
   _PlayerIndex = playerIndex;
+  strcpy_s(_PlayerNames[_PlayerIndex], playerName.data());
+  
 
   inet_pton(AF_INET, remoteIp, &_RemoteAddr);
-  _RemoteIp = htons(remotePort);
+  _RemotePort = htons(remotePort);
 
 
   /*
@@ -71,6 +68,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   for (int i = 0; i < ARRAY_SIZE(_local_connect_status); i++) {
     _local_connect_status[i].last_frame = -1;
   }
+
 
   /*
    * Preload the ROM
@@ -129,6 +127,7 @@ void Peer2PeerBackend::AddRemotePlayer(char* ip, uint16 port, int queue)
   _endpoints[queue].SetDisconnectTimeout(_disconnect_timeout);
   _endpoints[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
   _endpoints[queue].Synchronize();
+  _endpoints[queue].SetPlayerName(_PlayerNames[_PlayerIndex]);
 }
 
 GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip,
@@ -490,6 +489,11 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHan
   case UdpProtocol::Event::Connected:
     info.code = GGPO_EVENTCODE_CONNECTED_TO_PEER;
     info.u.connected.player = handle;
+    
+    strcpy_s(_PlayerNames[handle], evt.u.connected.playerName);
+
+    // strcpy_s(info.u.connected.playerName, evt.u.connected.playerName);
+
     _callbacks.on_event(&info);
     break;
   case UdpProtocol::Event::Synchronizing:
@@ -524,15 +528,17 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHan
     // Log("received a chat event!");
 
     
-    const size_t MAX_NAME = 32;
-    char username[MAX_NAME];
-    char text[MAX_CHAT_SIZE];
+    // const size_t MAX_NAME = 32;
+    //char username[MAX_NAME];
+    char text[MAX_GGPOCHAT_SIZE];
 
-    sprintf_s(username, MAX_NAME, "player: %u", (handle - 1));
+    auto userName = _PlayerNames[handle];
+
+    //sprintf_s(username, MAX_NAME, "player: %d", (handle - 1));
     strcpy_s(text, evt.u.chat.text);
 
     info.code = GGPO_EVENTCODE_CHAT;
-    info.u.chat.username = username;
+    info.u.chat.username = userName;
     info.u.chat.text = text;
 
     _callbacks.on_event(&info);

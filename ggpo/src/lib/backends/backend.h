@@ -10,6 +10,8 @@
 
 #include "ggponet.h"
 #include "types.h"
+#include <string>
+
 
 struct GGPOSession {
    virtual ~GGPOSession() { }
@@ -29,13 +31,13 @@ struct GGPOSession {
 
    // Additions:
 protected:
-	// ulong _RemoteAddr = 0;
 	IN_ADDR _RemoteAddr;
-	uint16 _RemoteIp = 0;
+	uint16 _RemotePort = 0;
 	uint16 _PlayerIndex = 0;
-};
 
-// typedef struct GGPOSession Quark, GGPOSession; /* XXX: nuke this */
+  char _PlayerNames[2][MAX_NAME_SIZE];
+
+};
 
 #endif
 

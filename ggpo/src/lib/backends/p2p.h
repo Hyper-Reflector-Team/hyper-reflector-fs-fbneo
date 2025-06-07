@@ -14,10 +14,19 @@
 #include "backend.h"
 #include "timesync.h"
 #include "network/udp_proto.h"
+#include <string>
 
+ // TEMP:  Using assumed player and input sizes for now.
+static const uint16 PLAYER_COUNT = 2;
+
+// NOTE: This is the input size that 3s uses.  We should not have a hard-coded way of doing this,
+// or we should actually probably just change the way we do the asserts....
+static const uint16 INPUT_SIZE = 5;
+
+// ==========================================================================================================
 class Peer2PeerBackend : public GGPOSession, IPollSink, Udp::Callbacks {
 public:
-   Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16 localport, char* remoteIp, uint16 remotePort, uint16 playerIndex);
+   Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16 localport, char* remoteIp, uint16 remotePort, uint16 playerIndex, std::string playerName);
    virtual ~Peer2PeerBackend();
 
 
@@ -79,7 +88,6 @@ protected:
    int                   _disconnect_notify_start;
 
    UdpMsg::connect_status _local_connect_status[UDP_MSG_MAX_PLAYERS];
-
 
 
 };

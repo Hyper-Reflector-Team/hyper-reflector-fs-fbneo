@@ -54,8 +54,16 @@ UdpProtocol::UdpProtocol() :
 
 	_send_latency = Platform::GetConfigInt(L"ggpo.network.delay");
 	_oop_percent = Platform::GetConfigInt(L"ggpo.oop.percent");
+
+  memset(_playerName, 0, MAX_NAME_SIZE);
 }
 
+// ----------------------------------------------------------------------------------------------------------
+void UdpProtocol::SetPlayerName(char* playerName_) {
+  strcpy_s(_playerName, playerName_);
+}
+
+// ----------------------------------------------------------------------------------------------------------
 UdpProtocol::~UdpProtocol()
 {
 	ClearSendQueue();
@@ -90,7 +98,7 @@ void UdpProtocol::SendChat(char* text) {
 		if (_current_state == Running) {
 
 			UdpMsg* msg = new UdpMsg(UdpMsg::Chat);
-      size_t len = strnlen_s(text, MAX_CHAT_SIZE);
+      size_t len = strnlen_s(text, MAX_GGPOCHAT_SIZE);
 			strcpy_s(msg->u.chat.text, len + 1, text);
 
 			
@@ -283,8 +291,8 @@ UdpProtocol::Disconnect()
 	_shutdown_timeout = Platform::GetCurrentTimeMS() + UDP_SHUTDOWN_TIMER;
 }
 
-void
-UdpProtocol::SendSyncRequest()
+// ------------------------------------------------------------------------------------------------
+void UdpProtocol::SendSyncRequest()
 {
 	_state.sync.random = rand() & 0xFFFF;
 	UdpMsg* msg = new UdpMsg(UdpMsg::SyncRequest);
@@ -340,8 +348,7 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
 
 	// filter out messages that don't match what we expect
 	uint16 seq = msg->header.sequence_number;
-	if (msg->header.type != UdpMsg::SyncRequest &&
-		msg->header.type != UdpMsg::SyncReply) {
+	if (msg->header.type != UdpMsg::SyncRequest && msg->header.type != UdpMsg::SyncReply) {
 		if (msg->header.magic != _remote_magic_number) {
 			LogMsg("recv rejecting", msg);
 			return;
@@ -503,6 +510,9 @@ UdpProtocol::OnSyncRequest(UdpMsg* msg, int len)
 	}
 	UdpMsg* reply = new UdpMsg(UdpMsg::SyncReply);
 	reply->u.sync_reply.random_reply = msg->u.sync_request.random_request;
+
+  strcpy_s(reply->u.sync_reply.playerName, _playerName);
+
 	SendMsg(reply);
 	return true;
 }
@@ -522,7 +532,10 @@ UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
 	}
 
 	if (!_connected) {
-		QueueEvent(Event(Event::Connected));
+    auto evt = Event(Event::Connected);
+    strcpy_s(evt.u.connected.playerName, msg->u.sync_reply.playerName);
+		QueueEvent(evt);
+
 		_connected = true;
 	}
 

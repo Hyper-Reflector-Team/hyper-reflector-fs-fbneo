@@ -41,14 +41,16 @@ GGPOSession* ggpo_start_session(
 	uint16 localPort, 
 	char* remoteIp, 
 	uint16 remotePort,
-	uint16 playerIndex)
+	uint16 playerIndex,
+  char* playerName)
 {
 	auto res = (GGPOSession*)new Peer2PeerBackend(cb,
 		gameName,
 		localPort,
 		remoteIp,
 		remotePort,
-		playerIndex);
+		playerIndex,
+    playerName);
 	return res;
 }
 

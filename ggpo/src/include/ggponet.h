@@ -12,6 +12,7 @@ typedef unsigned int uint32;
 typedef int int32;
 typedef unsigned short uint16;
 
+// #include <string>
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +41,11 @@ extern "C" {
 #define GGPO_MAX_SPECTATORS              32
 
 #define GGPO_SPECTATOR_INPUT_INTERVAL     4
+
+ // TODO: Share with main program / put this with defs elsewhere....
+  const static size_t MAX_GGPOCHAT_SIZE = 128;	 // 128 characters is enough?
+  const static size_t MAX_NAME_SIZE = 16;
+
 
   typedef struct GGPOSession GGPOSession;
 
@@ -170,6 +176,7 @@ extern "C" {
     union {
       struct {
         GGPOPlayerHandle  player;
+        // char playerName[MAX_NAME_SIZE];
       } connected;
       struct {
         GGPOPlayerHandle  player;
@@ -340,7 +347,8 @@ extern "C" {
     uint16 localPort,
     char* remoteIp,
     uint16  remotePort,
-    uint16 playerIndex);
+    uint16 playerIndex,
+    char* playerName);
 
 
   /*

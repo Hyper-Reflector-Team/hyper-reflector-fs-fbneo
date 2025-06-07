@@ -11,8 +11,7 @@
 #define MAX_COMPRESSED_BITS       4096
 #define UDP_MSG_MAX_PLAYERS          4
 
- // TODO: Share with main program / put this with defs elsewhere....
-const static UINT MAX_CHAT_SIZE = 128;	 // 128 characters is enough?
+#include "ggponet.h"
 
 #pragma pack(push, 1)
 
@@ -49,7 +48,8 @@ struct UdpMsg
     } sync_request;
 
     struct {
-      uint32      random_reply;    /* OK, here's your random data back */
+      uint32      random_reply;           /* OK, here's your random data back */
+      char playerName[MAX_NAME_SIZE];   /* The name of the player we synced to: */
     } sync_reply;
 
     struct {
@@ -79,7 +79,7 @@ struct UdpMsg
     } input_ack;
 
     struct {
-      char text[MAX_CHAT_SIZE];
+      char text[MAX_GGPOCHAT_SIZE];
     } chat;
 
   } u;
@@ -94,7 +94,12 @@ public:
 
     switch (header.type) {
     case SyncRequest:   return sizeof(u.sync_request);
-    case SyncReply:     return sizeof(u.sync_reply);
+    case SyncReply:
+    {
+      int res = sizeof(u.sync_reply);
+      return res;
+    }
+
     case QualityReport: return sizeof(u.quality_report);
     case QualityReply:  return sizeof(u.quality_reply);
     case InputAck:      return sizeof(u.input_ack);
@@ -107,7 +112,7 @@ public:
 
     case Chat:
       // Include one extra byte to ensure zero termination.
-      size = strnlen_s(u.chat.text, MAX_CHAT_SIZE) + 1;
+      size = strnlen_s(u.chat.text, MAX_GGPOCHAT_SIZE) + 1;
       return size;
     }
 
