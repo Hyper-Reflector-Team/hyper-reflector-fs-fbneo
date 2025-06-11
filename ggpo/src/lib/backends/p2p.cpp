@@ -461,24 +461,20 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, PlayerID play
     break;
 
   case UdpProtocol::Event::Chat:
-    // Log("received a chat event!");
 
+    if (evt.u.chat.text[0] == 'T')
+    {
+      char text[MAX_GGPOCHAT_SIZE];
+      auto userName = _PlayerNames[playerIndex];
 
-    // const size_t MAX_NAME = 32;
-    //char username[MAX_NAME];
-    char text[MAX_GGPOCHAT_SIZE];
+      strcpy_s(text, evt.u.chat.text + 1);
 
-    auto userName = _PlayerNames[playerIndex];
+      info.code = GGPO_EVENTCODE_CHAT;
+      info.u.chat.username = userName;
+      info.u.chat.text = text;
 
-    //sprintf_s(username, MAX_NAME, "player: %d", (playerIndex - 1));
-    strcpy_s(text, evt.u.chat.text);
-
-    info.code = GGPO_EVENTCODE_CHAT;
-    info.u.chat.username = userName;
-    info.u.chat.text = text;
-
-    _callbacks.on_event(&info);
-
+      _callbacks.on_event(&info);
+    }
 
     // info.code = 
 
