@@ -37,7 +37,7 @@ public:
       Disconnected,
       NetworkInterrupted,
       NetworkResumed,
-      Chat
+      ChatCommand
     };
 
     Type      type;

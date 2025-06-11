@@ -382,10 +382,10 @@ CheatSearchInitCallback CheatSearchInitCallbackFunction = NULL;
 UINT32 CheatSearchShowResultAddresses[CHEATSEARCH_SHOWRESULTS];
 UINT32 CheatSearchShowResultValues[CHEATSEARCH_SHOWRESULTS];
 
-INT32 CheatSearchInit()
-{
-	return 1;
-}
+//INT32 CheatSearchInit()
+//{
+//	return 1;
+//}
 
 void CheatSearchExit()
 {

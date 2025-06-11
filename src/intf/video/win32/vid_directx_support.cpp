@@ -1807,6 +1807,7 @@ static void VidSDisplayEdit(IDirectDrawSurface7* pSurf, RECT* pRect)
 
 void VidSDisplayOSD(IDirectDrawSurface7* pSurf, RECT* pRect, int nFlags)
 {
+//   return; 
 	nZoom = nFlags & 3;
 
 	VidSDisplayStatus(pSurf, pRect);

@@ -26,7 +26,7 @@ struct UdpMsg
     QualityReply = 5,
     KeepAlive = 6,
     InputAck = 7,
-    Chat = 8
+    ChatCommand = 8
   };
 
   struct connect_status {
@@ -110,7 +110,7 @@ public:
       size += (u.input.num_bits + 7) / 8;
       return size;
 
-    case Chat:
+    case ChatCommand:
       // Include one extra byte to ensure zero termination.
       size = strnlen_s(u.chat.text, MAX_GGPOCHAT_SIZE) + 1;
       return size;

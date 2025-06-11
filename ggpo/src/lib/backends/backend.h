@@ -20,7 +20,7 @@ struct GGPOSession {
    virtual GGPOErrorCode AddLocalInput(PlayerID playerIndex, void *values, int totalSize) = 0;
    virtual GGPOErrorCode SyncInput(void *values, int totalSize, int playerCount) = 0;
    virtual GGPOErrorCode IncrementFrame(void) { return GGPO_OK; }
-   virtual bool Chat(char *text) { return true; }
+   virtual bool ChatCommand(char *text) { return true; }
    virtual GGPOErrorCode DisconnectPlayer(PlayerID handle) { return GGPO_OK; }
    virtual bool GetNetworkStats(GGPONetworkStats *stats) { return GGPO_OK; }
    virtual GGPOErrorCode Logv(const char *fmt, va_list list) { ::Logv(fmt, list); return GGPO_OK; }

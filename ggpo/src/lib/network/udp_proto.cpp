@@ -97,7 +97,7 @@ void UdpProtocol::SendChat(char* text) {
 	if (_udp) {
 		if (_current_state == Running) {
 
-			UdpMsg* msg = new UdpMsg(UdpMsg::Chat);
+			UdpMsg* msg = new UdpMsg(UdpMsg::ChatCommand);
       size_t len = strnlen_s(text, MAX_GGPOCHAT_SIZE);
 			strcpy_s(msg->u.chat.text, len + 1, text);
 
@@ -343,7 +343,7 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
 	   &UdpProtocol::OnQualityReply,        /* QualityReply */
 	   &UdpProtocol::OnKeepAlive,           /* KeepAlive */
 	   &UdpProtocol::OnInputAck,            /* InputAck */
-	   &UdpProtocol::OnChat					/* Chat - A chat message / command was received */
+	   &UdpProtocol::OnChat					/* ChatCommand - A chat message / command was received */
 	};
 
 	// filter out messages that don't match what we expect
@@ -474,7 +474,7 @@ UdpProtocol::LogMsg(const char* prefix, UdpMsg* msg)
 		Log("%s input ack.\n", prefix);
 		break;
 
-	case UdpMsg::Chat:
+	case UdpMsg::ChatCommand:
 		Log("%s chat.\n", prefix);
 		break;
 		
@@ -561,7 +561,7 @@ UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
 bool UdpProtocol::OnChat(UdpMsg* msg, int len)
 {
 
-	UdpProtocol::Event evt(UdpProtocol::Event::Chat);
+	UdpProtocol::Event evt(UdpProtocol::Event::ChatCommand);
 	// evt.u.input.input = _last_received_input;
 	//_last_received_input.desc(desc, ARRAY_SIZE(desc));
 

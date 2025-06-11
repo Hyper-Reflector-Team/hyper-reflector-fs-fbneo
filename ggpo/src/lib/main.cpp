@@ -157,17 +157,17 @@ ggpo_advance_frame(GGPOSession* ggpo)
 //	if (!ggpo) {
 //		return GGPO_ERRORCODE_INVALID_SESSION;
 //	}
-//	return ggpo->Chat(text);
+//	return ggpo->ChatCommand(text);
 //}
 
-// NOTE: Chat is not actually implemented in the open source GGPO code.
+// NOTE: ChatCommand is not actually implemented in the open source GGPO code.
 // We will have to figure this out, but shouldn't be too hard.....
 bool ggpo_client_chat(GGPOSession* ggpo, char* text)
 {
   if (!ggpo) {
     return false;
   }
-  bool res = ggpo->Chat(text);
+  bool res = ggpo->ChatCommand(text);
   return res;
 }
 

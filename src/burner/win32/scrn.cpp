@@ -2253,107 +2253,107 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			}
 			break;
 
-		case MENU_CHEATSEARCH_START: {
-			CheatSearchStart();
+		//case MENU_CHEATSEARCH_START: {
+		//	CheatSearchStart();
 
-			TCHAR szText[100];
-			_stprintf(szText, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_NEW, true));
-			VidSAddChatLine(NULL, 0xFFFFFF, szText, 0xFFBFBF);
+		//	TCHAR szText[100];
+		//	_stprintf(szText, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_NEW, true));
+		//	VidSAddChatLine(NULL, 0xFFFFFF, szText, 0xFFBFBF);
 
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_NOCHANGE, MF_ENABLED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_CHANGE, MF_ENABLED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_DECREASE, MF_ENABLED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_INCREASE, MF_ENABLED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_DUMPFILE, MF_ENABLED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_EXIT, MF_ENABLED | MF_BYCOMMAND);
-			break;
-		}
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_NOCHANGE, MF_ENABLED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_CHANGE, MF_ENABLED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_DECREASE, MF_ENABLED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_INCREASE, MF_ENABLED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_DUMPFILE, MF_ENABLED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_EXIT, MF_ENABLED | MF_BYCOMMAND);
+		//	break;
+		//}
 
-		case MENU_CHEATSEARCH_NOCHANGE: {
-			TCHAR tmpmsg[256];
-			unsigned int nValues = CheatSearchValueNoChange();
+		//case MENU_CHEATSEARCH_NOCHANGE: {
+		//	TCHAR tmpmsg[256];
+		//	unsigned int nValues = CheatSearchValueNoChange();
 
-			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
-			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//	_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
+		//	VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
 
-			if (nValues <= CHEATSEARCH_SHOWRESULTS) {
-				for (unsigned int i = 0; i < nValues; i++) {
-					_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
-					VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
-				}
-			}
-			break;
-		}
+		//	if (nValues <= CHEATSEARCH_SHOWRESULTS) {
+		//		for (unsigned int i = 0; i < nValues; i++) {
+		//			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
+		//			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//		}
+		//	}
+		//	break;
+		//}
 
-		case MENU_CHEATSEARCH_CHANGE: {
-			TCHAR tmpmsg[256];
-			unsigned int nValues = CheatSearchValueChange();
+		//case MENU_CHEATSEARCH_CHANGE: {
+		//	TCHAR tmpmsg[256];
+		//	unsigned int nValues = CheatSearchValueChange();
 
-			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
-			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//	_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
+		//	VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
 
-			if (nValues <= CHEATSEARCH_SHOWRESULTS) {
-				for (unsigned int i = 0; i < nValues; i++) {
-					_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
-					VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
-				}
-			}
-			break;
-		}
+		//	if (nValues <= CHEATSEARCH_SHOWRESULTS) {
+		//		for (unsigned int i = 0; i < nValues; i++) {
+		//			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
+		//			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//		}
+		//	}
+		//	break;
+		//}
 
-		case MENU_CHEATSEARCH_DECREASE: {
-			TCHAR tmpmsg[256];
-			unsigned int nValues = CheatSearchValueDecreased();
+		//case MENU_CHEATSEARCH_DECREASE: {
+		//	TCHAR tmpmsg[256];
+		//	unsigned int nValues = CheatSearchValueDecreased();
 
-			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
-			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//	_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
+		//	VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
 
-			if (nValues <= CHEATSEARCH_SHOWRESULTS) {
-				for (unsigned int i = 0; i < nValues; i++) {
-					_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
-					VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
-				}
-			}
-			break;
-		}
+		//	if (nValues <= CHEATSEARCH_SHOWRESULTS) {
+		//		for (unsigned int i = 0; i < nValues; i++) {
+		//			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
+		//			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//		}
+		//	}
+		//	break;
+		//}
 
-		case MENU_CHEATSEARCH_INCREASE: {
-			TCHAR tmpmsg[256];
+		//case MENU_CHEATSEARCH_INCREASE: {
+		//	TCHAR tmpmsg[256];
 
-			unsigned int nValues = CheatSearchValueIncreased();
+		//	unsigned int nValues = CheatSearchValueIncreased();
 
-			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
-			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//	_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_ADD_MATCH, true), nValues);
+		//	VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
 
-			if (nValues <= CHEATSEARCH_SHOWRESULTS) {
-				for (unsigned int i = 0; i < nValues; i++) {
-					_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
-					VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
-				}
-			}
-			break;
-		}
+		//	if (nValues <= CHEATSEARCH_SHOWRESULTS) {
+		//		for (unsigned int i = 0; i < nValues; i++) {
+		//			_stprintf(tmpmsg, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_RESULTS, true), CheatSearchShowResultAddresses[i], CheatSearchShowResultValues[i]);
+		//			VidSAddChatLine(NULL, 0xFFFFFF, tmpmsg, 0xFFBFBF);
+		//		}
+		//	}
+		//	break;
+		//}
 
-		case MENU_CHEATSEARCH_DUMPFILE: {
-			CheatSearchDumptoFile();
-			break;
-		}
+		//case MENU_CHEATSEARCH_DUMPFILE: {
+		//	CheatSearchDumptoFile();
+		//	break;
+		//}
 
-		case MENU_CHEATSEARCH_EXIT: {
-			CheatSearchExit();
+		//case MENU_CHEATSEARCH_EXIT: {
+		//	CheatSearchExit();
 
-			TCHAR szText[100];
-			_stprintf(szText, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_EXIT, true));
-			VidSAddChatLine(NULL, 0xFFFFFF, szText, 0xFFBFBF);
+		//	TCHAR szText[100];
+		//	_stprintf(szText, FBALoadStringEx(hAppInst, IDS_CHEAT_SEARCH_EXIT, true));
+		//	VidSAddChatLine(NULL, 0xFFFFFF, szText, 0xFFBFBF);
 
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_NOCHANGE, MF_GRAYED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_CHANGE, MF_GRAYED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_DECREASE, MF_GRAYED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_INCREASE, MF_GRAYED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_DUMPFILE, MF_GRAYED | MF_BYCOMMAND);
-			EnableMenuItem(hMenu, MENU_CHEATSEARCH_EXIT, MF_GRAYED | MF_BYCOMMAND);
-			break;
-		}
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_NOCHANGE, MF_GRAYED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_CHANGE, MF_GRAYED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_DECREASE, MF_GRAYED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_INCREASE, MF_GRAYED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_DUMPFILE, MF_GRAYED | MF_BYCOMMAND);
+		//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_EXIT, MF_GRAYED | MF_BYCOMMAND);
+		//	break;
+		//}
 
 		case MENU_ASSOCIATE:
 			RegisterExtensions(true);

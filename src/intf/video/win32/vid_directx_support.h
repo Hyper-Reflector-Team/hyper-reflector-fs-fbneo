@@ -39,6 +39,9 @@ int VidSScaleImage(RECT* pRect, int nGameWidth, int nGameHeight, bool bVertScanl
 bool VidSGetArcaderes(int* pWidth, int* pHeight);
 
 // Text display
+// NOTE: OSD == "On Screen Display", and known as a HUD ("Heads Up Display").
+// This is everything that goes on top of the game image.
+// NOTE: When we get into universal menuing system, this kind of thing will be removed.
 void VidSExitOSD();
 int VidSInitOSD(int nFlags);
 int VidSRestoreOSD();

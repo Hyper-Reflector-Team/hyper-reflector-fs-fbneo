@@ -320,7 +320,7 @@ GGPOErrorCode Peer2PeerBackend::AddPlayer(GGPOPlayer* player)
 
 
 // -------------------------------------------------------------------------------------------------------------------
-bool Peer2PeerBackend::Chat(char* text) {
+bool Peer2PeerBackend::ChatCommand(char* text) {
 
   for (int i = 0; i < _num_players; i++) {
     // if (i == _playerIndex) { continue; }      // Don't chat to ourselves....
@@ -460,25 +460,19 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, PlayerID play
     _callbacks.on_event(&info);
     break;
 
-  case UdpProtocol::Event::Chat:
+  case UdpProtocol::Event::ChatCommand:
 
-    if (evt.u.chat.text[0] == 'T')
-    {
-      char text[MAX_GGPOCHAT_SIZE];
-      auto userName = _PlayerNames[playerIndex];
+    char text[MAX_GGPOCHAT_SIZE];
+    auto userName = _PlayerNames[playerIndex];
 
-      strcpy_s(text, evt.u.chat.text + 1);
+    strcpy_s(text, evt.u.chat.text);
 
-      info.code = GGPO_EVENTCODE_CHAT;
-      info.u.chat.username = userName;
-      info.u.chat.text = text;
+    info.code = GGPO_EVENTCODE_CHATCOMMAND;
+    info.u.chat.username = userName;
+    info.u.chat.text = text;
 
-      _callbacks.on_event(&info);
-    }
+    _callbacks.on_event(&info);
 
-    // info.code = 
-
-    // NOTE: We have to set player name + message data.... makes sense.....
     break;
 
   }

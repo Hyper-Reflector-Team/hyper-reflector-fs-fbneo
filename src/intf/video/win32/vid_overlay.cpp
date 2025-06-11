@@ -105,8 +105,8 @@ static int volume_time = 0;
 
 enum
 {
-	CMD_CHATMUTED = 1,
-	CMD_DELAYRA = 2,
+	CMD_CHAT_MUTED = 1,
+	CMD_DELAY_RUNAHEAD = 2,
 };
 
 static bool CopyFileContents(const char *src, const char *dst)
@@ -1367,7 +1367,7 @@ void VidOverlaySetSystemMessage(const wchar_t *text)
 
 void SendToPeer(int delay, int runahead) {
 	char buffer[32];
-	sprintf(buffer, "%d,%d,%d,%d", CMD_DELAYRA, game_player, delay, runahead);
+	sprintf(buffer, "%d,%d,%d,%d", CMD_DELAY_RUNAHEAD, game_player, delay, runahead);
 	QuarkSendChatCmd(buffer, 'C');
 }
 
@@ -1542,14 +1542,14 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 			switch (cmd)
 			{
 				// get delay & runahead from opponent
-				case CMD_DELAYRA:
+				case CMD_DELAY_RUNAHEAD:
 					if (idx != game_player) {
 						swscanf(text, _T("%d,%d,%d,%d"), &cmd, &idx, &op_delay, &op_runahead);
 						bOpInfoRcvd = true;
 					}
 					break;
 				// opponent has ingame chat muted
-				case CMD_CHATMUTED:
+				case CMD_CHAT_MUTED:
 					if (idx != game_player) {
 						VidOverlayAddChatLine(_T("System"), _T("Your opponent has opted to disable ingame chat. Your message was not sent."));
 					}
@@ -1564,11 +1564,15 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 		if (!bMutedWarnSent) {
 			char buffer[16];
 			bMutedWarnSent = true;
-			sprintf(buffer, "%d,%d", CMD_CHATMUTED, game_player);
+			sprintf(buffer, "%d,%d", CMD_CHAT_MUTED, game_player);
 			QuarkSendChatCmd(buffer, 'C');
 		}
 		return;
 	}
+
+  // OPTIONS:
+  const UINT P1_CHAT_COLOR = 0xFF00B2FF;
+  const UINT P2_CHAT_COLOR = 0xFFFFB200;
 
 	// regular chat
 	bool save = false;
@@ -1579,12 +1583,12 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 	wchar_t user[128];
 	if (!wcscmp(name, player1.name.str)) {
 		swprintf(user, 128, _T("%s"), name);
-		chat_names[0].col = (game_player == 0) ? 0xFF00B2FF : 0xFFFFB200;
+		chat_names[0].col = (game_player == 0) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
 		save = true;
 	}
 	else if (!wcscmp(name, player2.name.str)) {
 		swprintf(user, 128, _T("%s"), name);
-		chat_names[0].col = (game_player == 1) ? 0xFF00B2FF : 0xFFFFB200;
+		chat_names[0].col = (game_player == 1) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
 		save = true;
 	}
 	else {

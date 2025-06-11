@@ -128,19 +128,6 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent* info)
     VidSSetGameSpectators(info->u.spectator_count_changed.count);
     break;
 
-    //case GGPOCLIENT_EVENTCODE_CHAT:
-    //	if (strlen(info->u.chat.text) > 0) {
-    //		TCHAR szUser[128];
-    //		TCHAR szText[1024];
-    //		ANSIToTCHAR(info->u.chat.username, szUser, 128);
-    //		ANSIToTCHAR(info->u.chat.text, szText, 1024);
-    //		VidOverlayAddChatLine(szUser, szText);
-    //		TCHAR szTemp[128];
-    //		_sntprintf(szTemp, 128, _T("«%.32hs» "), info->u.chat.username);
-    //		VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
-    //	}
-    //	break;
-
   default:
     break;
   }
@@ -196,16 +183,29 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
 
-  case GGPO_EVENTCODE_CHAT:
+  case GGPO_EVENTCODE_CHATCOMMAND:
+
     if (strlen(info->u.chat.text) > 0) {
-      TCHAR szUser[MAX_CHAT_SIZE];
-      TCHAR szText[MAX_CHAT_SIZE];
-      ANSIToTCHAR(info->u.chat.username, szUser, MAX_CHAT_SIZE);
-      ANSIToTCHAR(info->u.chat.text, szText, MAX_CHAT_SIZE);
-      VidOverlayAddChatLine(szUser, szText);
-      TCHAR szTemp[MAX_CHAT_SIZE];
-      _sntprintf(szTemp, MAX_CHAT_SIZE, _T("«%.32hs» "), info->u.chat.username);
-      VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
+      char& first = info->u.chat.text[0];
+      char* msg = info->u.chat.text + 1;
+
+      if (first == 'T' || first == 'C')
+      {
+        TCHAR szUser[MAX_CHAT_SIZE];
+        TCHAR szText[MAX_CHAT_SIZE];
+
+        ANSIToTCHAR(info->u.chat.username, szUser, MAX_CHAT_SIZE);
+        ANSIToTCHAR(msg, szText, MAX_CHAT_SIZE);
+
+        // Are we adding chat data twice for some reason....?
+        VidOverlayAddChatLine(szUser, szText);
+
+        // ummmm.... do we know what this is all about?
+        //TCHAR szTemp[MAX_CHAT_SIZE];
+        //_sntprintf(szTemp, MAX_CHAT_SIZE, _T("«%.32hs» "), info->u.chat.username);
+        //VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
+      }
+
     }
     break;
 

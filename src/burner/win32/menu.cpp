@@ -1433,9 +1433,9 @@ void MenuEnableItems()
 				EnableMenuItem(hMenu, MENU_ENABLECHEAT,	MF_ENABLED | MF_BYCOMMAND);
 			}
 
-			if (CheatSearchInit()) {
-				EnableMenuItem(hMenu, MENU_CHEATSEARCH_START, MF_ENABLED | MF_BYCOMMAND);
-			}
+			//if (CheatSearchInit()) {
+			//	EnableMenuItem(hMenu, MENU_CHEATSEARCH_START, MF_ENABLED | MF_BYCOMMAND);
+			//}
 
 #if defined (FBNEO_DEBUG)
 			extern UINT8 DebugCPU_SekInitted;
