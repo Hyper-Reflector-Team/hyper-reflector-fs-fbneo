@@ -48,12 +48,6 @@ public:
    virtual void OnMsg(sockaddr_in &from, UdpMsg *msg, int len);
 
 protected:
-   // GGPOErrorCode PlayerHandleToQueue(PlayerID player, int *queue);
-
-   // [OBSOLETE]
-   // NOTE: Having special functions to add / minus some number to an index will be removed.
-   // PlayerID QueueToPlayerHandle(PlayerID playerIndex) { return playerIndex; }
-   PlayerID QueueToSpectatorHandle(int queue) { return (PlayerID)(queue + 1000); } /* out of range of the player array, basically */
    void DisconnectPlayer(PlayerID playerIndex, int syncto);
    void PollSyncEvents(void);
    void PollUdpProtocolEvents(void);
@@ -62,12 +56,9 @@ protected:
    int PollNPlayers(int current_frame);
    void AddRemotePlayer(char *remoteip, uint16 reportport, int queue);
    
-   // [OBSOLETE]
-   GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
    virtual void OnSyncEvent(Sync::Event &e) { }
    virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, PlayerID playerIndex);
    virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, PlayerID playerIndex);
-   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, PlayerID playerIndex);
 
 protected:
    GGPOSessionCallbacks  _callbacks;
@@ -76,16 +67,12 @@ protected:
    Udp                   _udp;
    UdpProtocol           *_endpoints;
 
-   // NOTE: Spectators will likely be removed from this backend...
-   UdpProtocol           _spectators[GGPO_MAX_SPECTATORS];
-   int                   _num_spectators;
    int                   _input_size;
 
    bool                  _synchronizing;
    int                   _num_players;
    int                   _next_recommended_sleep;
 
-   int                   _next_spectator_frame;
    int                   _disconnect_timeout;
    int                   _disconnect_notify_start;
 
