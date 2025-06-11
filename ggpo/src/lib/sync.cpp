@@ -55,7 +55,7 @@ Sync::SetLastConfirmedFrame(int frame)
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
-bool Sync::AddLocalInput(int playerIndex, GameInput &input)
+bool Sync::AddLocalInput(PlayerID playerIndex, GameInput &input)
 {
    int frames_behind = _framecount - _last_confirmed_frame; 
    if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
@@ -75,7 +75,7 @@ bool Sync::AddLocalInput(int playerIndex, GameInput &input)
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
-void Sync::AddRemoteInput(int playerIndex, GameInput &input)
+void Sync::AddRemoteInput(PlayerID playerIndex, GameInput &input)
 {
    _input_queues[playerIndex].AddInput(input);
 }

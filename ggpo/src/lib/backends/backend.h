@@ -17,11 +17,11 @@ struct GGPOSession {
    virtual ~GGPOSession() { }
    virtual GGPOErrorCode DoPoll(int timeout) { return GGPO_OK; }
    virtual GGPOErrorCode AddPlayer(GGPOPlayer *player) = 0;
-   virtual GGPOErrorCode AddLocalInput(uint16 playerIndex, void *values, int totalSize) = 0;
+   virtual GGPOErrorCode AddLocalInput(PlayerID playerIndex, void *values, int totalSize) = 0;
    virtual GGPOErrorCode SyncInput(void *values, int totalSize, int playerCount) = 0;
    virtual GGPOErrorCode IncrementFrame(void) { return GGPO_OK; }
    virtual bool Chat(char *text) { return true; }
-   virtual GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle handle) { return GGPO_OK; }
+   virtual GGPOErrorCode DisconnectPlayer(PlayerID handle) { return GGPO_OK; }
    virtual bool GetNetworkStats(GGPONetworkStats *stats) { return GGPO_OK; }
    virtual GGPOErrorCode Logv(const char *fmt, va_list list) { ::Logv(fmt, list); return GGPO_OK; }
 
@@ -33,7 +33,7 @@ struct GGPOSession {
 protected:
 	IN_ADDR _RemoteAddr;
 	uint16 _RemotePort = 0;
-	uint16 _PlayerIndex = 0;
+  PlayerID _playerIndex = 0;
 
   char _PlayerNames[2][MAX_NAME_SIZE];
 

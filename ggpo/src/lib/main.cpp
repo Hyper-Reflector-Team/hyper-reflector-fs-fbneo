@@ -41,7 +41,7 @@ GGPOSession* ggpo_start_session(
   uint16 localPort,
   char* remoteIp,
   uint16 remotePort,
-  uint16 playerIndex,
+  PlayerID playerIndex,
   char* playerName)
 {
   auto res = (GGPOSession*)new Peer2PeerBackend(cb,
@@ -97,7 +97,7 @@ ggpo_idle(GGPOSession* ggpo, int timeout)
 
 //GGPOErrorCode
 //ggpo_add_local_input(GGPOSession *ggpo,
-//                     GGPOPlayerHandle player,
+//                     PlayerID player,
 //                     void *values,
 //                     int isize)
 //{
@@ -133,7 +133,7 @@ ggpo_synchronize_input(GGPOSession* ggpo,
 }
 
 GGPOErrorCode ggpo_disconnect_player(GGPOSession* ggpo,
-  GGPOPlayerHandle player)
+  PlayerID player)
 {
   if (!ggpo) {
     return GGPO_ERRORCODE_INVALID_SESSION;
@@ -174,7 +174,7 @@ bool ggpo_client_chat(GGPOSession* ggpo, char* text)
 // Original:
 //GGPOErrorCode
 //ggpo_get_network_stats(GGPOSession* ggpo,
-//	GGPOPlayerHandle player,
+//	PlayerID player,
 //	GGPONetworkStats* stats)
 //{
 //	if (!ggpo) {

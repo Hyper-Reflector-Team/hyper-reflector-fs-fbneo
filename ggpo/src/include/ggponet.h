@@ -49,7 +49,7 @@ extern "C" {
 
   typedef struct GGPOSession GGPOSession;
 
-  typedef uint16 GGPOPlayerHandle;
+  typedef uint16 PlayerID;
 
   typedef enum {
     GGPO_PLAYERTYPE_LOCAL,
@@ -174,29 +174,29 @@ extern "C" {
     GGPOEventCode code;
     union {
       struct {
-        GGPOPlayerHandle  player_index;
+        PlayerID  player_index;
         // char playerName[MAX_NAME_SIZE];
       } connected;
       struct {
-        GGPOPlayerHandle  player_index;
+        PlayerID  player_index;
         int               count;
         int               total;
       } synchronizing;
       struct {
-        GGPOPlayerHandle  player_index;
+        PlayerID  player_index;
       } synchronized;
       struct {
-        GGPOPlayerHandle  player_index;
+        PlayerID  player_index;
       } disconnected;
       struct {
         int               frames_ahead;
       } timesync;
       struct {
-        GGPOPlayerHandle  player_index;
+        PlayerID  player_index;
         int               disconnect_timeout;
       } connection_interrupted;
       struct {
-        GGPOPlayerHandle  player_index;
+        PlayerID  player_index;
       } connection_resumed;
 
       // NOTE: I expect to change this definition at some point....
@@ -346,7 +346,7 @@ extern "C" {
     uint16 localPort,
     char* remoteIp,
     uint16  remotePort,
-    uint16 playerIndex,
+    PlayerID playerIndex,
     char* playerName);
 
 
@@ -363,7 +363,7 @@ extern "C" {
    */
   GGPO_API GGPOErrorCode __cdecl ggpo_add_player(GGPOSession* session,
     GGPOPlayer* player,
-    GGPOPlayerHandle* handle);
+    PlayerID* handle);
 
 
   /*
@@ -474,7 +474,7 @@ extern "C" {
    * size passed into ggpo_start_session.
    */
   GGPO_API GGPOErrorCode __cdecl ggpo_add_local_input(GGPOSession*,
-    GGPOPlayerHandle player,
+    PlayerID player,
     void* values,
     int totalSize);
 
@@ -514,7 +514,7 @@ extern "C" {
    * if you try to disconnect a player who has already been disconnected.
    */
   GGPO_API GGPOErrorCode __cdecl ggpo_disconnect_player(GGPOSession*,
-    GGPOPlayerHandle player);
+    PlayerID player);
 
   /*
    * ggpo_advance_frame --
@@ -537,7 +537,7 @@ extern "C" {
    * stats - Out parameter to the network statistics.
    */
    //GGPO_API GGPOErrorCode __cdecl ggpo_get_network_stats(GGPOSession*,
-   //	GGPOPlayerHandle player,
+   //	PlayerID player,
    //	GGPONetworkStats* stats);
 
    /*

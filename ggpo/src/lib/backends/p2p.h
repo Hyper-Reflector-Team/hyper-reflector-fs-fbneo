@@ -26,17 +26,17 @@ static const uint16 INPUT_SIZE = 5;
 // ==========================================================================================================
 class Peer2PeerBackend : public GGPOSession, IPollSink, Udp::Callbacks {
 public:
-   Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16 localport, char* remoteIp, uint16 remotePort, uint16 playerIndex, std::string playerName);
+   Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16 localport, char* remoteIp, uint16 remotePort, PlayerID playerIndex, std::string playerName);
    virtual ~Peer2PeerBackend();
 
 
 public:
    virtual GGPOErrorCode DoPoll(int timeout);
    virtual GGPOErrorCode AddPlayer(GGPOPlayer *player);
-   virtual GGPOErrorCode AddLocalInput(uint16 playerIndex, void *values, int totalSize);
+   virtual GGPOErrorCode AddLocalInput(PlayerID playerIndex, void *values, int totalSize);
    virtual GGPOErrorCode SyncInput(void *values, int totalSize, int playerCount);
    virtual GGPOErrorCode IncrementFrame(void);
-   virtual GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle handle);
+   virtual GGPOErrorCode DisconnectPlayer(PlayerID playerIndex);
    virtual bool GetNetworkStats(GGPONetworkStats *stats);
    virtual uint32 SetFrameDelay(int delay);
    virtual GGPOErrorCode SetDisconnectTimeout(int timeout);
@@ -48,13 +48,13 @@ public:
    virtual void OnMsg(sockaddr_in &from, UdpMsg *msg, int len);
 
 protected:
-   // GGPOErrorCode PlayerHandleToQueue(GGPOPlayerHandle player, int *queue);
+   // GGPOErrorCode PlayerHandleToQueue(PlayerID player, int *queue);
 
    // [OBSOLETE]
    // NOTE: Having special functions to add / minus some number to an index will be removed.
-   // GGPOPlayerHandle QueueToPlayerHandle(uint16 playerIndex) { return playerIndex; }
-   GGPOPlayerHandle QueueToSpectatorHandle(int queue) { return (GGPOPlayerHandle)(queue + 1000); } /* out of range of the player array, basically */
-   void DisconnectPlayer(uint16 playerIndex, int syncto);
+   // PlayerID QueueToPlayerHandle(PlayerID playerIndex) { return playerIndex; }
+   PlayerID QueueToSpectatorHandle(int queue) { return (PlayerID)(queue + 1000); } /* out of range of the player array, basically */
+   void DisconnectPlayer(PlayerID playerIndex, int syncto);
    void PollSyncEvents(void);
    void PollUdpProtocolEvents(void);
    void CheckInitialSync(void);
@@ -65,9 +65,9 @@ protected:
    // [OBSOLETE]
    GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
    virtual void OnSyncEvent(Sync::Event &e) { }
-   virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, uint16 playerIndex);
-   virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, uint16 playerIndex);
-   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, uint16 playerIndex);
+   virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, PlayerID playerIndex);
+   virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, PlayerID playerIndex);
+   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, PlayerID playerIndex);
 
 protected:
    GGPOSessionCallbacks  _callbacks;

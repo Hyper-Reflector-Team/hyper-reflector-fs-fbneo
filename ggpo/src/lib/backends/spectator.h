@@ -25,13 +25,13 @@ public:
 
 public:
    virtual GGPOErrorCode DoPoll(int timeout);
-   virtual GGPOErrorCode AddPlayer(GGPOPlayer *player, GGPOPlayerHandle *handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
-   virtual GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, void *values, int size) { return GGPO_OK; }
+   virtual GGPOErrorCode AddPlayer(GGPOPlayer *player, PlayerID *handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
+   virtual GGPOErrorCode AddLocalInput(PlayerID player, void *values, int size) { return GGPO_OK; }
    virtual GGPOErrorCode SyncInput(void *values, int size, int *disconnect_flags);
    virtual GGPOErrorCode IncrementFrame(void);
-   virtual GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
-   virtual GGPOErrorCode GetNetworkStats(GGPONetworkStats *stats, GGPOPlayerHandle handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
-   virtual GGPOErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) { return GGPO_ERRORCODE_UNSUPPORTED; }
+   virtual GGPOErrorCode DisconnectPlayer(PlayerID handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
+   virtual GGPOErrorCode GetNetworkStats(GGPONetworkStats *stats, PlayerID handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
+   virtual GGPOErrorCode SetFrameDelay(PlayerID player, int delay) { return GGPO_ERRORCODE_UNSUPPORTED; }
    virtual GGPOErrorCode SetDisconnectTimeout(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }
    virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }
 
