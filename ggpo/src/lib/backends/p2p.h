@@ -32,7 +32,7 @@ public:
 
 public:
    virtual GGPOErrorCode DoPoll(int timeout);
-   virtual GGPOErrorCode AddPlayer(GGPOPlayer *player, GGPOPlayerHandle *handle);
+   virtual GGPOErrorCode AddPlayer(GGPOPlayer *player);
    virtual GGPOErrorCode AddLocalInput(uint16 playerIndex, void *values, int totalSize);
    virtual GGPOErrorCode SyncInput(void *values, int totalSize, int playerCount);
    virtual GGPOErrorCode IncrementFrame(void);
@@ -48,24 +48,26 @@ public:
    virtual void OnMsg(sockaddr_in &from, UdpMsg *msg, int len);
 
 protected:
-   GGPOErrorCode PlayerHandleToQueue(GGPOPlayerHandle player, int *queue);
+   // GGPOErrorCode PlayerHandleToQueue(GGPOPlayerHandle player, int *queue);
 
    // [OBSOLETE]
    // NOTE: Having special functions to add / minus some number to an index will be removed.
-   GGPOPlayerHandle QueueToPlayerHandle(uint16 playerIndex) { return playerIndex; }
+   // GGPOPlayerHandle QueueToPlayerHandle(uint16 playerIndex) { return playerIndex; }
    GGPOPlayerHandle QueueToSpectatorHandle(int queue) { return (GGPOPlayerHandle)(queue + 1000); } /* out of range of the player array, basically */
-   void DisconnectPlayerQueue(uint16 queue, int syncto);
+   void DisconnectPlayer(uint16 playerIndex, int syncto);
    void PollSyncEvents(void);
    void PollUdpProtocolEvents(void);
    void CheckInitialSync(void);
    int Poll2Players(int current_frame);
    int PollNPlayers(int current_frame);
    void AddRemotePlayer(char *remoteip, uint16 reportport, int queue);
+   
+   // [OBSOLETE]
    GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
    virtual void OnSyncEvent(Sync::Event &e) { }
    virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, uint16 playerIndex);
-   virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, uint16 queue);
-   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, uint16 queue);
+   virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, uint16 playerIndex);
+   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, uint16 playerIndex);
 
 protected:
    GGPOSessionCallbacks  _callbacks;

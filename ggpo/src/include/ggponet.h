@@ -67,8 +67,7 @@ extern "C" {
    *       ggpo_add_local_inputs.  Remote players values will come over the
    *       network.
    *
-   * player_num: The player number.  Should be between 1 and the number of players
-   *       In the game (e.g. in a 2 player game, either 1 or 2).
+   * player_index: The index of the player.  This is zero based, so player 1 = 0, player 2 = 1, etc.
    *
    * If type == GGPO_PLAYERTYPE_REMOTE:
    *
@@ -84,7 +83,7 @@ extern "C" {
   typedef struct GGPOPlayer {
     int               size;
     GGPOPlayerType    type;
-    uint16            player_num;			// TODO: Convert to zero-based index.
+    uint16            player_index;
     union {
       struct {
       } local;
@@ -96,7 +95,7 @@ extern "C" {
   } GGPOPlayer;
 
   typedef struct GGPOLocalEndpoint {
-    int      player_num;
+    int      player_index;
   } GGPOLocalEndpoint;
 
 
@@ -175,29 +174,29 @@ extern "C" {
     GGPOEventCode code;
     union {
       struct {
-        GGPOPlayerHandle  player;
+        GGPOPlayerHandle  player_index;
         // char playerName[MAX_NAME_SIZE];
       } connected;
       struct {
-        GGPOPlayerHandle  player;
+        GGPOPlayerHandle  player_index;
         int               count;
         int               total;
       } synchronizing;
       struct {
-        GGPOPlayerHandle  player;
+        GGPOPlayerHandle  player_index;
       } synchronized;
       struct {
-        GGPOPlayerHandle  player;
+        GGPOPlayerHandle  player_index;
       } disconnected;
       struct {
         int               frames_ahead;
       } timesync;
       struct {
-        GGPOPlayerHandle  player;
+        GGPOPlayerHandle  player_index;
         int               disconnect_timeout;
       } connection_interrupted;
       struct {
-        GGPOPlayerHandle  player;
+        GGPOPlayerHandle  player_index;
       } connection_resumed;
 
       // NOTE: I expect to change this definition at some point....

@@ -99,11 +99,10 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
       memcpy(&ipa, remoteIp, (std::min)(ARRAYSIZE(ipa), strlen(remoteIp) + 1));
       p.u.remote.port = remotePort;
     }
-    p.player_num = i + 1;
+    p.player_index = i;
     p.size = sizeof(GGPOPlayer);
 
-    GGPOPlayerHandle handle;		// NOTE: Throwaway.
-    AddPlayer(&p, &handle);
+    AddPlayer(&p);
   }
 
 
@@ -115,6 +114,46 @@ Peer2PeerBackend::~Peer2PeerBackend()
   delete[] _endpoints;
 }
 
+
+// -------------------------------------------------------------------------------------------------------------------
+// NOTE: We already know what our player playerIndex is so we don't have to pass it in.
+// That could be different if we had two local players, but we can figure that out later....
+GGPOErrorCode Peer2PeerBackend::AddLocalInput(uint16 playerIndex, void* values, int isize) {
+
+  GameInput input;
+
+  if (_sync.InRollback()) {
+    return GGPO_ERRORCODE_IN_ROLLBACK;
+  }
+  if (_synchronizing) {
+    return GGPO_ERRORCODE_NOT_SYNCHRONIZED;
+  }
+
+  input.init(-1, (char*)values, isize);
+
+  // Feed the input for the current frame into the synchronzation layer.
+  if (!_sync.AddLocalInput(playerIndex, input)) {
+    return GGPO_ERRORCODE_PREDICTION_THRESHOLD;
+  }
+
+  if (input.frame != GameInput::NullFrame) { // xxx: <- comment why this is the case
+    // Update the local connect status state to indicate that we've got a
+    // confirmed local frame for this player.  this must come first so it
+    // gets incorporated into the next packet we send.
+
+    Log("setting local connect status for local player %d to %d", playerIndex, input.frame);
+    _local_connect_status[playerIndex].last_frame = input.frame;
+
+    // Send the input to all the remote players.
+    for (int i = 0; i < _num_players; i++) {
+      if (_endpoints[i].IsInitialized()) {
+        _endpoints[i].SendInput(input);
+      }
+    }
+  }
+
+  return GGPO_OK;
+}
 // ----------------------------------------------------------------------------------------------------------
 void Peer2PeerBackend::AddRemotePlayer(char* ip, uint16 port, int queue)
 {
@@ -130,8 +169,8 @@ void Peer2PeerBackend::AddRemotePlayer(char* ip, uint16 port, int queue)
   _endpoints[queue].SetPlayerName(_PlayerNames[_PlayerIndex]);
 }
 
-GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip,
-  uint16 port)
+// ----------------------------------------------------------------------------------------------------------
+GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip, uint16 port)
 {
   if (_num_spectators == GGPO_MAX_SPECTATORS) {
     return GGPO_ERRORCODE_TOO_MANY_SPECTATORS;
@@ -152,6 +191,7 @@ GGPOErrorCode Peer2PeerBackend::AddSpectator(char* ip,
   return GGPO_OK;
 }
 
+// ----------------------------------------------------------------------------------------------------------
 GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
 {
   if (!_sync.InRollback()) {
@@ -240,7 +280,7 @@ int Peer2PeerBackend::Poll2Players(int current_frame)
     Log("  local endp: connected = %d, last_received = %d, total_min_confirmed = %d.\n", !_local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed);
     if (!queue_connected && !_local_connect_status[i].disconnected) {
       Log("disconnecting i %d by remote request.\n", i);
-      DisconnectPlayerQueue(i, total_min_confirmed);
+      DisconnectPlayer(i, total_min_confirmed);
     }
     Log("  total_min_confirmed = %d.\n", total_min_confirmed);
   }
@@ -257,7 +297,7 @@ int Peer2PeerBackend::PollNPlayers(int current_frame)
   for (queue = 0; queue < _num_players; queue++) {
     bool queue_connected = true;
     int queue_min_confirmed = MAX_INT;
-    Log("considering queue %d.\n", queue);
+    Log("considering playerIndex %d.\n", queue);
     for (i = 0; i < _num_players; i++) {
       // we're going to do a lot of logic here in consideration of endpoint i.
       // keep accumulating the minimum confirmed point for all n*n packets and
@@ -287,8 +327,8 @@ int Peer2PeerBackend::PollNPlayers(int current_frame)
       // so, we need to re-adjust.  This can happen when we detect our own disconnect at frame n
       // and later receive a disconnect notification for frame n-1.
       if (!_local_connect_status[queue].disconnected || _local_connect_status[queue].last_frame > queue_min_confirmed) {
-        Log("disconnecting queue %d by remote request.\n", queue);
-        DisconnectPlayerQueue(queue, queue_min_confirmed);
+        Log("disconnecting playerIndex %d by remote request.\n", queue);
+        DisconnectPlayer(queue, queue_min_confirmed);
       }
     }
     Log("  total_min_confirmed = %d.\n", total_min_confirmed);
@@ -297,64 +337,26 @@ int Peer2PeerBackend::PollNPlayers(int current_frame)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-GGPOErrorCode Peer2PeerBackend::AddPlayer(GGPOPlayer* player, GGPOPlayerHandle* handle)
+GGPOErrorCode Peer2PeerBackend::AddPlayer(GGPOPlayer* player)
 {
   // Spectator support will be removed!
   //if (player->type == GGPO_PLAYERTYPE_SPECTATOR) {
   //	return AddSpectator(player->u.remote.ip_address, player->u.remote.port);
   //} 
 
-  uint16 queue = player->player_num - 1;
-  if (player->player_num < 1 || player->player_num > _num_players) {
+  uint16 playerIndex = player->player_index;
+  if (player->player_index > _num_players) {
     return GGPO_ERRORCODE_PLAYER_OUT_OF_RANGE;
   }
-  *handle = QueueToPlayerHandle(queue);
+  // *playerIndex = playerIndex;
 
   if (player->type == GGPO_PLAYERTYPE_REMOTE) {
-    AddRemotePlayer(player->u.remote.ip_address, player->u.remote.port, queue);
-  }
-  return GGPO_OK;
-}
-
-// -------------------------------------------------------------------------------------------------------------------
-// NOTE: We already know what our player index is so we don't have to pass it in.
-// That could be different if we had two local players, but we can figure that out later....
-GGPOErrorCode Peer2PeerBackend::AddLocalInput(uint16 playerIndex, void* values, int isize) {
-
-  GameInput input;
-
-  if (_sync.InRollback()) {
-    return GGPO_ERRORCODE_IN_ROLLBACK;
-  }
-  if (_synchronizing) {
-    return GGPO_ERRORCODE_NOT_SYNCHRONIZED;
-  }
-
-  input.init(-1, (char*)values, isize);
-
-  // Feed the input for the current frame into the synchronzation layer.
-  if (!_sync.AddLocalInput(playerIndex, input)) {
-    return GGPO_ERRORCODE_PREDICTION_THRESHOLD;
-  }
-
-  if (input.frame != GameInput::NullFrame) { // xxx: <- comment why this is the case
-    // Update the local connect status state to indicate that we've got a
-    // confirmed local frame for this player.  this must come first so it
-    // gets incorporated into the next packet we send.
-
-    Log("setting local connect status for local player %d to %d", playerIndex, input.frame);
-    _local_connect_status[playerIndex].last_frame = input.frame;
-
-    // Send the input to all the remote players.
-    for (int i = 0; i < _num_players; i++) {
-      if (_endpoints[i].IsInitialized()) {
-        _endpoints[i].SendInput(input);
-      }
-    }
+    AddRemotePlayer(player->u.remote.ip_address, player->u.remote.port, playerIndex);
   }
 
   return GGPO_OK;
 }
+
 
 // -------------------------------------------------------------------------------------------------------------------
 bool Peer2PeerBackend::Chat(char* text) {
@@ -383,7 +385,7 @@ GGPOErrorCode Peer2PeerBackend::SyncInput(void* values, int isize, int playerCou
   }
 
   // NOTE: We aren't doing anything with the flags... I think the system is probably using the event codes
-  // to handle this kind of thing......
+  // to playerIndex this kind of thing......
   _sync.SynchronizeInputs(values, isize * playerCount);
 
   // The disconnect flags tell us who isn't connected anymore....   
@@ -433,8 +435,8 @@ Peer2PeerBackend::PollUdpProtocolEvents(void)
   }
 }
 
-void
-Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpProtocol::Event& evt, uint16 playerIndex)
+// ----------------------------------------------------------------------------------------------------------
+void Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpProtocol::Event& evt, uint16 playerIndex)
 {
   OnUdpProtocolEvent(evt, playerIndex);
   switch (evt.type) {
@@ -447,7 +449,7 @@ Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpProtocol::Event& evt, uint16 playerI
 
       _sync.AddRemoteInput(playerIndex, evt.u.input.input);
       // Notify the other endpoints which frame we received from a peer
-      Log("setting remote connect status for queue %d to %d\n", playerIndex, evt.u.input.input.frame);
+      Log("setting remote connect status for playerIndex %d to %d\n", playerIndex, evt.u.input.input.frame);
       _local_connect_status[playerIndex].last_frame = evt.u.input.input.frame;
     }
     break;
@@ -459,9 +461,8 @@ Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpProtocol::Event& evt, uint16 playerI
   }
 }
 
-
-void
-Peer2PeerBackend::OnUdpProtocolSpectatorEvent(UdpProtocol::Event& evt, uint16 queue)
+// [Obsolete]
+void Peer2PeerBackend::OnUdpProtocolSpectatorEvent(UdpProtocol::Event& evt, uint16 queue)
 {
   GGPOPlayerHandle handle = QueueToSpectatorHandle(queue);
   OnUdpProtocolEvent(evt, handle);
@@ -473,7 +474,7 @@ Peer2PeerBackend::OnUdpProtocolSpectatorEvent(UdpProtocol::Event& evt, uint16 qu
     _spectators[queue].Disconnect();
 
     info.code = GGPO_EVENTCODE_DISCONNECTED_FROM_PEER;
-    info.u.disconnected.player = handle;
+    info.u.disconnected.player_index = handle;
     _callbacks.on_event(&info);
 
     break;
@@ -481,16 +482,16 @@ Peer2PeerBackend::OnUdpProtocolSpectatorEvent(UdpProtocol::Event& evt, uint16 qu
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHandle handle)
+void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHandle playerIndex)
 {
   GGPOEvent info;
 
   switch (evt.type) {
   case UdpProtocol::Event::Connected:
     info.code = GGPO_EVENTCODE_CONNECTED_TO_PEER;
-    info.u.connected.player = handle;
+    info.u.connected.player_index = playerIndex;
     
-    strcpy_s(_PlayerNames[handle], evt.u.connected.playerName);
+    strcpy_s(_PlayerNames[playerIndex], evt.u.connected.playerName);
 
     // strcpy_s(info.u.connected.playerName, evt.u.connected.playerName);
 
@@ -498,14 +499,14 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHan
     break;
   case UdpProtocol::Event::Synchronizing:
     info.code = GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER;
-    info.u.synchronizing.player = handle;
+    info.u.synchronizing.player_index = playerIndex;
     info.u.synchronizing.count = evt.u.synchronizing.count;
     info.u.synchronizing.total = evt.u.synchronizing.total;
     _callbacks.on_event(&info);
     break;
   case UdpProtocol::Event::Synchronzied:
     info.code = GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER;
-    info.u.synchronized.player = handle;
+    info.u.synchronized.player_index = playerIndex;
     _callbacks.on_event(&info);
 
     CheckInitialSync();
@@ -513,14 +514,14 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHan
 
   case UdpProtocol::Event::NetworkInterrupted:
     info.code = GGPO_EVENTCODE_CONNECTION_INTERRUPTED;
-    info.u.connection_interrupted.player = handle;
+    info.u.connection_interrupted.player_index = playerIndex;
     info.u.connection_interrupted.disconnect_timeout = evt.u.network_interrupted.disconnect_timeout;
     _callbacks.on_event(&info);
     break;
 
   case UdpProtocol::Event::NetworkResumed:
     info.code = GGPO_EVENTCODE_CONNECTION_RESUMED;
-    info.u.connection_resumed.player = handle;
+    info.u.connection_resumed.player_index = playerIndex;
     _callbacks.on_event(&info);
     break;
 
@@ -532,9 +533,9 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, GGPOPlayerHan
     //char username[MAX_NAME];
     char text[MAX_GGPOCHAT_SIZE];
 
-    auto userName = _PlayerNames[handle];
+    auto userName = _PlayerNames[playerIndex];
 
-    //sprintf_s(username, MAX_NAME, "player: %d", (handle - 1));
+    //sprintf_s(username, MAX_NAME, "player: %d", (playerIndex - 1));
     strcpy_s(text, evt.u.chat.text);
 
     info.code = GGPO_EVENTCODE_CHAT;
@@ -567,7 +568,7 @@ Peer2PeerBackend::DisconnectPlayer(GGPOPlayerHandle player)
   //	GGPOErrorCode result;
 
     // if (player > MAX_PLA
-    //result = PlayerHandleToQueue(player, &queue);
+    //result = PlayerHandleToQueue(player, &playerIndex);
     //if (!GGPO_SUCCEEDED(result)) {
     //	return result;
     //}
@@ -583,39 +584,39 @@ Peer2PeerBackend::DisconnectPlayer(GGPOPlayerHandle player)
     Log("Disconnecting local player %d at frame %d by user request.\n", queue, _local_connect_status[queue].last_frame);
     for (uint16 i = 0; i < _num_players; i++) {
       if (_endpoints[i].IsInitialized()) {
-        DisconnectPlayerQueue(i, current_frame);
+        DisconnectPlayer(i, current_frame);
       }
     }
   }
   else {
-    Log("Disconnecting queue %d at frame %d by user request.\n", queue, _local_connect_status[queue].last_frame);
-    DisconnectPlayerQueue(queue, _local_connect_status[queue].last_frame);
+    Log("Disconnecting playerIndex %d at frame %d by user request.\n", queue, _local_connect_status[queue].last_frame);
+    DisconnectPlayer(queue, _local_connect_status[queue].last_frame);
   }
   return GGPO_OK;
 }
 
-void
-Peer2PeerBackend::DisconnectPlayerQueue(uint16 queue, int syncto)
+// --------------------------------------------------------------------------------------------------------------
+void Peer2PeerBackend::DisconnectPlayer(uint16 playerIndex, int syncto)
 {
   GGPOEvent info;
   int framecount = _sync.GetFrameCount();
 
-  _endpoints[queue].Disconnect();
+  _endpoints[playerIndex].Disconnect();
 
-  Log("Changing queue %d local connect status for last frame from %d to %d on disconnect request (current: %d).\n",
-    queue, _local_connect_status[queue].last_frame, syncto, framecount);
+  Log("Changing playerIndex %d local connect status for last frame from %d to %d on disconnect request (current: %d).\n",
+    playerIndex, _local_connect_status[playerIndex].last_frame, syncto, framecount);
 
-  _local_connect_status[queue].disconnected = 1;
-  _local_connect_status[queue].last_frame = syncto;
+  _local_connect_status[playerIndex].disconnected = 1;
+  _local_connect_status[playerIndex].last_frame = syncto;
 
   if (syncto < framecount) {
-    Log("adjusting simulation to account for the fact that %d disconnected @ %d.\n", queue, syncto);
+    Log("adjusting simulation to account for the fact that %d disconnected @ %d.\n", playerIndex, syncto);
     _sync.AdjustSimulation(syncto);
     Log("finished adjusting simulation.\n");
   }
 
   info.code = GGPO_EVENTCODE_DISCONNECTED_FROM_PEER;
-  info.u.disconnected.player = QueueToPlayerHandle(queue);
+  info.u.disconnected.player_index = playerIndex;
   _callbacks.on_event(&info);
 
   CheckInitialSync();
@@ -680,17 +681,17 @@ Peer2PeerBackend::SetDisconnectNotifyStart(int timeout)
   return GGPO_OK;
 }
 
-// OBSOLETE: This will be removed as it just removes 1 from the player index.
-GGPOErrorCode
-Peer2PeerBackend::PlayerHandleToQueue(GGPOPlayerHandle player, int* queue)
-{
-  int offset = ((int)player - 1);
-  if (offset < 0 || offset >= _num_players) {
-    return GGPO_ERRORCODE_INVALID_PLAYER_HANDLE;
-  }
-  *queue = offset;
-  return GGPO_OK;
-}
+//// OBSOLETE: This will be removed as it just removes 1 from the player playerIndex.
+//GGPOErrorCode
+//Peer2PeerBackend::PlayerHandleToQueue(GGPOPlayerHandle player, int* playerIndex)
+//{
+//  int offset = ((int)player - 1);
+//  if (offset < 0 || offset >= _num_players) {
+//    return GGPO_ERRORCODE_INVALID_PLAYER_HANDLE;
+//  }
+//  *playerIndex = offset;
+//  return GGPO_OK;
+//}
 
 
 void

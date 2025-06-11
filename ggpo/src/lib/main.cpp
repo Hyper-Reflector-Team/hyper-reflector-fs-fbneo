@@ -14,87 +14,85 @@
 BOOL WINAPI
 DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
-	srand(Platform::GetCurrentTimeMS() + Platform::GetProcessID());
-	return TRUE;
+  srand(Platform::GetCurrentTimeMS() + Platform::GetProcessID());
+  return TRUE;
 }
 
 void
 ggpo_log(GGPOSession* ggpo, const char* fmt, ...)
 {
-	va_list args;
-	va_start(args, fmt);
-	ggpo_logv(ggpo, fmt, args);
-	va_end(args);
+  va_list args;
+  va_start(args, fmt);
+  ggpo_logv(ggpo, fmt, args);
+  va_end(args);
 }
 
 void
 ggpo_logv(GGPOSession* ggpo, const char* fmt, va_list args)
 {
-	if (ggpo) {
-		ggpo->Logv(fmt, args);
-	}
+  if (ggpo) {
+    ggpo->Logv(fmt, args);
+  }
 }
 
 GGPOSession* ggpo_start_session(
-	GGPOSessionCallbacks* cb, 
-	const char* gameName, 
-	uint16 localPort, 
-	char* remoteIp, 
-	uint16 remotePort,
-	uint16 playerIndex,
+  GGPOSessionCallbacks* cb,
+  const char* gameName,
+  uint16 localPort,
+  char* remoteIp,
+  uint16 remotePort,
+  uint16 playerIndex,
   char* playerName)
 {
-	auto res = (GGPOSession*)new Peer2PeerBackend(cb,
-		gameName,
-		localPort,
-		remoteIp,
-		remotePort,
-		playerIndex,
+  auto res = (GGPOSession*)new Peer2PeerBackend(cb,
+    gameName,
+    localPort,
+    remoteIp,
+    remotePort,
+    playerIndex,
     playerName);
-	return res;
+  return res;
 }
 
 
-GGPOErrorCode
-ggpo_add_player(GGPOSession* ggpo,
-	GGPOPlayer* player,
-	GGPOPlayerHandle* handle)
+// NOTE: We may not need this function call outside of the lib....
+GGPOErrorCode ggpo_add_player(GGPOSession* ggpo, GGPOPlayer* player)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->AddPlayer(player, handle);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->AddPlayer(player);
 }
 
 
 
 GGPOErrorCode
 ggpo_start_synctest(GGPOSession** ggpo,
-	GGPOSessionCallbacks* cb,
-	char* game,
-	int num_players,
-	int input_size,
-	int frames)
+  GGPOSessionCallbacks* cb,
+  char* game,
+  int num_players,
+  int input_size,
+  int frames)
 {
-	return GGPO_ERRORCODE_UNSUPPORTED;
-	//*ggpo = (GGPOSession *)new SyncTestBackend(cb, game, frames, num_players);
-	//return GGPO_OK;
+  return GGPO_ERRORCODE_UNSUPPORTED;
+  //*ggpo = (GGPOSession *)new SyncTestBackend(cb, game, frames, num_players);
+  //return GGPO_OK;
 }
 
 uint32 ggpo_set_frame_delay(GGPOSession* ggpo, int frame_delay) {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->SetFrameDelay(frame_delay);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->SetFrameDelay(frame_delay);
 }
 
 GGPOErrorCode
 ggpo_idle(GGPOSession* ggpo, int timeout)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->DoPoll(timeout);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->DoPoll(timeout);
 }
 
 //GGPOErrorCode
@@ -124,32 +122,32 @@ ggpo_idle(GGPOSession* ggpo, int timeout)
 
 GGPOErrorCode
 ggpo_synchronize_input(GGPOSession* ggpo,
-	void* values,
-	int isize,
-	int playerCount)
+  void* values,
+  int isize,
+  int playerCount)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->SyncInput(values, isize, playerCount);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->SyncInput(values, isize, playerCount);
 }
 
 GGPOErrorCode ggpo_disconnect_player(GGPOSession* ggpo,
-	GGPOPlayerHandle player)
+  GGPOPlayerHandle player)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->DisconnectPlayer(player);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->DisconnectPlayer(player);
 }
 
 GGPOErrorCode
 ggpo_advance_frame(GGPOSession* ggpo)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->IncrementFrame();
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->IncrementFrame();
 }
 
 //// ORIGINAL:
@@ -166,11 +164,11 @@ ggpo_advance_frame(GGPOSession* ggpo)
 // We will have to figure this out, but shouldn't be too hard.....
 bool ggpo_client_chat(GGPOSession* ggpo, char* text)
 {
-	if (!ggpo) {
-		return false;
-	}
-	bool res = ggpo->Chat(text);
-	return res;
+  if (!ggpo) {
+    return false;
+  }
+  bool res = ggpo->Chat(text);
+  return res;
 }
 
 // Original:
@@ -188,40 +186,40 @@ bool ggpo_client_chat(GGPOSession* ggpo, char* text)
 // ----------------------------------------------------------------------------------------------------------------
 bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats)
 {
-	if (!ggpo) {
-		return false;
-	}
-	bool res = ggpo->GetNetworkStats(stats);
-	return res;
+  if (!ggpo) {
+    return false;
+  }
+  bool res = ggpo->GetNetworkStats(stats);
+  return res;
 }
 
 
 GGPOErrorCode
 ggpo_close_session(GGPOSession* ggpo)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	delete ggpo;
-	return GGPO_OK;
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  delete ggpo;
+  return GGPO_OK;
 }
 
 GGPOErrorCode
 ggpo_set_disconnect_timeout(GGPOSession* ggpo, int timeout)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->SetDisconnectTimeout(timeout);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->SetDisconnectTimeout(timeout);
 }
 
 GGPOErrorCode
 ggpo_set_disconnect_notify_start(GGPOSession* ggpo, int timeout)
 {
-	if (!ggpo) {
-		return GGPO_ERRORCODE_INVALID_SESSION;
-	}
-	return ggpo->SetDisconnectNotifyStart(timeout);
+  if (!ggpo) {
+    return GGPO_ERRORCODE_INVALID_SESSION;
+  }
+  return ggpo->SetDisconnectNotifyStart(timeout);
 }
 //
 //GGPOErrorCode ggpo_start_spectating(GGPOSession **session,
