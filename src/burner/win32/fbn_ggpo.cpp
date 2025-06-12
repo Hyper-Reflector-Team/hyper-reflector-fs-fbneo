@@ -265,7 +265,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
-          VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
+          //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
           VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
         }
         return 0;
@@ -280,7 +280,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so put anonymous
       if (bDirect) {
-        VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
+        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
         VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
       }
       return 0;

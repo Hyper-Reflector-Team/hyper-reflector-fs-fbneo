@@ -224,6 +224,7 @@ GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
   return GGPO_OK;
 }
 
+// ----------------------------------------------------------------------------------------------------------
 int Peer2PeerBackend::Poll2Players(int current_frame)
 {
   uint16  i;
@@ -249,6 +250,7 @@ int Peer2PeerBackend::Poll2Players(int current_frame)
   return total_min_confirmed;
 }
 
+// ----------------------------------------------------------------------------------------------------------
 int Peer2PeerBackend::PollNPlayers(int current_frame)
 {
   uint16 i, queue;

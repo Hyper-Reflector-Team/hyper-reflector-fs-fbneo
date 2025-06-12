@@ -1296,12 +1296,15 @@ void VidOverlayRender(const RECT &dest, int gameWidth, int gameHeight, int scan_
 //------------------------------------------------------------------------------------------------------------------------------
 // overlay API
 //------------------------------------------------------------------------------------------------------------------------------
+// REFACTOR:  This function needs to be updated to take actual parameters, and not whatever bullshit transcoded into a string.
+// Just pass in two structs FFS!  No point in formatting strings, to pass them to a function only so they can be unparsed,
+// or worse yet, nothing happens if you don't get it right.
 void VidOverlaySetGameInfo(const wchar_t *name1, const wchar_t *name2, int spectator, int ranked, int playerIndex)
 {
 	game_enabled = 1;
 	game_spectator = spectator;
 	game_ranked = ranked;
-	game_player = playerIndex;
+	game_player = playerIndex;      // This is fucking bonkers!  we need to know our player index every time a score changes?
 #ifdef TEST_OVERLAY
 	gameDetector.run_detector = true;
 #endif
