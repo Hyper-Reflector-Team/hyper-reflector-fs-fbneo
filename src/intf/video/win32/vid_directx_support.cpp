@@ -1519,6 +1519,9 @@ int VidSSetGameInfo(const TCHAR *p1, const TCHAR *p2, INT32 spectator, INT32 ran
 
 int VidSSetGameScores(INT32 score1, INT32 score2)
 {
+  // DO NOTTHING
+  return 0 ;
+
 	nScore1 = score1;
 	nScore2 = score2;
 

@@ -685,7 +685,7 @@ void DetectorLoad(const char *game, bool debug, int seed)
 	debug_mode = debug;
  	gameDetector.Load(game);
 
-	// initial state
+	// initial state.  Why are we doing this???
 	if (kNetVersion >= NET_VERSION_KOF98_MOOD && seed) {
 		if (!strcmp(BurnDrvGetTextA(DRV_NAME), "kof98")) {
 			srand(seed);
@@ -1563,7 +1563,9 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 		return;
 	}
 
-	if (bVidMuteChat) {
+  // Let other player know that your chat is muted.  Only do this branch for non-system messages.
+  // NOTE: This is a great demonstration of how double-dipping on the 'name' parameter just makes things more difficult to deal with.
+	if (bVidMuteChat && wcscmp(name, _T("System"))) {
 		if (!bMutedWarnSent) {
 			char buffer[16];
 			bMutedWarnSent = true;

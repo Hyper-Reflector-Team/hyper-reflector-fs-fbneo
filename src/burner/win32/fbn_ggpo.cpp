@@ -224,10 +224,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
         ANSIToTCHAR(info->u.chat.username, szUser, MAX_CHAT_SIZE);
         ANSIToTCHAR(msg, szText, MAX_CHAT_SIZE);
 
-        // Are we adding chat data twice for some reason....?
-        VidOverlayAddChatLine(szUser, szText);
+        // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
+        TCHAR* useName = first == 'C' ? _T("Command") : szUser;
+        VidOverlayAddChatLine(useName, szText);
 
         // ummmm.... do we know what this is all about?
+        // --> It appears that there is some other overlay / OSD layer that isn't used.  Might be for the DDraw7 stuff which we don't care about.
+        // I think in 2025 that such a rendering approach can be ignored / removed.
         //TCHAR szTemp[MAX_CHAT_SIZE];
         //_sntprintf(szTemp, MAX_CHAT_SIZE, _T("«%.32hs» "), info->u.chat.username);
         //VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
@@ -307,8 +310,8 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so play anonymous
       if (bDirect) {
-        VidOverlaySetGameInfo(_T("player 1#0,0"), _T("player 2#0,0"), false, iRanked, iPlayer);
-        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
+        // VidOverlaySetGameInfo(_T("player 1#0,0"), _T("player 2#0,0"), false, iRanked, iPlayer);
+        // VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
       }
       return 1;
     }
