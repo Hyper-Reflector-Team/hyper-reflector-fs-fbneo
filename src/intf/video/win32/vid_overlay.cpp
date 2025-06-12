@@ -95,7 +95,7 @@ bool LoadD3DTextureFromFile(IDirect3DDevice9* device, const char* filename, IDir
 static int game_enabled = 0;
 static int game_spectator = 0;
 static int game_ranked = 0;
-static int game_player = 0;
+static UINT16 game_playerIndex = 0;
 static bool show_spectators = false;
 static bool show_chat_input = false;
 static bool show_chat = false;
@@ -1116,14 +1116,14 @@ void VidOverlayRender(const RECT &dest, int gameWidth, int gameHeight, int scan_
 	else if (bShowFPS) {
 		// stats (fps & ping)
 		stats_line1.col = (stats_line1_warning >= 100) ? 0xffff0000 : 0xffffffff;
-		stats_line1.Render((bShowFPS==2) ? frame_width - 0.0015f : frame_width - 0.0035f, 0.003f, 0.90f, FNT_MED*0.9, FONT_ALIGN_RIGHT);
+		stats_line1.Render((bShowFPS==2) ? frame_width - 0.0015f : frame_width - 0.0035f, 0.003f, 0.90f, FNT_MED*0.9f, FONT_ALIGN_RIGHT);
 		if (bShowFPS > 1) {
 			stats_line2.col = (stats_line2_warning >= 100) ? 0xffff0000 : 0xffffffff;
-			stats_line2.Render((jitterAvg >= 10) ? frame_width - 0.0052f : frame_width - 0.0035f, 0.023f, 0.90, FNT_MED*0.9, FONT_ALIGN_RIGHT);
+			stats_line2.Render((jitterAvg >= 10) ? frame_width - 0.0052f : frame_width - 0.0035f, 0.023f, 0.90f, FNT_MED*0.9f, FONT_ALIGN_RIGHT);
 		}
 		if (bShowFPS > 2) {
 			stats_line3.col = (stats_line3_warning >= 100) ? 0xffff0000 : 0xffffffff;
-			stats_line3.Render(frame_width - 0.0035f, 0.043f, 0.90, FNT_MED*0.9, FONT_ALIGN_RIGHT);
+			stats_line3.Render(frame_width - 0.0035f, 0.043f, 0.90f, FNT_MED*0.9f, FONT_ALIGN_RIGHT);
 		}
 	}
 
@@ -1230,7 +1230,7 @@ void VidOverlayRender(const RECT &dest, int gameWidth, int gameHeight, int scan_
 	{
 		// player
 		for (int k = 0; k < 2; k++) {
-			if (kNetGame && !kNetSpectator && k != game_player)
+			if (kNetGame && !kNetSpectator && k != game_playerIndex)
 				continue;
 			// buffer (local = 0, online = 1)
 			for (int j = 0; j < 2; j++) {
@@ -1299,12 +1299,12 @@ void VidOverlayRender(const RECT &dest, int gameWidth, int gameHeight, int scan_
 // REFACTOR:  This function needs to be updated to take actual parameters, and not whatever bullshit transcoded into a string.
 // Just pass in two structs FFS!  No point in formatting strings, to pass them to a function only so they can be unparsed,
 // or worse yet, nothing happens if you don't get it right.
-void VidOverlaySetGameInfo(const wchar_t *name1, const wchar_t *name2, int spectator, int ranked, int playerIndex)
+void VidOverlaySetGameInfo(const wchar_t *name1, const wchar_t *name2, int spectator, int ranked, UINT16 playerIndex)
 {
 	game_enabled = 1;
 	game_spectator = spectator;
 	game_ranked = ranked;
-	game_player = playerIndex;      // This is fucking bonkers!  we need to know our player index every time a score changes?
+	game_playerIndex = playerIndex;      // This is fucking bonkers!  we need to know our player index every time a score changes?
 #ifdef TEST_OVERLAY
 	gameDetector.run_detector = true;
 #endif
@@ -1370,7 +1370,7 @@ void VidOverlaySetSystemMessage(const wchar_t *text)
 
 void SendToPeer(int delay, int runahead) {
 	char buffer[32];
-	sprintf(buffer, "%d,%d,%d,%d", CMD_DELAY_RUNAHEAD, game_player, delay, runahead);
+	sprintf(buffer, "%d,%d,%d,%d", CMD_DELAY_RUNAHEAD, game_playerIndex, delay, runahead);
 	QuarkSendChatCmd(buffer, 'C');
 }
 
@@ -1477,10 +1477,10 @@ void VidOverlaySetStats(double fps, int ping, int delay)
 
 			//swprintf(buf_line3, 64, _T("Delay %d  | Runahead %d"), delay, nVidRunahead);
 			if (!bOpInfoRcvd) {
-				if (game_player == 0) swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d?-ra?    "), delay, nVidRunahead);
+				if (game_playerIndex == 0) swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d?-ra?    "), delay, nVidRunahead);
 				else swprintf(buf_line3, 64, _T("P1: d?-ra?  |  P2: d%d-ra%d   "), delay, nVidRunahead);
 			} else {
-				if (game_player == 0) swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d   "), delay, nVidRunahead, op_delay, op_runahead);
+				if (game_playerIndex == 0) swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d   "), delay, nVidRunahead, op_delay, op_runahead);
 				else swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d   "), op_delay, op_runahead, delay, nVidRunahead);
 			}
 			stats_line3.Set(buf_line3);
@@ -1546,14 +1546,14 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 			{
 				// get delay & runahead from opponent
 				case CMD_DELAY_RUNAHEAD:
-					if (idx != game_player) {
+					if (idx != game_playerIndex) {
 						swscanf(text, _T("%d,%d,%d,%d"), &cmd, &idx, &op_delay, &op_runahead);
 						bOpInfoRcvd = true;
 					}
 					break;
 				// opponent has ingame chat muted
 				case CMD_CHAT_MUTED:
-					if (idx != game_player) {
+					if (idx != game_playerIndex) {
 						VidOverlayAddChatLine(_T("System"), _T("Your opponent has opted to disable ingame chat. Your message was not sent."));
 					}
 					break;
@@ -1565,11 +1565,11 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 
   // Let other player know that your chat is muted.  Only do this branch for non-system messages.
   // NOTE: This is a great demonstration of how double-dipping on the 'name' parameter just makes things more difficult to deal with.
-	if (bVidMuteChat && wcscmp(name, _T("System"))) {
+	if (isChatMuted && wcscmp(name, _T("System"))) {
 		if (!bMutedWarnSent) {
 			char buffer[16];
 			bMutedWarnSent = true;
-			sprintf(buffer, "%d,%d", CMD_CHAT_MUTED, game_player);
+			sprintf(buffer, "%d,%d", CMD_CHAT_MUTED, game_playerIndex);
 			QuarkSendChatCmd(buffer, 'C');
 		}
 		return;
@@ -1588,12 +1588,12 @@ void VidOverlayAddChatLine(const wchar_t *name, const wchar_t *text)
 	wchar_t user[128];
 	if (!wcscmp(name, player1.name.str)) {
 		swprintf(user, 128, _T("%s"), name);
-		chat_names[0].col = (game_player == 0) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
+		chat_names[0].col = (game_playerIndex == 0) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
 		save = true;
 	}
 	else if (!wcscmp(name, player2.name.str)) {
 		swprintf(user, 128, _T("%s"), name);
-		chat_names[0].col = (game_player == 1) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
+		chat_names[0].col = (game_playerIndex == 1) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
 		save = true;
 	}
 	else {
@@ -1754,14 +1754,14 @@ void DetectFreeze()
 
 	if (nFreezeFrames == 1800 && !freeze_warn1_sent) {
 		if (debug_freeze) VidOverlayAddChatLine(_T("System"), _T("FREEZE WARNING SENT"));
-		sprintf(temp, "%d,%d,%d", game_player,nFreezeFrames,nFreezeCount);
+		sprintf(temp, "%d,%d,%d", game_playerIndex,nFreezeFrames,nFreezeCount);
 		QuarkSendChatCmd(temp, 'F');
 		freeze_warn1_sent=true;
 	}
 
 	if (nFreezeCount == 10 && !freeze_warn2_sent) {
 		if (debug_freeze) VidOverlayAddChatLine(_T("System"), _T("FREEZE WARNING SENT"));
-		sprintf(temp, "%d,%d,%d", game_player,nFreezeFrames,nFreezeCount);
+		sprintf(temp, "%d,%d,%d", game_playerIndex,nFreezeFrames,nFreezeCount);
 		QuarkSendChatCmd(temp, 'F');
 		freeze_warn2_sent=true;
 	}

@@ -2469,7 +2469,7 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			break;
 
 		case MENU_MUTE_CHAT:
-			bVidMuteChat = !bVidMuteChat;
+			isChatMuted = !isChatMuted;
 			break;
 
 		case MENU_RUNAHEAD_DISABLED:

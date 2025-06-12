@@ -113,20 +113,20 @@ float fVidScreenCurvature = 0.698132f;			// The angle of the maximum screen curv
 double dVidCubicB = 0.0;						// Paremeters for the cubic filter (default is the CAtmull-Rom spline, DX9 blitter)
 double dVidCubicC = 0.5;						//
 
-INT32 bVidDX9Bilinear = 0;					// 1 = enable bi-linear filtering (D3D9 Alt blitter)
-INT32 bVidHardwareVertex = 1;				// 1 = use hardware vertex processing
-INT32 bVidMotionBlur = 0;						// 1 = motion blur
-INT32 bVidDX9Scanlines = 1;					// 1 = draw scanlines
-INT32 bVidDX9WinFullscreen = 0;			// 0 = borderless windowed for fullscreen
-INT32 bVidDX9LegacyRenderer = 0;		// 0 = legacy directx9 renderer (no Ex)
+INT32 bVidDX9Bilinear = 0;					// 1 = enable bi-linear filtering (D3D9 Alt blitter)      // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidHardwareVertex = 1;				// 1 = use hardware vertex processing                     // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidMotionBlur = 0;						// 1 = motion blur                                        // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidDX9Scanlines = 1;					// 1 = draw scanlines                                     // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidDX9WinFullscreen = 0;			// 0 = borderless windowed for fullscreen                 // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidDX9LegacyRenderer = 0;		// 0 = legacy directx9 renderer (no Ex)                   // REFACTOR: bool - use 'is*' naming convention
 INT32 nVidDX9HardFX = 0; 						// index of HardFX effect (0 = None)
-INT32 bVidOverlay = 1;							// 1 = draw overlay
-INT32 bVidBigOverlay = 0;						// 1 = bigger overlay
-INT32 bVidShowInputs = 0;						// 1 = show game inputs
-INT32 bVidUnrankedScores = 0;				// 1 = show scores in unranked
-INT32 bVidSaveOverlayFiles = 0;			// 1 = save overlay data to obs files
-INT32 bVidSaveChatHistory = 0;			// 1 = save chat history to file
-INT32 bVidMuteChat = 0;							// 1 = mute ingame chat
+INT32 bVidOverlay = 1;							// 1 = draw overlay                                       // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidBigOverlay = 0;						// 1 = bigger overlay                                     // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidShowInputs = 0;						// 1 = show game inputs                                   // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidUnrankedScores = 0;				// 1 = show scores in unranked                            // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidSaveOverlayFiles = 0;			// 1 = save overlay data to obs files                     // REFACTOR: bool - use 'is*' naming convention
+INT32 bVidSaveChatHistory = 0;			// 1 = save chat history to file                          // REFACTOR: bool - use 'is*' naming convention
+INT32 isChatMuted = 0;							// 1 = mute ingame chat                                   // REFACTOR: bool
 INT32 nVidRunahead = 0;							// 0|1|2 = number of run ahead frames
 
 wchar_t HorScreen[32] = L"";

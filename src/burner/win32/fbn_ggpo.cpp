@@ -33,7 +33,7 @@ static bool bReplayStarted = false;
 static bool bReplayRecord = false;
 static bool bReplayRecording = false;
 static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
-static int iPlayer = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
+//static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
 
@@ -120,8 +120,8 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent* info)
     }
     TCHAR szUser1[128];
     TCHAR szUser2[128];
-    VidOverlaySetGameInfo(ANSIToTCHAR(info->u.matchinfo.p1, szUser1, 128), ANSIToTCHAR(info->u.matchinfo.p2, szUser2, 128), kNetSpectator, iRanked, iPlayer);
-    VidSSetGameInfo(ANSIToTCHAR(info->u.matchinfo.p1, szUser1, 128), ANSIToTCHAR(info->u.matchinfo.p2, szUser2, 128), kNetSpectator, iRanked, iPlayer);
+    VidOverlaySetGameInfo(ANSIToTCHAR(info->u.matchinfo.p1, szUser1, 128), ANSIToTCHAR(info->u.matchinfo.p2, szUser2, 128), kNetSpectator, iRanked, _playerIndex);
+    VidSSetGameInfo(ANSIToTCHAR(info->u.matchinfo.p1, szUser1, 128), ANSIToTCHAR(info->u.matchinfo.p2, szUser2, 128), kNetSpectator, iRanked, _playerIndex);
     break;
   }
 
@@ -168,7 +168,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     sprintf(p1Final, "%s#0,0", p1);
     sprintf(p2Final, "%s#0,0", p2);
 
-    TCHAR p1w[16*2];
+    TCHAR p1w[16 * 2];
     TCHAR p2w[16 * 2];
     TCHAR* buffer = ANSIToTCHAR(p1Final, NULL, NULL);
     wcscpy(p1w, buffer);
@@ -268,8 +268,8 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
-          //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
-          VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
+          //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
         }
         return 0;
       }
@@ -283,8 +283,8 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so put anonymous
       if (bDirect) {
-        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
-        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
+        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
       }
       return 0;
     }
@@ -310,8 +310,8 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so play anonymous
       if (bDirect) {
-        // VidOverlaySetGameInfo(_T("player 1#0,0"), _T("player 2#0,0"), false, iRanked, iPlayer);
-        // VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, iPlayer);
+        // VidOverlaySetGameInfo(_T("player 1#0,0"), _T("player 2#0,0"), false, iRanked, _playerIndex);
+        // VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
       }
       return 1;
     }
@@ -587,7 +587,7 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   kNetQuarkId[0] = 0;
   bForce60Hz = 0;
   iRanked = 0;
-  iPlayer = PLAYER_NOT_SET;
+  _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
 
 #ifdef _DEBUG
@@ -608,7 +608,6 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   kNetLua = 1;
   bDirect = true;
   iRanked = 0;
-  iPlayer = ops.playerNumber;
   _playerIndex = ops.playerNumber - 1;
   iDelay = ops.frameDelay;
   iSeed = 0;
@@ -645,7 +644,7 @@ void QuarkInit(TCHAR* tconnect)
   kNetQuarkId[0] = 0;
   bForce60Hz = 0;
   iRanked = 0;
-  iPlayer = 0;
+  _playerIndex = 0;
   iDelay = 0;
 
 #ifdef _DEBUG
@@ -667,7 +666,7 @@ void QuarkInit(TCHAR* tconnect)
   //if (strncmp(connect, "quark:served", strlen("quark:served")) == 0) {
   //	sscanf(connect, "quark:served,%[^,],%[^,],%d,%d,%d", game, quarkid, &port, &delay, &ranked);
   //	iRanked = ranked;
-  //	iPlayer = atoi(&quarkid[strlen(quarkid) - 1]);
+  //	_playerIndex = atoi(&quarkid[strlen(quarkid) - 1]);
   //	if (nVidRunahead == 3 && delay < 2) {delay = 2;}
   //	iDelay = delay;
   //	iSeed = GetHash(quarkid, strlen(quarkid) - 2);
@@ -680,7 +679,7 @@ void QuarkInit(TCHAR* tconnect)
   //if (strncmp(connect, "quark:training", strlen("quark:training")) == 0) {
   //	sscanf(connect, "quark:training,%[^,],%[^,],%d,%d", game, quarkid, &port, &delay);
   //	iRanked = 0;
-  //	iPlayer = atoi(&quarkid[strlen(quarkid) - 1]);
+  //	_playerIndex = atoi(&quarkid[strlen(quarkid) - 1]);
   //	if (nVidRunahead == 3 && delay < 2) {delay = 2;}
   //	iDelay = delay;
   //	iSeed = GetHash(quarkid, strlen(quarkid) - 2);
@@ -709,7 +708,7 @@ void QuarkInit(TCHAR* tconnect)
     //kNetLua = 1;
     //bDirect = true;
     //iRanked = 0;
-    //iPlayer = playerNumber;
+    //_playerIndex = playerNumber;
     //iDelay = delay;
     //iSeed = 0;
     //// ggpo = ggpo_start_session(&cb, game, localPort, host, remotePort, playerNumber);
@@ -754,7 +753,7 @@ void QuarkInit(TCHAR* tconnect)
     sscanf(connect, "quark:debugdetector,%[^,]", gameName);
     kNetGame = 0;
     iRanked = 1;
-    iPlayer = 0;
+    _playerIndex = 0;
     iSeed = 0x133;
     kNetLua = 1;
     // load game
@@ -774,9 +773,9 @@ void QuarkInit(TCHAR* tconnect)
           BurnStateLoad(tfilename, 1, &DrvInitCallback);
         }
         DetectorLoad(gameName, true, iSeed);
-        VidOverlaySetGameInfo(_T("Detector1#0,0,0"), _T("Detector2#0,0,0"), false, iRanked, iPlayer);
+        VidOverlaySetGameInfo(_T("Detector1#0,0,0"), _T("Detector2#0,0,0"), false, iRanked, _playerIndex);
         VidOverlaySetGameSpectators(0);
-        VidSSetGameInfo(_T("Detector1"), _T("Detector2"), false, iRanked, iPlayer);
+        VidSSetGameInfo(_T("Detector1"), _T("Detector2"), false, iRanked, _playerIndex);
         VidSSetGameSpectators(0);
         break;
       }
@@ -847,21 +846,30 @@ bool QuarkIncrementFrame()
 void QuarkSendChatText(char* text)
 {
   QuarkSendChatCmd(text, 'T');
+
 }
 
 // --------------------------------------------------------------------------------------------------------
 void QuarkSendChatCmd(char* text, char cmd)
 {
-  // TODO: Use a single chat buffer vs. buffer per-call.
-  char buffer[MAX_CHAT_SIZE]; // command chat
-  memset(buffer, 0, MAX_CHAT_SIZE);
+  static char msgBuffer[MAX_CHAT_SIZE]; // command chat
+  memset(msgBuffer, 0, MAX_CHAT_SIZE);
 
-  buffer[0] = cmd;
-  strncpy(&buffer[1], text, 127);
+  msgBuffer[0] = cmd;
+  strncpy(&msgBuffer[1], text, 127);
 
-  ggpo_client_chat(ggpo, buffer);
+  // Print the chat line on our local:
+  if (cmd == 'T' && _playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
+    auto playerName = ggpo_get_playerName(ggpo , _playerIndex);
+    wchar_t nameBuffer[16*2];
+    wcscpy(nameBuffer, ANSIToTCHAR(playerName, NULL, NULL));
+
+    VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(msgBuffer + 1, NULL, NULL));
+  }
+  ggpo_client_chat(ggpo, msgBuffer);
 }
 
+// --------------------------------------------------------------------------------------------------------
 void QuarkUpdateStats(double fps)
 {
   GGPONetworkStats stats;
@@ -870,12 +878,14 @@ void QuarkUpdateStats(double fps)
   VidOverlaySetStats(fps, stats.network.ping, iDelay);
 }
 
+// --------------------------------------------------------------------------------------------------------
 void QuarkRecordReplay()
 {
   bReplayRecord = true;
   bReplayRecording = false;
 }
 
+// --------------------------------------------------------------------------------------------------------
 void QuarkFinishReplay()
 {
   if (!bReplaySupport && bReplayStarted) {

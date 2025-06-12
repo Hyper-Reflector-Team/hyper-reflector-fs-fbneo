@@ -12,7 +12,7 @@ void VidOverlayEnd();
 void VidOverlayQuit();
 void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_intensity);
 
-void VidOverlaySetGameInfo(const wchar_t *p1, const wchar_t *p2, int spectator, int ranked, int player);
+void VidOverlaySetGameInfo(const wchar_t *p1, const wchar_t *p2, int spectator, int ranked, UINT16 playerIndex);
 void VidOverlaySetGameScores(int score1, int score2, int winner = 0);
 void VidOverlaySetGameSpectators(int num);
 void VidOverlaySetSystemMessage(const wchar_t *text);

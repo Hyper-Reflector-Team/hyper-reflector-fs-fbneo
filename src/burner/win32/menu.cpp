@@ -777,7 +777,7 @@ void MenuUpdate()
 	CheckMenuItem(hMenu, MENU_UNRANKED_SCORES, (bVidUnrankedScores) ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(hMenu, MENU_SAVE_OVERLAY_FILES, (bVidSaveOverlayFiles) ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(hMenu, MENU_SAVE_CHAT_HISTORY, (bVidSaveChatHistory) ? MF_CHECKED : MF_UNCHECKED);
-	CheckMenuItem(hMenu, MENU_MUTE_CHAT, (bVidMuteChat) ? MF_CHECKED : MF_UNCHECKED);
+	CheckMenuItem(hMenu, MENU_MUTE_CHAT, (isChatMuted) ? MF_CHECKED : MF_UNCHECKED);
 
 	CheckMenuItem(hMenu, MENU_RUNAHEAD_DISABLED, (nVidRunahead == 0) ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuItem(hMenu, MENU_RUNAHEAD_1F, (nVidRunahead == 1) ? MF_CHECKED : MF_UNCHECKED);

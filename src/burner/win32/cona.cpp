@@ -170,7 +170,7 @@ int ConfigAppLoad()
 		VAR(bVidUnrankedScores);
 		VAR(bVidSaveOverlayFiles);
 		VAR(bVidSaveChatHistory);
-		VAR(bVidMuteChat);
+		VAR(isChatMuted);
 
 		// Runahead
 		VAR(nVidRunahead);
@@ -537,7 +537,7 @@ int ConfigAppSave()
 	_ftprintf(h, _T("\n// Save chat history\n"));
 	VAR(bVidSaveChatHistory);
 	_ftprintf(h, _T("\n// Mute chat\n"));
-	VAR(bVidMuteChat);
+	VAR(isChatMuted);
 	_ftprintf(h, _T("\n// Run ahead frames (0 = disabled, 1, 2)\n"));
 	VAR(nVidRunahead);
 
