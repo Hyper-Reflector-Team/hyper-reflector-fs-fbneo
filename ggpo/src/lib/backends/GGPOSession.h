@@ -29,6 +29,8 @@ struct GGPOSession {
    virtual GGPOErrorCode SetDisconnectTimeout(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }
    virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }
 
+   char* GetPlayerName(UINT16 index) { return _PlayerNames[index]; }
+
    // Additions:
 protected:
 	IN_ADDR _RemoteAddr;

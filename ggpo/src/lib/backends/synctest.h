@@ -9,7 +9,7 @@
 #define _SYNCTEST_H
 
 #include "types.h"
-#include "backend.h"
+#include "GGPOSession.h"
 #include "sync.h"
 #include "ring_buffer.h"
 

@@ -48,7 +48,7 @@
     <ClInclude Include="..\..\ggpo\src\lib\network\udp_proto.h">
       <Filter>Network</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\ggpo\src\lib\backends\backend.h">
+    <ClInclude Include="..\..\ggpo\src\lib\backends\GGPOSession.h">
       <Filter>Backends</Filter>
     </ClInclude>
     <ClInclude Include="..\..\ggpo\src\lib\backends\p2p.h">

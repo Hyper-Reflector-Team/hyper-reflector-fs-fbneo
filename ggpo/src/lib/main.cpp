@@ -193,6 +193,11 @@ bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats)
   return res;
 }
 
+// ----------------------------------------------------------------------------------------------------------------
+char* ggpo_get_playerName(GGPOSession* ggpo, PlayerID index) {
+  auto res = ggpo->GetPlayerName(index);
+  return res;
+}
 
 GGPOErrorCode
 ggpo_close_session(GGPOSession* ggpo)

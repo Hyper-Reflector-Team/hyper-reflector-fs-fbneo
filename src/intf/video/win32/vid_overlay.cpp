@@ -1296,12 +1296,12 @@ void VidOverlayRender(const RECT &dest, int gameWidth, int gameHeight, int scan_
 //------------------------------------------------------------------------------------------------------------------------------
 // overlay API
 //------------------------------------------------------------------------------------------------------------------------------
-void VidOverlaySetGameInfo(const wchar_t *name1, const wchar_t *name2, int spectator, int ranked, int player)
+void VidOverlaySetGameInfo(const wchar_t *name1, const wchar_t *name2, int spectator, int ranked, int playerIndex)
 {
 	game_enabled = 1;
 	game_spectator = spectator;
 	game_ranked = ranked;
-	game_player = player;
+	game_player = playerIndex;
 #ifdef TEST_OVERLAY
 	gameDetector.run_detector = true;
 #endif

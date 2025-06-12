@@ -262,7 +262,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\ggpo\src\include\ggponet.h" />
-    <ClInclude Include="..\..\ggpo\src\lib\backends\backend.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\backends\GGPOSession.h" />
     <ClInclude Include="..\..\ggpo\src\lib\backends\p2p.h" />
     <ClInclude Include="..\..\ggpo\src\lib\backends\spectator.h" />
     <ClInclude Include="..\..\ggpo\src\lib\backends\synctest.h" />

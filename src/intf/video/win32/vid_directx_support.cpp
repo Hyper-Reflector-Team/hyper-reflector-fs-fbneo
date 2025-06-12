@@ -1501,8 +1501,12 @@ static int VidSDrawChat(RECT* dest)
 	return 0;
 }
 
+// NOTE: I don't think this does anything....
 int VidSSetGameInfo(const TCHAR *p1, const TCHAR *p2, INT32 spectator, INT32 ranked, INT32 player)
 {
+  // DO NOTHING!
+  return 0; 
+
 	nSpectator = spectator;
 	nRanked = ranked;
 	nPlayer = player;
@@ -1524,6 +1528,9 @@ int VidSSetGameScores(INT32 score1, INT32 score2)
 
 int VidSSetGameSpectators(INT32 num)
 {
+  // DO NOTHING!
+  return 0;
+
 	if (num > 1) {
 		_sntprintf(szSpectatorCount, 256, _T("%d spectator%s"), num - 1, num > 2 ? _T("s") : _T(""));
 	} else {
@@ -1935,6 +1942,9 @@ int VidSNewJoystickMsg(const TCHAR* pText, int nRGB, int nDuration, int nLineNo)
 
 int VidSNewShortMsg(const TCHAR* pText, int nRGB, int nDuration, int nPriority)	// int nRGB = 0, int nDuration = 0, int nPriority = 5
 {
+  // DO NOTHING!
+  return 0;
+
 	// If a message with a higher priority is being displayed, exit.
 	if (VidSShortMsg.nTimer && VidSShortMsg.nPriority > nPriority) {
 		return 1;

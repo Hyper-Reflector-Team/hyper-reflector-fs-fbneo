@@ -18,8 +18,10 @@ extern int nAcbVersion;
 extern int nAcbLoadState;
 extern int bMediaExit;
 
+PlayerID _playerIndex = PLAYER_NOT_SET;
+
 // rollback counter
-// NOTE: These are only used in the vidoe overlay.
+// NOTE: These are only used in the video overlay. --> so they should be part of the overlay vars?
 int nRollbackFrames = 0;
 int nRollbackCount = 0;
 
@@ -30,8 +32,8 @@ static bool bReplaySupport = false;
 static bool bReplayStarted = false;
 static bool bReplayRecord = false;
 static bool bReplayRecording = false;
-static int iRanked = 0;
-static int iPlayer = 0;
+static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
+static int iPlayer = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
 
@@ -150,9 +152,34 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   //}
   switch (info->code) {
   case GGPO_EVENTCODE_CONNECTED_TO_PEER:
+  {
     VidOverlaySetSystemMessage(_T("Connected to Peer"));
     VidSSetSystemMessage(_T("Connected to Peer"));
-    break;
+
+    // NOTE: We can probably update the game info here....
+    char* p1 = ggpo_get_playerName(ggpo, 0);
+    char* p2 = ggpo_get_playerName(ggpo, 1);
+
+    char p1Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
+    char p2Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
+
+    // WOOO!  MAKEWORK BULLSHIT!
+    // Look at all of the glorious string bullshit we need to do to pass parameters to a function!
+    sprintf(p1Final, "%s#0,0", p1);
+    sprintf(p2Final, "%s#0,0", p2);
+
+    TCHAR p1w[16*2];
+    TCHAR p2w[16 * 2];
+    TCHAR* buffer = ANSIToTCHAR(p1Final, NULL, NULL);
+    wcscpy(p1w, buffer);
+
+    buffer = ANSIToTCHAR(p2Final, NULL, NULL);
+    wcscpy(p2w, buffer);
+
+    VidOverlaySetGameInfo(p1w, p2w, false, false, _playerIndex);
+    int x = 10;
+  }
+  break;
 
   case GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER:
     //_stprintf(status, _T("Synchronizing with Peer (%d/%d)..."), info->u.synchronizing.count, info->u.synchronizing.total);
@@ -557,7 +584,7 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   kNetQuarkId[0] = 0;
   bForce60Hz = 0;
   iRanked = 0;
-  iPlayer = 0;
+  iPlayer = PLAYER_NOT_SET;
   iDelay = 0;
 
 #ifdef _DEBUG
@@ -579,10 +606,11 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   bDirect = true;
   iRanked = 0;
   iPlayer = ops.playerNumber;
+  _playerIndex = ops.playerNumber - 1;
   iDelay = ops.frameDelay;
   iSeed = 0;
 
-  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, ops.playerNumber - 1, ops.playerName.data());
+  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, _playerIndex, ops.playerName.data());
 
   ggpo_set_frame_delay(ggpo, ops.frameDelay);
   VidOverlaySetSystemMessage(_T("Connecting..."));

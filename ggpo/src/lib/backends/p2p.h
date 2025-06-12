@@ -11,7 +11,7 @@
 #include "types.h"
 #include "poll.h"
 #include "sync.h"
-#include "backend.h"
+#include "GGPOSession.h"
 #include "timesync.h"
 #include "network/udp_proto.h"
 #include <string>

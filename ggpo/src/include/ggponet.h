@@ -50,6 +50,7 @@ extern "C" {
   typedef struct GGPOSession GGPOSession;
 
   typedef uint16 PlayerID;
+  static const PlayerID PLAYER_NOT_SET = 0xFFFF;
 
   typedef enum {
     GGPO_PLAYERTYPE_LOCAL,
@@ -266,6 +267,11 @@ extern "C" {
      * structure above for more information.
      */
     bool(__cdecl* on_event)(GGPOEvent* info);
+
+
+    /* Get the name of the player for the given index */
+    char*(__cdecl* get_player_name)(PlayerID index);
+
   } GGPOSessionCallbacks;
 
   /*
@@ -596,6 +602,9 @@ extern "C" {
     va_list args);
 
   GGPO_API bool __cdecl ggpo_client_chat(GGPOSession* ggpo, char* text);
+
+  /* get the name of the player at the given index */
+  GGPO_API char* __cdecl ggpo_get_playerName(GGPOSession* ggpo, PlayerID index);
 
 
 #ifdef __cplusplus
