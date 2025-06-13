@@ -1649,6 +1649,11 @@ XCOPY "$(SolutionDir)$(Configuration)\$(TargetName)$(TargetExt)" "../../build" /
     <Manifest>
       <VerboseOutput>false</VerboseOutput>
     </Manifest>
+    <PostBuildEvent>
+      <Command>if not exist "..\..\build" ( mkdir "..\..\build" )
+
+XCOPY "$(SolutionDir)$(Configuration)\$(TargetName)$(TargetExt)" "../../build" /Y /D</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
