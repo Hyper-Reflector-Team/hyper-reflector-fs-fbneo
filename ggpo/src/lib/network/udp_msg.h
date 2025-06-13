@@ -79,7 +79,7 @@ struct UdpMsg
     } input_ack;
 
     struct {
-      char text[MAX_GGPOCHAT_SIZE];
+      char text[MAX_GGPOCHAT_SIZE + 1];
     } chat;
 
   } u;

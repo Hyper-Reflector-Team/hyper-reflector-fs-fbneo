@@ -852,11 +852,11 @@ void QuarkSendChatText(char* text)
 // --------------------------------------------------------------------------------------------------------
 void QuarkSendChatCmd(char* text, char cmd)
 {
-  static char msgBuffer[MAX_CHAT_SIZE]; // command chat
+  static char msgBuffer[MAX_CHAT_SIZE]; // command chat  +1 for command char +1 for zero termination.
   memset(msgBuffer, 0, MAX_CHAT_SIZE);
 
   msgBuffer[0] = cmd;
-  strncpy(&msgBuffer[1], text, 127);
+  strncpy(&msgBuffer[1], text, MAX_CHAT_SIZE - 1);
 
   // Print the chat line on our local:
   if (cmd == 'T' && _playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {

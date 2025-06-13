@@ -60,7 +60,7 @@ public:
       } network_interrupted;
 
       struct {
-        char		text[MAX_GGPOCHAT_SIZE];
+        char		text[MAX_GGPOCHAT_SIZE + 1];
       } chat;
 
     } u;			// REFACTOR: Rename this to 'data'

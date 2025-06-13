@@ -120,7 +120,7 @@ int ActivateChat()
 	bEditTextChanged = true;
 	bEditActive = true;
 
-	SendMessage(hwndChat, EM_LIMITTEXT, MAX_CHAT_SIZE, 0);			// Limit the amount of text
+	SendMessage(hwndChat, EM_LIMITTEXT, MAX_CHAT_SIZE - 1, 0);			// Limit the amount of text.  We drop 1 character because one char is used for command prefix (not visible to user)
 
 	SetFocus(hwndChat);
 

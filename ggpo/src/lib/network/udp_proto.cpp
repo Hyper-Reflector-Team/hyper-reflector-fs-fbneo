@@ -99,8 +99,10 @@ void UdpProtocol::SendChat(char* text) {
 
 			UdpMsg* msg = new UdpMsg(UdpMsg::ChatCommand);
       size_t len = strnlen_s(text, MAX_GGPOCHAT_SIZE);
-			strcpy_s(msg->u.chat.text, len + 1, text);
 
+      // copy string + zero terminate.
+      memcpy_s(msg->u.chat.text, MAX_GGPOCHAT_SIZE, text, len);
+      msg->u.chat.text[len] = 0;
 			
 			SendMsg(msg);
 		}

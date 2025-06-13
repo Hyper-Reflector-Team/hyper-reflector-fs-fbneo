@@ -464,7 +464,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpProtocol::Event& evt, PlayerID play
 
   case UdpProtocol::Event::ChatCommand:
 
-    char text[MAX_GGPOCHAT_SIZE];
+    char text[MAX_GGPOCHAT_SIZE + 1];
     auto userName = _PlayerNames[playerIndex];
 
     strcpy_s(text, evt.u.chat.text);
