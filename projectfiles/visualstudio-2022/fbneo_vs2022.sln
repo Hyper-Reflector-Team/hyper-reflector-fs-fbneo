@@ -5,7 +5,7 @@ VisualStudioVersion = 17.11.35219.272
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GGPO", "GGPO.vcxproj", "{50B76E66-9BFF-3774-96F0-4FC88D2C36C2}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fcadefbneo", "fbneo_vs2022.vcxproj", "{86D06C32-A849-4988-A176-A38D014C36C1}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fs-fbneo", "fbneo_vs2022.vcxproj", "{86D06C32-A849-4988-A176-A38D014C36C1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

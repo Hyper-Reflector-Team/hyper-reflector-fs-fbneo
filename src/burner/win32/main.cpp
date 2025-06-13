@@ -393,6 +393,7 @@ void CloseDebugLog()
 int OpenDebugLog()
 {
 #if defined (FBNEO_DEBUG)
+  #if defined (APP_DEBUG_LOG)
 
   time_t nTime;
   tm* tmTime;
@@ -515,6 +516,9 @@ int OpenDebugLog()
   nPrevConsoleStatus = -1;
 
   bprintf = AppDebugPrintf;							// Redirect Burn library debug to our function
+
+#endif
+
 
   return 0;
 }
