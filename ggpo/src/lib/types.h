@@ -52,11 +52,11 @@ typedef int int32;
 /*
  * Macros
  */
-#define ASSERT(x)                                           \
+#define ASSERT(msg)                                         \
    do {                                                     \
-      if (!(x)) {                                           \
+      if (!(msg)) {                                         \
          char assert_buf[1024];                             \
-         snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #x, __FILE__, __LINE__, Platform::GetProcessID()); \
+         snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #msg, __FILE__, __LINE__, Platform::GetProcessID()); \
          Log("%s\n", assert_buf);                           \
          Log("\n");                                         \
          Log("\n");                                         \

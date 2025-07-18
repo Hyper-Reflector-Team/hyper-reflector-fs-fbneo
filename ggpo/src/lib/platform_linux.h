@@ -20,7 +20,12 @@ public:  // types
 
 public:  // functions
    static ProcessID GetProcessID() { return getpid(); }
-   static void AssertFailed(char *msg) { }
+   static void AssertFailed(char *msg) { 
+#ifdef _DEBUG
+  // NOTE: There was no implementation for linux_platform, but I added the preprocessor check anyway.
+     //MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+#endif
+   }
    static uint32 GetCurrentTimeMS();
 };
 
