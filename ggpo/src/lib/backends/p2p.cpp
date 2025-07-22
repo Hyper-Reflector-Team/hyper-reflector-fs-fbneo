@@ -33,6 +33,8 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   _disconnect_timeout(DEFAULT_DISCONNECT_TIMEOUT),
   _disconnect_notify_start(DEFAULT_DISCONNECT_NOTIFY_START)
 {
+  ASSERT(false);
+
   _callbacks = *cb;
   _synchronizing = true;
   _next_recommended_sleep = 0;

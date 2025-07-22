@@ -147,6 +147,10 @@ int CFont::Init(const char *fontFile, const char *shaderfile, CDynRender *render
 
 		return r;
 	}
+  else {
+    // TODO: Better error reporting later....
+    throw std::exception("Could not load font file!");
+  }
 	return 0;
 }
 
