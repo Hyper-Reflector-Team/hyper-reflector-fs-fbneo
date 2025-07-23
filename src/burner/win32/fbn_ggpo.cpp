@@ -601,7 +601,7 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   cb.save_game_state = ggpo_save_game_state_callback;
   cb.log_game_state = ggpo_log_game_state_callback;
   cb.free_buffer = ggpo_free_buffer_callback;
-  cb.advance_frame = ggpo_advance_frame_callback;
+  cb.rollback_frame = ggpo_advance_frame_callback;
   cb.on_event = ggpo_on_event_callback;
 
 
@@ -659,7 +659,7 @@ void QuarkInit(TCHAR* tconnect)
   cb.save_game_state = ggpo_save_game_state_callback;
   cb.log_game_state = ggpo_log_game_state_callback;
   cb.free_buffer = ggpo_free_buffer_callback;
-  cb.advance_frame = ggpo_advance_frame_callback;
+  cb.rollback_frame = ggpo_advance_frame_callback;
   cb.on_event = ggpo_on_event_callback;
 
   // This path is used for connecting to other players via FC servers.

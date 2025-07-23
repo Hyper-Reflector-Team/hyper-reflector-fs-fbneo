@@ -52,13 +52,14 @@ typedef int int32;
 /*
  * Macros
  */
- // TODO: We need to fix this macro, or change up how asserts are done.  These are basically being treated like an exception.
- // Even if we don't print the message, we immediately stop the program, which isn't really correct.  We should throw an exception IMO.
-#define ASSERT(msg)                                         \
+// TODO: Make this into a function, and give it a real name!
+// Since it crashes the system no matter what, it isn't an assert!
+// Also, why is it in a loop that immediately exits?
+#define ASSERT(condition)                                   \
    do {                                                     \
-      if (!(msg)) {                                         \
+      if (!(condition)) {                                   \
          char assert_buf[1024];                             \
-         snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #msg, __FILE__, __LINE__, Platform::GetProcessID()); \
+         snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #condition, __FILE__, __LINE__, Platform::GetProcessID()); \
          Log("%s\n", assert_buf);                           \
          Log("\n");                                         \
          Log("\n");                                         \

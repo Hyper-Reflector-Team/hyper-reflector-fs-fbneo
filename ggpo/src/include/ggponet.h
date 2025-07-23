@@ -252,7 +252,7 @@ extern "C" {
     void(__cdecl* free_buffer)(void* buffer);
 
     /*
-     * advance_frame - Called during a rollback.  You should advance your game
+     * rollback_frame - Called during a rollback.  You should advance your game
      * state by exactly one frame.  Before each frame, call ggpo_synchronize_input
      * to retrieve the inputs you should use for that frame.  After each frame,
      * you should call ggpo_advance_frame to notify GGPO.net that you're
@@ -260,7 +260,7 @@ extern "C" {
      *
      * The flags parameter is reserved.  It can safely be ignored at this time.
      */
-    bool(__cdecl* advance_frame)(int flags);
+    bool(__cdecl* rollback_frame)(int flags);
 
     /*
      * on_event - Notification that something has happened.  See the GGPOEventCode

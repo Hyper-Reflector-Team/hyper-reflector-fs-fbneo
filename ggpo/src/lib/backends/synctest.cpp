@@ -133,7 +133,7 @@ SyncTestBackend::IncrementFrame(void)
 
     _rollingback = true;
     while (!_saved_frames.empty()) {
-      _callbacks.advance_frame(0);
+      _callbacks.rollback_frame(0);
 
       // Verify that the checksumn of this frame is the same as the one in our
       // list.

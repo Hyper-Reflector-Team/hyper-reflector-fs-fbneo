@@ -117,7 +117,7 @@ void UdpProtocol::SendInput(GameInput& input)
 			/*
 			 * Check to see if this is a good time to adjust for the rift...
 			 */
-			_timesync.advance_frame(input, _local_frame_advantage, _remote_frame_advantage);
+			_timesync.rollback_frame(input, _local_frame_advantage, _remote_frame_advantage);
 
 			/*
 			 * Save this input packet

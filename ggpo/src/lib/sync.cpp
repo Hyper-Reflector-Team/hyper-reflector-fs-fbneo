@@ -165,10 +165,10 @@ Sync::AdjustSimulation(int seek_to)
    ResetPrediction(_curFrame);
    for (int i = 0; i < count; i++) {
      // NOTE 2: This is where the _framecount would probably be updated to the correct version.
-      _callbacks.advance_frame(0);
+      _callbacks.rollback_frame(0);
    }
 
-   // NOTE: This assert will fail if _framecount is not correctly incremented in the above for loop.  advance_frame should increment it!
+   // NOTE: This assert will fail if _framecount is not correctly incremented in the above for loop.  rollback_frame should increment it!
    ASSERT(_curFrame == prevFrame);
 
    _rollingback = false;
