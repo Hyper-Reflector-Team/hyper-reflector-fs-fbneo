@@ -55,7 +55,7 @@ public:
   void AdjustSimulation(int seek_to);
   void IncrementFrame(void);
 
-  int GetFrameCount() { return _framecount; }
+  int GetFrameCount() { return _curFrame; }
   bool InRollback() { return _rollingback; }
 
   bool GetEvent(Event& e);
@@ -91,7 +91,7 @@ protected:
 
   bool           _rollingback;
   int            _last_confirmed_frame;
-  int            _framecount;
+  int            _curFrame;                         // Number of the current frame.  This can be adjusted during rollbacks.
   int            _max_prediction_frames;
 
   InputQueue* _input_queues;

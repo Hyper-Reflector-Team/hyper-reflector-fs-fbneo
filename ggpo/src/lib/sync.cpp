@@ -11,7 +11,7 @@ Sync::Sync(UdpMsg::connect_status *connect_status) :
  _local_connect_status(connect_status),
  _input_queues(NULL)
 {
-   _framecount = 0;
+   _curFrame = 0;
    _last_confirmed_frame = -1;
    _max_prediction_frames = 0;
    memset(&_savedstate, 0, sizeof(_savedstate));
@@ -35,7 +35,7 @@ Sync::Init(Sync::Config &config)
 {
    _config = config;
    _callbacks = config.callbacks;
-   _framecount = 0;
+   _curFrame = 0;
    _rollingback = false;
 
    _max_prediction_frames = config.num_prediction_frames;
@@ -57,18 +57,18 @@ Sync::SetLastConfirmedFrame(int frame)
 // ------------------------------------------------------------------------------------------------------------------------
 bool Sync::AddLocalInput(PlayerID playerIndex, GameInput &input)
 {
-   int frames_behind = _framecount - _last_confirmed_frame; 
-   if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
+   int frames_behind = _curFrame - _last_confirmed_frame; 
+   if (_curFrame >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
       Log("Rejecting input from emulator: reached prediction barrier.\n");
       return false;
    }
 
-   if (_framecount == 0) {
+   if (_curFrame == 0) {
       SaveCurrentFrame();
    }
 
-   Log("Sending undelayed local frame %d to queue %d.\n", _framecount, playerIndex);
-   input.frame = _framecount;
+   Log("Sending undelayed local frame %d to queue %d.\n", _curFrame, playerIndex);
+   input.frame = _curFrame;
    _input_queues[playerIndex].AddInput(input);
 
    return true;
@@ -114,11 +114,11 @@ int Sync::SynchronizeInputs(void *values, int totalSize)
    memset(output, 0, totalSize);
    for (int i = 0; i < _config.num_players; i++) {
       GameInput input;
-      if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame) {
+      if (_local_connect_status[i].disconnected && _curFrame > _local_connect_status[i].last_frame) {
          disconnect_flags |= (1 << i);
          input.erase();
       } else {
-         _input_queues[i].GetInput(_framecount, &input);
+         _input_queues[i].GetInput(_curFrame, &input);
       }
       memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
    }
@@ -137,15 +137,15 @@ Sync::CheckSimulation(int timeout)
 void
 Sync::IncrementFrame(void)
 {
-   _framecount++;
+   _curFrame++;
    SaveCurrentFrame();
 }
 
 void
 Sync::AdjustSimulation(int seek_to)
 {
-   int framecount = _framecount;
-   int count = _framecount - seek_to;
+   int prevFrame = _curFrame;
+   int count = _curFrame - seek_to;   // This is assumed to be positive b/c we are rolling back to an earlier frame.  Therefore, _framecount is always > seek_to.
 
    Log("Catching up\n");
    _rollingback = true;
@@ -154,17 +154,22 @@ Sync::AdjustSimulation(int seek_to)
     * Flush our input queue and load the last frame.
     */
    LoadFrame(seek_to);
-   ASSERT(_framecount == seek_to);
+   ASSERT(_curFrame == seek_to);
+
+   // Now that we have updated _framecount to seek_to, it will be == to (oldFrameCount - count).
 
    /*
     * Advance frame by frame (stuffing notifications back to 
     * the master).
     */
-   ResetPrediction(_framecount);
+   ResetPrediction(_curFrame);
    for (int i = 0; i < count; i++) {
+     // NOTE 2: This is where the _framecount would probably be updated to the correct version.
       _callbacks.advance_frame(0);
    }
-   ASSERT(_framecount == framecount);
+
+   // NOTE: This assert will fail if _framecount is not correctly incremented in the above for loop.  advance_frame should increment it!
+   ASSERT(_curFrame == prevFrame);
 
    _rollingback = false;
 
@@ -175,7 +180,7 @@ void
 Sync::LoadFrame(int frame)
 {
    // find the frame in question
-   if (frame == _framecount) {
+   if (frame == _curFrame) {
       Log("Skipping NOP.\n");
       return;
    }
@@ -192,7 +197,7 @@ Sync::LoadFrame(int frame)
 
    // Reset framecount and the head of the state ring-buffer to point in
    // advance of the current frame (as if we had just finished executing it).
-   _framecount = state->frame;
+   _curFrame = state->frame;
    _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
 }
 
@@ -208,7 +213,7 @@ Sync::SaveCurrentFrame()
       _callbacks.free_buffer(state->buf);
       state->buf = NULL;
    }
-   state->frame = _framecount;
+   state->frame = _curFrame;
    _callbacks.save_game_state(&state->buf, &state->cbuf, &state->checksum, state->frame);
 
    Log("=== Saved frame info %d (size: %d  checksum: %08x).\n", state->frame, state->cbuf, state->checksum);

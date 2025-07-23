@@ -327,6 +327,7 @@ bool __cdecl ggpo_advance_frame_callback(int flags)
   nRollbackFrames++;
 
   // Run the frame.  This will not sync inputs and will draw / do sound, etc.
+  // NOTE: The reference implementation syncs inputs on rollback....
   RunFrame(0, 0, false);
   bSkipPerfmonUpdates = false;
   return true;

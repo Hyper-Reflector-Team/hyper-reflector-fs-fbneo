@@ -33,8 +33,6 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   _disconnect_timeout(DEFAULT_DISCONNECT_TIMEOUT),
   _disconnect_notify_start(DEFAULT_DISCONNECT_NOTIFY_START)
 {
-  ASSERT(false);
-
   _callbacks = *cb;
   _synchronizing = true;
   _next_recommended_sleep = 0;
@@ -344,19 +342,19 @@ GGPOErrorCode Peer2PeerBackend::SyncInput(void* values, int isize, int playerCou
     return GGPO_ERRORCODE_NOT_SYNCHRONIZED;
   }
 
-  GGPOErrorCode code = AddLocalInput(_playerIndex, values, isize);
-  if (code != GGPO_OK) {
-    return code;
+  // If we are rolling back, there is no need to attempt to add a local input.
+  // The call will result in an error code anyway....
+  if (!_sync.InRollback())
+  {
+    GGPOErrorCode code = AddLocalInput(_playerIndex, values, isize);
+    if (code != GGPO_OK) {
+      return code;
+    }
   }
 
   // NOTE: We aren't doing anything with the flags... I think the system is probably using the event codes
   // to playerIndex this kind of thing......
   _sync.SynchronizeInputs(values, isize * playerCount);
-
-  // The disconnect flags tell us who isn't connected anymore....   
-  //if (disconnect_flags) {
-  //   *disconnect_flags = flags;
-  //}
 
   return GGPO_OK;
 }

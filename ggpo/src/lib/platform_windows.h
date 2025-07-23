@@ -22,7 +22,7 @@ public:  // functions
   static ProcessID GetProcessID() { return GetCurrentProcessId(); }
 
   static void AssertFailed(char* msg) {
-    MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+   MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
   }
   static uint32 GetCurrentTimeMS() { return timeGetTime(); }
   static int GetConfigInt(LPCWSTR name);

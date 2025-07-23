@@ -52,6 +52,8 @@ typedef int int32;
 /*
  * Macros
  */
+ // TODO: We need to fix this macro, or change up how asserts are done.  These are basically being treated like an exception.
+ // Even if we don't print the message, we immediately stop the program, which isn't really correct.  We should throw an exception IMO.
 #define ASSERT(msg)                                         \
    do {                                                     \
       if (!(msg)) {                                         \
