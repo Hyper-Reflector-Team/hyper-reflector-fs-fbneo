@@ -1595,9 +1595,9 @@ void VidOverlayAddChatLine(const wchar_t* name, const wchar_t* text)
     return;
   }
 
-  // OPTIONS:
-  const UINT P1_CHAT_COLOR = 0xFF00B2FF;
-  const UINT P2_CHAT_COLOR = 0xFFFFB200;
+  // OPTIONS: // Player Chat Colors
+  const UINT P1_CHAT_COLOR = 0xFFDB2777;
+  const UINT P2_CHAT_COLOR = 0xFF9333EA;
 
   // regular chat
   bool save = false;
