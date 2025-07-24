@@ -36,15 +36,15 @@ bool bBurnUseASMCPUEmulation = false;
  clock_t starttime = 0;
 #endif
 
-UINT32 nCurrentFrame;			// Framecount for emulated game
+UINT32 nCurrentFrame;			            // Framecount for emulated game
 
-UINT32 nFramesEmulated;		// Counters for FPS	display
-UINT32 nFramesRendered;		//
+UINT32 nFramesEmulated;		            // Counters for FPS	display
+UINT32 nFramesRendered;		            //
 INT32 bForce60Hz = 0;
 INT32 bBurnUseBlend = 1;
-INT32 nBurnFPS = 6000;
-INT32 nBurnCPUSpeedAdjust = 0x0100;	// CPU speed adjustment (clock * nBurnCPUSpeedAdjust / 0x0100)
-INT32 nBurnCPUSpeedTurbo = 0;	// Enable to boost CPU speed as a toggle option
+INT32 nBurnFPS = 6000;                // FPS emulator should run at * 100. Allows for non-integer FPS, i.e. 59.94 (5994) for CP3.
+INT32 nBurnCPUSpeedAdjust = 0x0100;	  // CPU speed adjustment (clock * nBurnCPUSpeedAdjust / 0x0100)
+INT32 nBurnCPUSpeedTurbo = 0;	        // Enable to boost CPU speed as a toggle option
 
 // Burn Draw:
 UINT8* pBurnDraw = NULL;	// Pointer to correctly sized bitmap

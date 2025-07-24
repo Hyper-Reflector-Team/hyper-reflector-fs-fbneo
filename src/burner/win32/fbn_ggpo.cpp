@@ -23,8 +23,8 @@ PlayerID _otherPlayerIndex = PLAYER_NOT_SET;
 
 // rollback counter
 // NOTE: These are only used in the video overlay. --> so they should be part of the overlay vars?
-int nRollbackFrames = 0;
-int nRollbackCount = 0;
+int nRollbackFrames = 0;              // The number of frames that were rolled back.
+int nRollbackCount = 0;               // The total number of rollbacks.
 
 static char pGameName[MAX_PATH];
 static bool bDelayLoad = false;

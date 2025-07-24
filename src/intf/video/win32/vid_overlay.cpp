@@ -13,20 +13,21 @@
 #define MIN(x,y) ((x)<(y)?(x):(y))
 #define MAX(x,y) ((x)>(y)?(x):(y))
 
-static const UINT TEXT_ANIM_FRAMES = 8;
-static const UINT NUM_RANKS = 7;
-static const UINT INFO_FRAMES = 150;
-static const UINT WARNING_FRAMES = 180;
-static const UINT CHAT_LINES = 7;
-static const UINT CHAT_FRAMES = 200;
-static const UINT CHAT_FRAMES_EXT = 350;
-static const UINT START_FRAMES = 300;
-static const UINT END_FRAMES = 500;
-static const UINT DETECTOR_FRAMES = 30;
-static const UINT WARNING_THRESHOLD = 100;
-static const UINT WARNING_MAX = 510;
-static const UINT WARNING_MSGCOUNT = 4;
-static const UINT MAX_CHARACTERS = 32;
+static const INT32 TEXT_ANIM_FRAMES = 8;
+static const INT32 NUM_RANKS = 7;
+static const INT32 INFO_FRAMES = 150;
+static const INT32 WARNING_FRAMES = 180;     // This corresponds to three seconds, 60FPS * 3 = 180
+static const INT32 CHAT_LINES = 7;
+static const INT32 CHAT_FRAMES = 200;
+static const INT32 CHAT_FRAMES_EXT = 350;
+static const INT32 START_FRAMES = 300;
+static const INT32 END_FRAMES = 500;
+static const INT32 DETECTOR_FRAMES = 30;
+static const INT32 WARNING_THRESHOLD = 100;
+static const INT32 WARNING_MAX = 510;
+static const INT32 WARNING_MSGCOUNT = 4;
+static const INT32 MAX_CHARACTERS = 32;
+static const INT32 DISABLE = -5000;
 
 static const float FONT_SPACING = 0.6f;
 static const float FNT_SMA = 0.10f;
@@ -1389,9 +1390,9 @@ extern int nRollbackCount;
 
 static int nLastRollbackCount = 0;
 static UINT32 nLastRollbackFrames = 0;
-static UINT32 nRollbackRealtime = 0;
+static UINT32 nAvgRollbackFrameCount = 0;       // Average number of frames rolled back, per rollback.
 static UINT32 nLastRollbackAt = 0;
-static UINT32 nMaxRollback = 0;
+//static UINT32 nMaxRollback = 0;
 static UINT32 nRollbacksIn1Cycle = 0;
 static UINT32 rollbackPct = 0;
 static UINT32 nLastCount = 0;
@@ -1423,20 +1424,24 @@ void VidOverlaySetStats(double fps, int ping, int delay)
   else {
     if (bShowFPS >= 1) {
       // rollback frames
-      UINT32 nMaxRollback = 3 + ((ping / 2) / (100000 / nBurnFPS));
+
+      INT32 msPerFrame = 100000 / nBurnFPS;
+      UINT32 rollbackWarnThreshold = 3 + ((ping / 2) / msPerFrame);
       if (nLastRollbackFrames > 0 && nLastRollbackCount > 0) {
         if (nRollbackCount > nLastRollbackCount) {
-          nRollbackRealtime = (nRollbackFrames - nLastRollbackFrames) / (nRollbackCount - nLastRollbackCount);
+          nAvgRollbackFrameCount = (nRollbackFrames - nLastRollbackFrames) / (nRollbackCount - nLastRollbackCount);
           nLastRollbackAt = nFramesEmulated;
-          if (nRollbackRealtime > nMaxRollback) {
-            if (nFramesEmulated > 1000 && nRollbackRealtime > 0) {
-              VidOverlaySetWarning(180, 1);
+
+          if (nAvgRollbackFrameCount > rollbackWarnThreshold) {
+            if (nFramesEmulated > 1000 && nAvgRollbackFrameCount > 0) {
+              VidOverlaySetWarning(WARNING_FRAMES, 1);
             }
           }
 
         }
+        // Just clear it out after 10 seconds, OK!
         else if (nFramesEmulated > nLastRollbackAt + 600) {
-          nRollbackRealtime = 0;
+          nAvgRollbackFrameCount = 0;
         }
       }
       nLastRollbackCount = nRollbackCount;
@@ -1444,7 +1449,7 @@ void VidOverlaySetStats(double fps, int ping, int delay)
 
       if (bShowFPS == 1) swprintf(buf_line1, 64, _T(" %2.2f fps  |  d%d-ra%d "), fps, delay, nVidRunahead);
       else if (bShowFPS == 2) swprintf(buf_line1, 64, _T(" %2.2f fps  |      d%d-ra%d        "), fps, delay, nVidRunahead);
-      else swprintf(buf_line1, 64, _T(" %2.2f fps  |  Rollback %df "), fps, nRollbackRealtime);
+      else swprintf(buf_line1, 64, _T(" %2.2f fps  |  Rollback %df "), fps, nAvgRollbackFrameCount);
       stats_line1.Set(buf_line1);
     }
     if (bShowFPS >= 2) {
@@ -1509,23 +1514,23 @@ void VidOverlaySetStats(double fps, int ping, int delay)
 
 }
 
-void VidOverlaySetWarning(int warning, int line)
+void VidOverlaySetWarning(int amount, int line)
 {
 
   if (line == 1) {
-    stats_line1_warning += warning;
+    stats_line1_warning += amount;
     if (stats_line1_warning > WARNING_MAX) {
       stats_line1_warning = WARNING_MAX;
     }
   }
   else if (line == 2) {
-    stats_line2_warning += warning;
+    stats_line2_warning += amount;
     if (stats_line2_warning > WARNING_MAX) {
       stats_line2_warning = WARNING_MAX;
     }
   }
   else if (line == 3) {
-    stats_line3_warning += warning;
+    stats_line3_warning += amount;
     if (stats_line3_warning > WARNING_MAX) {
       stats_line3_warning = WARNING_MAX;
     }
