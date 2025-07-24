@@ -13,20 +13,20 @@
 #define MIN(x,y) ((x)<(y)?(x):(y))
 #define MAX(x,y) ((x)>(y)?(x):(y))
 
-#define TEXT_ANIM_FRAMES    		8
-#define NUM_RANKS           		7
-#define INFO_FRAMES					150
-#define WARNING_FRAMES				180
-#define CHAT_LINES					7
-#define CHAT_FRAMES					200
-#define CHAT_FRAMES_EXT 			350
-#define START_FRAMES				300
-#define END_FRAMES					500
-#define DETECTOR_FRAMES				30
-// #define WARNING_THRESHOLD			260
-#define WARNING_MAX					510
-#define WARNING_MSGCOUNT			4
-#define MAX_CHARACTERS				32
+static const UINT TEXT_ANIM_FRAMES = 8;
+static const UINT NUM_RANKS = 7;
+static const UINT INFO_FRAMES = 150;
+static const UINT WARNING_FRAMES = 180;
+static const UINT CHAT_LINES = 7;
+static const UINT CHAT_FRAMES = 200;
+static const UINT CHAT_FRAMES_EXT = 350;
+static const UINT START_FRAMES = 300;
+static const UINT END_FRAMES = 500;
+static const UINT DETECTOR_FRAMES = 30;
+static const UINT WARNING_THRESHOLD = 100;
+static const UINT WARNING_MAX = 510;
+static const UINT WARNING_MSGCOUNT = 4;
+static const UINT MAX_CHARACTERS = 32;
 
 static const float FONT_SPACING = 0.6f;
 static const float FNT_SMA = 0.10f;
@@ -35,6 +35,8 @@ static const float FNT_CHAT = 0.24f;
 static const float FNT_SCALE = 1.0f;
 static const float FNT_SEPARATION = 0.09f;
 
+static const UINT RED = 0xffff0000;
+static const UINT WHITE = 0xffffffff;
 
 //------------------------------------------------------------------------------------------------------------------------------
 // render vars
@@ -784,7 +786,7 @@ void DetectorGetState(int& state, int& score1, int& score2, int& start1, int& st
 struct Text
 {
   wchar_t str[300] = {};
-  unsigned int col = 0;
+  unsigned int color = 0;
   Text();
   void Set(const wchar_t* text);
   void Copy(const Text& text);
@@ -793,7 +795,7 @@ struct Text
 
 Text::Text()
 {
-  col = 0xFFFFFFFF;
+  color = 0xFFFFFFFF;
 }
 
 void Text::Set(const wchar_t* text)
@@ -803,14 +805,14 @@ void Text::Set(const wchar_t* text)
 
 void Text::Copy(const Text& text)
 {
-  col = text.col;
+  color = text.color;
   Set(text.str);
 }
 
 void Text::Render(float x, float y, float alpha, float scale, unsigned int mode)
 {
   if (str[0]) {
-    fontWrite(str, x, y, col, alpha, scale, mode);
+    fontWrite(str, x, y, color, alpha, scale, mode);
   }
 }
 
@@ -1118,14 +1120,14 @@ void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_
   }
   else if (bShowFPS) {
     // stats (fps & ping)
-    stats_line1.col = (stats_line1_warning >= 100) ? 0xffff0000 : 0xffffffff;
+    stats_line1.color = (stats_line1_warning >= WARNING_THRESHOLD) ? RED : WHITE;
     stats_line1.Render((bShowFPS == 2) ? frame_width - 0.0015f : frame_width - 0.0035f, 0.003f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     if (bShowFPS > 1) {
-      stats_line2.col = (stats_line2_warning >= 100) ? 0xffff0000 : 0xffffffff;
+      stats_line2.color = (stats_line2_warning >= WARNING_THRESHOLD) ? RED : WHITE;
       stats_line2.Render((jitterAvg >= 10) ? frame_width - 0.0052f : frame_width - 0.0035f, 0.023f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     }
     if (bShowFPS > 2) {
-      stats_line3.col = (stats_line3_warning >= 100) ? 0xffff0000 : 0xffffffff;
+      stats_line3.color = (stats_line3_warning >= WARNING_THRESHOLD) ? RED : WHITE;
       stats_line3.Render(frame_width - 0.0035f, 0.043f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     }
   }
@@ -1169,7 +1171,7 @@ void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_
         player1.name.Render(x - xn, yn, 1.f, FNT_MED, FONT_ALIGN_RIGHT);
         if (detector_enabled) {
           if (player1.score.str[0]) {
-            player1.score.col = 0xFF33F1E5;
+            player1.score.color = 0xFF33F1E5;
             player1.score.Render(x - xs, yn, 1.f, FNT_MED, FONT_ALIGN_RIGHT);
           }
           float len = fontGetTextWidth(player1.name.str, FNT_MED);
@@ -1182,7 +1184,7 @@ void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_
         player2.name.Render(x + xn, yn, 1.f, FNT_MED, FONT_ALIGN_LEFT);
         if (detector_enabled) {
           if (player2.score.str[0]) {
-            player2.score.col = 0xFF33F1E5;
+            player2.score.color = 0xFF33F1E5;
             player2.score.Render(x + xs, yn, 1.f, FNT_MED, FONT_ALIGN_LEFT);
           }
           float len = fontGetTextWidth(player2.name.str, FNT_MED);
@@ -1402,7 +1404,7 @@ void VidOverlaySetStats(double fps, int ping, int delay)
     SendToPeer(delay, nVidRunahead);
   }
 
-  if (bShowFPS <= 0) { return; }
+  if (bShowFPS == SHOWSTATS_NONE) { return; }
 
   wchar_t buf_line1[64];
   wchar_t buf_line2[64];
@@ -1421,7 +1423,7 @@ void VidOverlaySetStats(double fps, int ping, int delay)
   else {
     if (bShowFPS >= 1) {
       // rollback frames
-      nMaxRollback = 3 + ((ping / 2) / (100000 / nBurnFPS));
+      UINT32 nMaxRollback = 3 + ((ping / 2) / (100000 / nBurnFPS));
       if (nLastRollbackFrames > 0 && nLastRollbackCount > 0) {
         if (nRollbackCount > nLastRollbackCount) {
           nRollbackRealtime = (nRollbackFrames - nLastRollbackFrames) / (nRollbackCount - nLastRollbackCount);
@@ -1601,17 +1603,17 @@ void VidOverlayAddChatLine(const wchar_t* name, const wchar_t* text)
   wchar_t user[128];
   if (!wcscmp(name, player1.name.str)) {
     swprintf(user, 128, _T("%s"), name);
-    chat_names[0].col = (game_playerIndex == 0) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
+    chat_names[0].color = (game_playerIndex == 0) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
     save = true;
   }
   else if (!wcscmp(name, player2.name.str)) {
     swprintf(user, 128, _T("%s"), name);
-    chat_names[0].col = (game_playerIndex == 1) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
+    chat_names[0].color = (game_playerIndex == 1) ? P1_CHAT_COLOR : P2_CHAT_COLOR;
     save = true;
   }
   else {
     swprintf(user, 128, _T("%s"), name);
-    chat_names[0].col = 0xFFFFFFFF - 0x00B2FF;
+    chat_names[0].color = 0xFFFFFFFF - 0x00B2FF;
   }
   chat_names[0].Set(user);
   chat_lines[0].Set(text);
