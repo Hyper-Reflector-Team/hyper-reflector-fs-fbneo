@@ -52,9 +52,7 @@ typedef int int32;
 /*
  * Macros
  */
-// TODO: Make this into a function, and give it a real name!
-// Since it crashes the system no matter what, it isn't an assert!
-// Also, why is it in a loop that immediately exits?
+// NOTE: This assert will always 'abort' and is not meant to be disabled in Release builds.
 #define ASSERT(condition)                                   \
    do {                                                     \
       if (!(condition)) {                                   \
