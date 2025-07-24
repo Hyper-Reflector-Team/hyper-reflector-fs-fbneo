@@ -398,6 +398,7 @@ UdpProtocol::UpdateNetworkStats(void)
 
 	_kbps_sent = int(Bps / 1024);
 
+  // NOTE: This might be a good place to write some stats..?
 	Log("Network Stats -- Bandwidth: %.2f KBps   Packets Sent: %5d (%.2f pps)   "
 		"KB Sent: %.2f    UDP Overhead: %.2f pct.\n",
 		_kbps_sent,

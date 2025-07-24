@@ -310,7 +310,7 @@ extern "C" {
    */
   typedef struct GGPONetworkStats {
     struct {
-      int   predict_queue_len;				// FCADE
+      int   predict_queue_len;				// FCADE Specific... not sure why we care...
       int   send_queue_len;
       int   recv_queue_len;
       int   ping;
@@ -551,8 +551,7 @@ extern "C" {
     *
     * Used to fetch some statistics about the quality of the network connection.
     */
-  GGPO_API bool __cdecl ggpo_get_stats(GGPOSession*,
-    GGPONetworkStats* stats);
+  GGPO_API bool __cdecl ggpo_get_stats(GGPOSession*, GGPONetworkStats* stats, PlayerID playerIndex);
 
   /*
    * ggpo_set_disconnect_timeout --

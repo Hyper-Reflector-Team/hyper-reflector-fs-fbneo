@@ -551,18 +551,10 @@ void Peer2PeerBackend::DisconnectPlayer(PlayerID playerIndex, int syncto)
 
 
 // --------------------------------------------------------------------------------------------------------------
-bool Peer2PeerBackend::GetNetworkStats(GGPONetworkStats* stats)
+bool Peer2PeerBackend::GetNetworkStats(GGPONetworkStats* stats, PlayerID playerIndex)
 {
-  //int playerIndex = _playerIndex;
-  //GGPOErrorCode result;
-
-  //result = PlayerHandleToQueue(player, &playerIndex);
-  //if (!GGPO_SUCCEEDED(result)) {
-  //	return result;
-  //}
-
   memset(stats, 0, sizeof * stats);
-  _endpoints[_playerIndex].GetNetworkStats(stats);
+  _endpoints[playerIndex].GetNetworkStats(stats);
 
   return true;
 }

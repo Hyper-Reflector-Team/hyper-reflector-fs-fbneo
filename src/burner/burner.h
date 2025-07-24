@@ -259,3 +259,16 @@ extern TCHAR szAppControlsPath[MAX_PATH];
 extern TCHAR szAppCabinetsPath[MAX_PATH];
 extern TCHAR szAppPCBsPath[MAX_PATH];
 extern TCHAR szAppHistoryPath[MAX_PATH];
+
+// Used for displaying stats in the upper-right corner.
+enum EShowStatsOptions {
+  SHOWSTATS_NONE = 0
+  , SHOWSTATS_FPS_ONLY = 1
+  
+  // For net games only.
+  // NOTE: Not sure if these descriptors are correct....
+  , SHOWSTATS_NET_FPS_DELAY = 2
+  , SHOWSTATS_NET_FPS_DELAY_ROLLBACK = 3
+  , SHOWSTATS_NET_FPS_RUNAHEAD = 4
+
+};

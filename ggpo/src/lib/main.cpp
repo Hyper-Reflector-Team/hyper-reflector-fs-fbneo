@@ -184,12 +184,12 @@ bool ggpo_client_chat(GGPOSession* ggpo, char* text)
 //}
 
 // ----------------------------------------------------------------------------------------------------------------
-bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats)
+bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats, PlayerID playerIndex)
 {
   if (!ggpo) {
     return false;
   }
-  bool res = ggpo->GetNetworkStats(stats);
+  bool res = ggpo->GetNetworkStats(stats, playerIndex);
   return res;
 }
 

@@ -37,7 +37,7 @@ public:
    virtual GGPOErrorCode SyncInput(void *values, int totalSize, int playerCount);
    virtual GGPOErrorCode IncrementFrame(void);
    virtual GGPOErrorCode DisconnectPlayer(PlayerID playerIndex);
-   virtual bool GetNetworkStats(GGPONetworkStats *stats);
+   virtual bool GetNetworkStats(GGPONetworkStats *stats, PlayerID playerIndex);
    virtual uint32 SetFrameDelay(int delay);
    virtual GGPOErrorCode SetDisconnectTimeout(int timeout);
    virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout);

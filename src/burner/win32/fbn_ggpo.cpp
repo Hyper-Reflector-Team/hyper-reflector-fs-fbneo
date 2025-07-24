@@ -19,6 +19,7 @@ extern int nAcbLoadState;
 extern int bMediaExit;
 
 PlayerID _playerIndex = PLAYER_NOT_SET;
+PlayerID _otherPlayerIndex = PLAYER_NOT_SET;
 
 // rollback counter
 // NOTE: These are only used in the video overlay. --> so they should be part of the overlay vars?
@@ -320,7 +321,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
   return 0;
 }
 
-bool __cdecl ggpo_advance_frame_callback(int flags)
+bool __cdecl ggpo_rollback_frame_callback(int flags)
 {
   bSkipPerfmonUpdates = true;
   nFramesEmulated--;
@@ -601,7 +602,7 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   cb.save_game_state = ggpo_save_game_state_callback;
   cb.log_game_state = ggpo_log_game_state_callback;
   cb.free_buffer = ggpo_free_buffer_callback;
-  cb.rollback_frame = ggpo_advance_frame_callback;
+  cb.rollback_frame = ggpo_rollback_frame_callback;
   cb.on_event = ggpo_on_event_callback;
 
 
@@ -610,6 +611,8 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   bDirect = true;
   iRanked = 0;
   _playerIndex = ops.playerNumber - 1;
+  _otherPlayerIndex = _playerIndex == 0 ? 1 : 0;
+
   iDelay = ops.frameDelay;
   iSeed = 0;
 
@@ -659,7 +662,7 @@ void QuarkInit(TCHAR* tconnect)
   cb.save_game_state = ggpo_save_game_state_callback;
   cb.log_game_state = ggpo_log_game_state_callback;
   cb.free_buffer = ggpo_free_buffer_callback;
-  cb.rollback_frame = ggpo_advance_frame_callback;
+  cb.rollback_frame = ggpo_rollback_frame_callback;
   cb.on_event = ggpo_on_event_callback;
 
   // This path is used for connecting to other players via FC servers.
@@ -832,7 +835,8 @@ bool QuarkIncrementFrame()
 
   if (!bSkipPerfmonUpdates) {
     GGPONetworkStats stats;
-    ggpo_get_stats(ggpo, &stats);
+
+    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
     ggpoutil_perfmon_update(ggpo, stats);
   }
 
@@ -874,7 +878,7 @@ void QuarkSendChatCmd(char* text, char cmd)
 void QuarkUpdateStats(double fps)
 {
   GGPONetworkStats stats;
-  ggpo_get_stats(ggpo, &stats);
+  ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
   VidSSetStats(fps, stats.network.ping, iDelay);
   VidOverlaySetStats(fps, stats.network.ping, iDelay);
 }

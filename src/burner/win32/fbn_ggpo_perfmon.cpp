@@ -22,7 +22,7 @@ int _ping_graph[MAX_GRAPH_SIZE];
 int _local_fairness_graph[MAX_GRAPH_SIZE];
 int _remote_fairness_graph[MAX_GRAPH_SIZE];
 int _fairness_graph[MAX_GRAPH_SIZE];
-int _predict_queue_graph[MAX_GRAPH_SIZE];
+// int _predict_queue_graph[MAX_GRAPH_SIZE];
 int _remote_queue_graph[MAX_GRAPH_SIZE];
 int _send_queue_graph[MAX_GRAPH_SIZE];
 int _local_behind_queue_graph[MAX_GRAPH_SIZE];
@@ -63,7 +63,7 @@ draw_network_graph_control(LPDRAWITEMSTRUCT di)
    draw_grid(di);
    if (true) {
       draw_graph(di, _green_pen, _ping_graph,          _graph_size, 0, 500);
-      draw_graph(di, _yellow_pen,_predict_queue_graph, _graph_size, 0, 14);
+      // draw_graph(di, _yellow_pen,_predict_queue_graph, _graph_size, 0, 14);
       draw_graph(di, _red_pen,   _remote_queue_graph,  _graph_size, 0, 14);
       draw_graph(di, _blue_pen,  _send_queue_graph,    _graph_size, 0, 14);
    }
@@ -163,8 +163,7 @@ ggpoutil_perfmon_isopen()
 	return _shown;
 }
 
-void
-ggpoutil_perfmon_update(GGPOSession *ggpo, GGPONetworkStats &stats)
+void ggpoutil_perfmon_update(GGPOSession *ggpo, GGPONetworkStats &stats)
 {
    int i;
 
@@ -184,7 +183,7 @@ ggpoutil_perfmon_update(GGPOSession *ggpo, GGPONetworkStats &stats)
    /*
     * Random graphs
     */
-   _predict_queue_graph[i] = stats.network.predict_queue_len;
+   // _predict_queue_graph[i] = stats.network.predict_queue_len;
    _remote_queue_graph[i] = stats.network.recv_queue_len;
    _send_queue_graph[i] = stats.network.send_queue_len;
 

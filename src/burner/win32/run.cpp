@@ -6,7 +6,9 @@ int bRunPause = 0;
 int bAltPause = 0;
 int bAlwaysDrawFrames = 0;
 
-int bShowFPS = 0;
+// REFACTOR: Rename to 'ShowStats' or similar.  
+int bShowFPS = SHOWSTATS_NONE;
+
 static unsigned int nDoFPS = 0;
 
 static bool bMute = false;
