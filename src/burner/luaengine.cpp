@@ -4154,7 +4154,8 @@ int FBA_LoadLuaCode(const char *filename) {
 	FBA_LuaFrameBoundary();
 
 	// Set up our protection hook to be executed once every 10,000 bytecode instructions.
-	lua_sethook(thread, FBA_LuaHookFunction, LUA_MASKCOUNT, 10000);
+  // Removing this because its annoying every time we use training mode.
+	// lua_sethook(thread, FBA_LuaHookFunction, LUA_MASKCOUNT, 10000);
 
 	_chdir(fbnCWD);
 
