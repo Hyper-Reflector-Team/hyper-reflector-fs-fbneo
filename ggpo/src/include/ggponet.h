@@ -43,7 +43,7 @@ extern "C" {
 #define GGPO_SPECTATOR_INPUT_INTERVAL     4
 
  // TODO: Share with main program / put this with defs elsewhere....
-  const static size_t MAX_GGPOCHAT_SIZE = 16;	 // 128 characters is enough?
+  const static size_t MAX_GGPOCHAT_SIZE = 64;	 // 128 characters is enough?
   const static size_t MAX_NAME_SIZE = 16;
 
 
