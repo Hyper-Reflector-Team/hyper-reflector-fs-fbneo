@@ -623,7 +623,66 @@ int InitDirectConnection(DirectConnectionOptions& ops)
 
   return 0;
 
+}
 
+// Spectator code
+int InitSpectatorConnection(SpectatorConnectionOptions& ops)
+{
+  const UINT16 DEFAULT_LOCAL_PORT = 7004;
+  const UINT16 DEFAULT_REMOTE_PORT = 7000;
+
+  // Let's parse out the ips/ports...
+  char remoteIP[MAX_HOST];
+  UINT16 localPort = DEFAULT_LOCAL_PORT;
+  UINT16 remotePort = DEFAULT_REMOTE_PORT;
+
+  char localHost[MAX_HOST] = "127.0.0.1";
+  char remoteHost[MAX_HOST] = "127.0.0.1";
+
+ /* try
+  {
+    ParseAddress(ops.localAddr.data(), localHost, &localPort);
+    ParseAddress(ops.remoteAddr.data(), remoteHost, &remotePort);
+  }
+  catch (const std::exception&)
+  {
+    throw std::exception("Could not parse local or remote address");
+  }*/
+
+  kNetSpectator = 1;
+  kNetLua = 1;
+  iSeed = 0;
+  _playerIndex = PLAYER_NOT_SET;
+
+  GGPOSessionCallbacks cb = {};
+  cb.begin_game = ggpo_begin_game_callback;
+  cb.load_game_state = ggpo_load_game_state_callback;
+  cb.save_game_state = ggpo_save_game_state_callback;
+  cb.log_game_state = ggpo_log_game_state_callback;
+  cb.free_buffer = ggpo_free_buffer_callback;
+  cb.rollback_frame = ggpo_rollback_frame_callback;
+  cb.on_event = ggpo_on_event_callback;
+
+  const int INPUT_SIZE = 5;
+
+  GGPOErrorCode result = ggpo_start_spectating(
+    &ggpo,
+    &cb,
+    ops.romName.data(),
+    2, // total number of players in match
+    INPUT_SIZE,
+    localPort,
+    remoteHost,
+    remotePort
+  );
+
+  if (result != GGPO_OK) {
+    throw std::exception("Failed to start spectator session");
+  }
+
+  VidOverlaySetSystemMessage(_T("Connecting as Spectator..."));
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------

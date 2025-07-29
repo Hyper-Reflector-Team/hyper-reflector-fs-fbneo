@@ -97,6 +97,12 @@ struct DirectConnectionOptions {
   UINT16 frameDelay = 1;
 };
 
+struct SpectatorConnectionOptions {
+  std::string romName;
+  std::string localAddr = "";
+  std::string remoteAddr = "";
+};
+
 
 // ---------------------------------------------------------------------------
 
@@ -461,6 +467,7 @@ int NetworkGetInput();
 
 // fbn_ggpo.cpp
 int InitDirectConnection(DirectConnectionOptions& ops);
+int InitSpectatorConnection(SpectatorConnectionOptions& ops);
 
 // [OBSOLETE]
 void QuarkInit(TCHAR* connect);

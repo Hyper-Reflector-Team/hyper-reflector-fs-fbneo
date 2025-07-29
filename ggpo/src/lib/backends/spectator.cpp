@@ -56,9 +56,10 @@ SpectatorBackend::DoPoll(int timeout)
 }
 
 GGPOErrorCode
-SpectatorBackend::SyncInput(void *values,
-                            int size,
-                            int *disconnect_flags)
+SpectatorBackend::SyncInput(void* values, int totalSize, int playerCount)
+//SpectatorBackend::SyncInput(void *values,
+//                            int size,
+//                            int *disconnect_flags)
 {
    // Wait until we've started to return inputs.
    if (_synchronizing) {
@@ -76,11 +77,11 @@ SpectatorBackend::SyncInput(void *values,
       return GGPO_ERRORCODE_GENERAL_FAILURE;
    }
 
-   ASSERT(size >= _input_size * _num_players);
+   ASSERT(totalSize >= _input_size * playerCount);
    memcpy(values, input.bits, _input_size * _num_players);
-   if (disconnect_flags) {
-      *disconnect_flags = 0; // xxx: should get them from the host!
-   }
+   //if (playerCount) {
+   //   playerCount = 0; // xxx: should get them from the host!
+   //}
    _next_input_to_send++;
 
    return GGPO_OK;

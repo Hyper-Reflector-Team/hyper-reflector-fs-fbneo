@@ -25,9 +25,11 @@ public:
 
 public:
    virtual GGPOErrorCode DoPoll(int timeout);
-   virtual GGPOErrorCode AddPlayer(GGPOPlayer *player, PlayerID *handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
+   //virtual GGPOErrorCode AddPlayer(GGPOPlayer *player, PlayerID *handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
+   virtual GGPOErrorCode AddPlayer(GGPOPlayer* player) override { return GGPO_ERRORCODE_UNSUPPORTED; }
+   virtual GGPOErrorCode SyncInput(void* values, int totalSize, int playerCount) override;
    virtual GGPOErrorCode AddLocalInput(PlayerID player, void *values, int size) { return GGPO_OK; }
-   virtual GGPOErrorCode SyncInput(void *values, int size, int *disconnect_flags);
+   //virtual GGPOErrorCode SyncInput(void *values, int size, int *disconnect_flags);
    virtual GGPOErrorCode IncrementFrame(void);
    virtual GGPOErrorCode DisconnectPlayer(PlayerID handle) { return GGPO_ERRORCODE_UNSUPPORTED; }
    virtual bool GetNetworkStats(GGPONetworkStats *stats, PlayerID handle) { return false ; }
