@@ -77,8 +77,10 @@ SpectatorBackend::SyncInput(void* values, int totalSize, int playerCount)
       return GGPO_ERRORCODE_GENERAL_FAILURE;
    }
 
-   ASSERT(totalSize >= _input_size * playerCount);
-   memcpy(values, input.bits, _input_size * _num_players);
+   // Fails to sync here
+   //ASSERT(totalSize >= _input_size * playerCount);
+   memcpy(values, input.bits, totalSize * playerCount);
+
    //if (playerCount) {
    //   playerCount = 0; // xxx: should get them from the host!
    //}
@@ -114,7 +116,7 @@ SpectatorBackend::OnUdpProtocolEvent(UdpProtocol::Event &evt)
    switch (evt.type) {
    case UdpProtocol::Event::Connected:
       info.code = GGPO_EVENTCODE_CONNECTED_TO_PEER;
-      info.u.connected.player_index = 0;
+      info.u.connected.player_index = 2;
       _callbacks.on_event(&info);
       break;
    case UdpProtocol::Event::Synchronizing:
@@ -130,9 +132,22 @@ SpectatorBackend::OnUdpProtocolEvent(UdpProtocol::Event &evt)
          info.u.synchronized.player_index = 0;
          _callbacks.on_event(&info);
 
-         info.code = GGPO_EVENTCODE_RUNNING;
+         info.code = GGPO_EVENTCODE_RUNNING; // if the spectator joins after both clients are already synced it goes to a black screen
+         _callbacks.on_event(&info); // Im guessing that means we need to re-sync somehow.
+          _synchronizing = false;
+      }
+      break;
+
+   // Spectate - Custom UDP message we can use to potentially start a spectate after a client has started
+   case UdpProtocol::Event::StartSpectate: // Says its unknown need to work this out.
+      if (_synchronizing) {
+         info.code = GGPO_EVENTCODE_CAN_SPECTATE;
+         info.u.synchronized.player_index = 0;
          _callbacks.on_event(&info);
-         _synchronizing = false;
+
+         //info.code = GGPO_EVENTCODE_RUNNING;
+         //_callbacks.on_event(&info);
+         //_synchronizing = false;
       }
       break;
 
@@ -172,4 +187,3 @@ SpectatorBackend::OnMsg(sockaddr_in &from, UdpMsg *msg, int len)
       _host.OnMsg(msg, len);
    }
 }
-

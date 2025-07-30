@@ -31,7 +31,9 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   _input_size(INPUT_SIZE),
   _sync(_local_connect_status),
   _disconnect_timeout(DEFAULT_DISCONNECT_TIMEOUT),
-  _disconnect_notify_start(DEFAULT_DISCONNECT_NOTIFY_START)
+  _disconnect_notify_start(DEFAULT_DISCONNECT_NOTIFY_START),
+  _num_spectators(0),
+  _next_spectator_frame(0)
 {
   _callbacks = *cb;
   _synchronizing = true;
@@ -86,8 +88,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
     if (isLocal) {
       p.type = GGPO_PLAYERTYPE_LOCAL;
       // Don't set any network info for local players.
-    }
-    else {
+    } else {
       p.type = GGPO_PLAYERTYPE_REMOTE;
 
       // Remote address....
@@ -96,10 +97,33 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
       memcpy(&ipa, remoteIp, (std::min)(ARRAYSIZE(ipa), strlen(remoteIp) + 1));
       p.u.remote.port = remotePort;
     }
+    // we need to set a spectator here
     p.player_index = i;
     p.size = sizeof(GGPOPlayer);
 
     AddPlayer(&p);
+  }
+  // Add our spectators
+  for (uint16 i = 0; i < 1; i++)
+  {
+   GGPOPlayer p;
+
+   p.type = GGPO_PLAYERTYPE_SPECTATOR;
+   //p.type = GGPO_PLAYERTYPE_REMOTE;
+
+   // Remote address....
+   // Maybe use some safety here.....
+   auto& ipa = p.u.remote.ip_address;
+   // memcpy(&ipa, remoteIp, (std::min)(ARRAYSIZE(ipa), strlen(remoteIp) + 1));
+   // p.u.remote.port = remotePort;
+   memcpy(&ipa, "127.0.0.1", (std::min)(ARRAYSIZE(ipa), strlen("127.0.0.1") + 1));
+   p.u.remote.port = 7002;
+   // we need to set a spectator here
+   p.player_index = 2;
+   p.size = sizeof(GGPOPlayer);
+
+   AddSpectator(p.u.remote.ip_address, p.u.remote.port);
+   //AddPlayer(&p);
   }
 
 
@@ -166,6 +190,28 @@ void Peer2PeerBackend::AddRemotePlayer(char* ip, uint16 port, int queue)
   _endpoints[queue].SetPlayerName(_PlayerNames[_playerIndex]);
 }
 
+GGPOErrorCode Peer2PeerBackend::AddSpectator(char *ip,
+                                             uint16 port)
+{
+   if (_num_spectators == GGPO_MAX_SPECTATORS) {
+      return GGPO_ERRORCODE_TOO_MANY_SPECTATORS;
+   }
+   /*
+    * Currently, we can only add spectators before the game starts.
+    */
+   if (!_synchronizing) {
+      return GGPO_ERRORCODE_INVALID_REQUEST;
+   }
+   int queue = _num_spectators++;
+
+   _spectators[queue].Init(&_udp, _pollMgr, queue + 1000, ip, port, _local_connect_status);
+   _spectators[queue].SetDisconnectTimeout(_disconnect_timeout);
+   _spectators[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
+   _spectators[queue].Synchronize();
+
+   return GGPO_OK;
+}
+
 // ----------------------------------------------------------------------------------------------------------
 GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
 {
@@ -185,7 +231,7 @@ GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
       }
 
       int total_min_confirmed;
-      if (_num_players <= 2) {
+      if (_num_players <= 2) { // spec
         total_min_confirmed = Poll2Players(current_frame);
       }
       else {
@@ -195,6 +241,21 @@ GGPOErrorCode Peer2PeerBackend::DoPoll(int timeout)
       Log("last confirmed frame in p2p backend is %d.\n", total_min_confirmed);
       if (total_min_confirmed >= 0) {
         ASSERT(total_min_confirmed != INT_MAX);
+        // Spectator code - send frames to spectators
+        if (_num_spectators > 0) {
+            while (_next_spectator_frame <= total_min_confirmed) {
+              Log("pushing frame %d to spectators.\n", _next_spectator_frame);
+
+              GameInput input;
+              input.frame = _next_spectator_frame;
+              input.size = _input_size * _num_players;
+              _sync.GetConfirmedInputs(input.bits, _input_size * _num_players, _next_spectator_frame);
+              for (int i = 0; i < _num_spectators; i++) {
+                  _spectators[i].SendInput(input);
+              }
+              _next_spectator_frame++;
+            }
+        }
 
         Log("setting confirmed frame in sync to %d.\n", total_min_confirmed);
         _sync.SetLastConfirmedFrame(total_min_confirmed);
@@ -304,9 +365,10 @@ int Peer2PeerBackend::PollNPlayers(int current_frame)
 GGPOErrorCode Peer2PeerBackend::AddPlayer(GGPOPlayer* player)
 {
   // Spectator support will be removed!
-  if (player->type == GGPO_PLAYERTYPE_SPECTATOR) {
-    return GGPO_ERRORCODE_GENERAL_FAILURE;
-  }
+  //if (player->type == GGPO_PLAYERTYPE_SPECTATOR) {
+  //  return AddSpectator(player->u.remote.ip_address, player->u.remote.port);
+  //  // return GGPO_ERRORCODE_GENERAL_FAILURE;
+  //}
 
   PlayerID playerIndex = player->player_index;
   if (player->player_index > _num_players) {
@@ -390,6 +452,11 @@ void Peer2PeerBackend::PollUdpProtocolEvents(void)
       OnUdpProtocolPeerEvent(evt, i);
     }
   }
+   for (uint16 i = 0; i < _num_spectators; i++) {
+      while (_spectators[i].GetEvent(evt)) {
+         OnUdpProtocolSpectatorEvent(evt, i);
+      }
+   }
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -416,6 +483,26 @@ void Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpProtocol::Event& evt, PlayerID 
     break;
 
   }
+}
+
+void
+Peer2PeerBackend::OnUdpProtocolSpectatorEvent(UdpProtocol::Event &evt, PlayerID playerIndex)
+{
+   OnUdpProtocolEvent(evt, playerIndex);
+
+   GGPOEvent info;
+
+   switch (evt.type) {
+   case UdpProtocol::Event::Disconnected:
+      // do we need to disconnect from the using this array??
+      // _spectators[queue].Disconnect();
+
+      info.code = GGPO_EVENTCODE_DISCONNECTED_FROM_PEER;
+      DisconnectPlayer(playerIndex);
+      _callbacks.on_event(&info);
+
+      break;
+   }
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -621,6 +708,13 @@ void Peer2PeerBackend::OnMsg(sockaddr_in& from, UdpMsg* msg, int len)
       return;
     }
   }
+  // Send message to spectators
+  for (int i = 0; i < _num_spectators; i++) {
+    if (_spectators[i].HandlesMsg(from, msg)) {
+        _spectators[i].OnMsg(msg, len);
+        return;
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -638,9 +732,26 @@ void Peer2PeerBackend::CheckInitialSync()
       }
     }
 
+    // This code breaks the syncronize for spectators, i wonder why..
+    //// check for spectators
+    //for (i = 0; i < _num_spectators; i++) {
+    //    if (_spectators[i].IsInitialized() && !_spectators[i].IsSynchronized()) {
+    //      return;
+    //    }
+    //}    
+
     GGPOEvent info;
     info.code = GGPO_EVENTCODE_RUNNING;
     _callbacks.on_event(&info);
     _synchronizing = false;
+
+
+    for (i = 0; i < _num_spectators; i++) {
+      if (_spectators[i].IsInitialized()) { // Make sure the spectator connection is valid
+        Log("Sending game start notification to spectator %d.\n", i);
+        // info.code = GGPO_EVENTCODE_CAN_SPECTATE;
+        //_spectators[i].StartSpectate(); // Causes uknown udp event but its possible to uses this later to do something usefull.
+      }
+    }
   }
 }

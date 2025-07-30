@@ -109,6 +109,17 @@ void UdpProtocol::SendChat(char* text) {
 	}
 }
 
+void UdpProtocol::StartSpectate() {
+
+	if (_udp) {
+		if (_current_state == Running) {
+
+			UdpMsg* msg = new UdpMsg(UdpMsg::StartSpectate);			
+			SendMsg(msg);
+		}
+	}
+}
+
 // ----------------------------------------------------------------------------------------------------------
 void UdpProtocol::SendInput(GameInput& input)
 {

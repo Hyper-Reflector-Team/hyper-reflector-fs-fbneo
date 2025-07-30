@@ -16,7 +16,7 @@
 #include "network/udp_proto.h"
 #include <string>
 
- // TEMP:  Using assumed player and input sizes for now.
+// TEMP:  Using assumed player and input sizes for now.
 static const uint16 PLAYER_COUNT = 2;
 
 // NOTE: This is the input size that 3s uses.  We should not have a hard-coded way of doing this,
@@ -55,10 +55,11 @@ protected:
    int Poll2Players(int current_frame);
    int PollNPlayers(int current_frame);
    void AddRemotePlayer(char *remoteip, uint16 reportport, int queue);
-   
+   GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
    virtual void OnSyncEvent(Sync::Event &e) { }
    virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, PlayerID playerIndex);
    virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, PlayerID playerIndex);
+   virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, PlayerID playerIndex);   
 
 protected:
    GGPOSessionCallbacks  _callbacks;
@@ -66,13 +67,15 @@ protected:
    Sync                  _sync;
    Udp                   _udp;
    UdpProtocol           *_endpoints;
-
+   UdpProtocol           _spectators[GGPO_MAX_SPECTATORS];
+   int                   _num_spectators;
    int                   _input_size;
 
    bool                  _synchronizing;
    int                   _num_players;
    int                   _next_recommended_sleep;
-
+   
+   int                   _next_spectator_frame;
    int                   _disconnect_timeout;
    int                   _disconnect_notify_start;
 
