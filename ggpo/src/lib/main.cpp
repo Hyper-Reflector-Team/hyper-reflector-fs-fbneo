@@ -54,6 +54,25 @@ GGPOSession* ggpo_start_session(
   return res;
 }
 
+//GGPOSession* ggpo_start_spectating(
+//  GGPOSessionCallbacks* cb,
+//  const char* gameName,
+//  uint16 localPort,
+//  char* remoteIp,
+//  uint16 remotePort,
+//  PlayerID playerIndex,
+//  char* playerName)
+//{
+//  auto res = (GGPOSession*)new Peer2PeerBackend(cb,
+//    gameName,
+//    localPort,
+//    remoteIp,
+//    remotePort,
+//    playerIndex,
+//    playerName);
+//  return res;
+//}
+
 
 // NOTE: We may not need this function call outside of the lib....
 GGPOErrorCode ggpo_add_player(GGPOSession* ggpo, GGPOPlayer* player)
@@ -227,23 +246,26 @@ ggpo_set_disconnect_notify_start(GGPOSession* ggpo, int timeout)
   }
   return ggpo->SetDisconnectNotifyStart(timeout);
 }
-//
-//GGPOErrorCode ggpo_start_spectating(GGPOSession **session,
-//                                    GGPOSessionCallbacks *cb,
-//                                    const char *game,
-//                                    int num_players,
-//                                    int input_size,
-//                                    unsigned short local_port,
-//                                    char *host_ip,
-//                                    unsigned short host_port)
-//{
-//   *session= (GGPOSession *)new SpectatorBackend(cb,
-//                                                 game,
-//                                                 local_port,
-//                                                 num_players,
-//                                                 input_size,
-//                                                 host_ip,
-//                                                 host_port);
-//   return GGPO_OK;
-//}
+
+extern "C" {
+  // spectate stuff?
+  GGPOErrorCode ggpo_start_spectating(GGPOSession** session,
+    GGPOSessionCallbacks* cb,
+    const char* game,
+    int num_players,
+    int input_size,
+    unsigned short local_port,
+    char* host_ip,
+    unsigned short host_port)
+  {
+    *session = (GGPOSession*)new SpectatorBackend(cb,
+      game,
+      local_port,
+      num_players,
+      input_size,
+      host_ip,
+      host_port);
+    return GGPO_OK;
+  }
+}
 //

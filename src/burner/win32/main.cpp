@@ -968,6 +968,13 @@ int HandleDirectConnection(DirectConnectionOptions& ops) {
   return res;
 }
 
+int HandleSpectatorConnection(SpectatorConnectionOptions& ops) {
+  // TODO: Validate the options.
+
+  int res = InitSpectatorConnection(ops);
+  return res;
+}
+
 
 // ----------------------------------------------------------------------------------------------------------
 // Thanks to Pavel P @ https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
@@ -1044,6 +1051,10 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_option("-n,--name", directOps.playerName, "Your name")->required();
   directConnect->add_option("-d,--delay", directOps.frameDelay, "Frame delay.  1 is default");
 
+  SpectatorConnectionOptions  spectateOps;
+  auto spectatorConnect = app.add_subcommand("spectate", "Initiate connection as a spectator.");
+  spectatorConnect->add_option("-l,--local", directOps.localAddr, "Local address")->required();;
+  spectatorConnect->add_option("-r,--remote", directOps.remoteAddr, "Remote address")->required();
 
   std::string loadPath = "";
   auto load = app.add_subcommand("load", "Load a game state (.fs), or replay file (.fr)");
@@ -1104,6 +1115,14 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   {
     directOps.romName = romName;
     int res = HandleDirectConnection(directOps);
+    if (res != 0) {
+      return res;
+    }
+  }
+  else if (spectatorConnect->parsed())
+  {
+    spectateOps.romName = romName;
+    int res = HandleSpectatorConnection(spectateOps);
     if (res != 0) {
       return res;
     }

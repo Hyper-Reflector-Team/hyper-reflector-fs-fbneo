@@ -37,6 +37,7 @@ static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
 //static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
+static bool isPlayer = false;
 
 const int ggpo_state_header_size = 6 * sizeof(int);
 
@@ -154,31 +155,33 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   switch (info->code) {
   case GGPO_EVENTCODE_CONNECTED_TO_PEER:
   {
+    // TODO: if a spectator joins before player 2, the emulator crashes
     VidOverlaySetSystemMessage(_T("Connected to Peer"));
     VidSSetSystemMessage(_T("Connected to Peer"));
+    //if (isPlayer == true) {
+    //  // NOTE: We can probably update the game info here....
+    //  char* p1 = ggpo_get_playerName(ggpo, 0);
+    //  char* p2 = ggpo_get_playerName(ggpo, 1);
 
-    // NOTE: We can probably update the game info here....
-    char* p1 = ggpo_get_playerName(ggpo, 0);
-    char* p2 = ggpo_get_playerName(ggpo, 1);
+    //  char p1Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
+    //  char p2Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
 
-    char p1Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
-    char p2Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
+    //  // WOOO!  MAKEWORK BULLSHIT!
+    //  // Look at all of the glorious string bullshit we need to do to pass parameters to a function!
+    //  sprintf(p1Final, "%s#0,0", p1);
+    //  sprintf(p2Final, "%s#0,0", p2);
 
-    // WOOO!  MAKEWORK BULLSHIT!
-    // Look at all of the glorious string bullshit we need to do to pass parameters to a function!
-    sprintf(p1Final, "%s#0,0", p1);
-    sprintf(p2Final, "%s#0,0", p2);
+    //  TCHAR p1w[16 * 2];
+    //  TCHAR p2w[16 * 2];
+    //  TCHAR* buffer = ANSIToTCHAR(p1Final, NULL, NULL);
+    //  wcscpy(p1w, buffer);
 
-    TCHAR p1w[16 * 2];
-    TCHAR p2w[16 * 2];
-    TCHAR* buffer = ANSIToTCHAR(p1Final, NULL, NULL);
-    wcscpy(p1w, buffer);
+    //  buffer = ANSIToTCHAR(p2Final, NULL, NULL);
+    //  wcscpy(p2w, buffer);
 
-    buffer = ANSIToTCHAR(p2Final, NULL, NULL);
-    wcscpy(p2w, buffer);
-
-    VidOverlaySetGameInfo(p1w, p2w, false, false, _playerIndex);
-    int x = 10;
+    //  VidOverlaySetGameInfo(p1w, p2w, false, false, _playerIndex);
+    //  int x = 10;
+    //}
   }
   break;
 
@@ -238,6 +241,11 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       }
 
     }
+    break;
+
+  case GGPO_EVENTCODE_CAN_SPECTATE:
+    VidOverlaySetSystemMessage(_T("Starting Spectate..."));
+    VidSSetSystemMessage(_T("Starting Spectate..."));
     break;
 
 
@@ -612,6 +620,7 @@ int InitDirectConnection(DirectConnectionOptions& ops)
   iRanked = 0;
   _playerIndex = ops.playerNumber - 1;
   _otherPlayerIndex = _playerIndex == 0 ? 1 : 0;
+  isPlayer = true; 
 
   iDelay = ops.frameDelay;
   iSeed = 0;
@@ -623,7 +632,93 @@ int InitDirectConnection(DirectConnectionOptions& ops)
 
   return 0;
 
+}
 
+// Spectator code
+int InitSpectatorConnection(SpectatorConnectionOptions& ops)
+{
+  const UINT16 DEFAULT_LOCAL_PORT = 7002; // This is being manually set for now
+  const UINT16 DEFAULT_REMOTE_PORT = 7000;
+
+  // Let's parse out the ips/ports...
+  UINT16 localPort = DEFAULT_LOCAL_PORT;
+  UINT16 remotePort = DEFAULT_REMOTE_PORT;
+
+  char localHost[MAX_HOST] = "127.0.0.1";
+  char remoteHost[MAX_HOST] = "127.0.0.1";
+
+ /* try
+  {
+    ParseAddress(ops.localAddr.data(), localHost, &localPort);
+    ParseAddress(ops.remoteAddr.data(), remoteHost, &remotePort);
+  }
+  catch (const std::exception&)
+  {
+    throw std::exception("Could not parse local or remote address");
+  }*/
+
+  kNetVersion = NET_VERSION;
+  kNetGame = 1;
+  kNetLua = 0;
+  kNetSpectator = 0;
+  kNetQuarkId[0] = 0;
+  bForce60Hz = 0;
+  iRanked = 0;
+  _playerIndex = PLAYER_NOT_SET;
+  iDelay = 0;
+  isPlayer = false;
+
+#ifdef _DEBUG
+  kNetLua = 1;
+#endif
+
+  //kNetSpectator = 1;
+  //kNetLua = 1;
+  //iSeed = 0;
+  //_playerIndex = PLAYER_NOT_SET;
+
+  GGPOSessionCallbacks cb = { 0 };
+  cb.begin_game = ggpo_begin_game_callback;
+  cb.load_game_state = ggpo_load_game_state_callback;
+  cb.save_game_state = ggpo_save_game_state_callback;
+  cb.log_game_state = ggpo_log_game_state_callback;
+  cb.free_buffer = ggpo_free_buffer_callback;
+  cb.rollback_frame = ggpo_rollback_frame_callback;
+  cb.on_event = ggpo_on_event_callback;
+
+
+  // SET GLOBALS
+  kNetLua = 1;
+  bDirect = false; // This does something when we try to connect for spectating, not sure yet
+  iRanked = 0;
+  // For checking
+  // 
+  // _playerIndex = 10 - 1;
+  // _otherPlayerIndex = _playerIndex == 0 ? 1 : 0;
+
+  //iDelay = ops.frameDelay;
+  iSeed = 0;
+
+  const int INPUT_SIZE = 5;
+
+  GGPOErrorCode result = ggpo_start_spectating(
+    &ggpo,
+    &cb,
+    ops.romName.data(),
+    2, // total number of players in match
+    INPUT_SIZE,
+    localPort,
+    remoteHost,
+    remotePort
+  );
+
+  if (result != GGPO_OK) {
+    throw std::exception("Failed to start spectator session");
+  }
+
+  VidOverlaySetSystemMessage(_T("Connecting as Spectator..."));
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------

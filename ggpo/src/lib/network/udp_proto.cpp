@@ -109,6 +109,17 @@ void UdpProtocol::SendChat(char* text) {
 	}
 }
 
+void UdpProtocol::StartSpectate() {
+
+	if (_udp) {
+		if (_current_state == Running) {
+
+			UdpMsg* msg = new UdpMsg(UdpMsg::StartSpectate);			
+			SendMsg(msg);
+		}
+	}
+}
+
 // ----------------------------------------------------------------------------------------------------------
 void UdpProtocol::SendInput(GameInput& input)
 {
@@ -804,6 +815,7 @@ UdpProtocol::PumpSendQueue()
 			_oo_packet.dest_addr = entry.dest_addr;
 		}
 		else {
+      Log("Sending to IP: %s, raw addr: %u", entry.dest_addr.sin_addr, entry.dest_addr.sin_addr.s_addr);
 			ASSERT(entry.dest_addr.sin_addr.s_addr);
 
       int packetSize = entry.msg->PacketSize();

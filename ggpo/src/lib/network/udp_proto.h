@@ -37,7 +37,8 @@ public:
       Disconnected,
       NetworkInterrupted,
       NetworkResumed,
-      ChatCommand
+      ChatCommand,
+      StartSpectate,
     };
 
     Type      type;
@@ -84,6 +85,7 @@ public:
   bool IsRunning() { return _current_state == Running; }
   void SendInput(GameInput& input);
   void SendChat(char* text);
+  void StartSpectate();
   void SendInputAck();
   bool HandlesMsg(sockaddr_in& from, UdpMsg* msg);
   void OnMsg(UdpMsg* msg, int len);

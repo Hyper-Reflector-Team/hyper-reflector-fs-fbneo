@@ -26,7 +26,8 @@ struct UdpMsg
     QualityReply = 5,
     KeepAlive = 6,
     InputAck = 7,
-    ChatCommand = 8
+    ChatCommand = 8,
+    StartSpectate = 9,
   };
 
   struct connect_status {
