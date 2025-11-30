@@ -7,53 +7,182 @@
 
 #include "types.h"
 
-static FILE *logfile = NULL;
+static GGPOLogOptions _logOps;
+static bool _logActive = false;
 
-void LogFlush()
-{
-   if (logfile) {
-      fflush(logfile);
-   }
+static FILE* logHandle = nullptr;
+static bool logInitialized = false;
+
+// ----------------------------------------------------------------------------------------------------------------
+// Simple check to see if the given category is active.
+// Might get weird if you don't use categories defined in log.h
+bool CategoryActive(const char* category) {
+
+  // Log everything.
+  if (_logOps.AllowedCategories.length() == 0) { return true; }
+  
+  // Log some things.
+  int match = _logOps.AllowedCategories.find(category);
+  return match != std::string::npos;
 }
 
-static char logbuf[4 * 1024 * 1024];
 
-void Log(const char *fmt, ...)
-{
-   va_list args;
-   va_start(args, fmt);
-   Logv(fmt, args);
-   va_end(args);
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::InitLogger(GGPOLogOptions& options_) {
+  if (logInitialized) { throw new std::exception("The log has already been initialized!"); }
+  logInitialized = true;
+
+  _logOps = options_;
+  _logActive = _logOps.LogToFile;
+
+  // Fire up the log file, if needed....
+  if (_logOps.LogToFile) {
+    fopen_s(&logHandle, _logOps.FilePath.data(), "w");
+  }
+
+  // Write the init message...
+  // TODO: Maybe we could add some more information about the current GGPO settings?  delay, etc.?
+  Utils::LogIt("INITIALIZED");
+
 }
 
-void Logv(const char *fmt, va_list args)
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::FlushLog() 
 {
-   if (!Platform::GetConfigBool(L"ggpo.log") || Platform::GetConfigBool(L"ggpo.log.ignore")) {
-      return;
-   }
-   if (!logfile) {
-      sprintf_s(logbuf, ARRAY_SIZE(logbuf), "log-%d.log", Platform::GetProcessID());
-      fopen_s(&logfile, logbuf, "w");
-   }
-   Logv(logfile, fmt, args);
+  if (!_logActive || !logHandle) { return; }
+  fflush(logHandle);
 }
 
-void Logv(FILE *fp, const char *fmt, va_list args)
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::CloseLog() 
 {
-   if (Platform::GetConfigBool(L"ggpo.log.timestamps")) {
-      static int start = 0;
-      int t = 0;
-      if (!start) {
-         start = Platform::GetCurrentTimeMS();
-      } else {
-         t = Platform::GetCurrentTimeMS() - start;
-      }
-      fprintf(fp, "%d.%03d : ", t / 1000, t % 1000);
-   }
+  if (logHandle) {
+    FlushLog();
+    fclose(logHandle);
+    logHandle = nullptr;
+  }
+}
 
-   vfprintf(fp, fmt, args);
-   fflush(fp);
-   
-   vsprintf_s(logbuf, ARRAY_SIZE(logbuf), fmt, args);
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogIt(const char* category, const char* fmt, ...)
+{
+  if (!_logActive) { return; }
+  if (!CategoryActive(category)) { return; }
+
+  va_list args;
+  va_start(args, fmt);
+
+  LogIt_v(category, fmt, args);
+
+  va_end(args);
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogIt(const char* fmt, ...)
+{
+  if (!_logActive) { return; }
+
+  va_list args;
+  va_start(args, fmt);
+  LogIt_v(fmt, args);
+  va_end(args);
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogIt_v(const char* fmt, va_list args)
+{
+  LogIt(CATEGORY_GENERAL, fmt, args);
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogEvent(const char* msg, const UdpEvent& evt)
+{
+  if (!_logActive) { return; }
+
+  const int MSG_SIZE = 1024;
+  char buf[MSG_SIZE];
+  memset(buf, 0, MSG_SIZE);
+
+  // TODO: Add some more information....
+
+  sprintf_s(buf, MSG_SIZE, "%s|", msg);
+
+  LogIt(CATEGORY_EVENT, buf);
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogNetworkStats(int totalBytesSent, int totalPacketsSent, int ping)
+{
+  if (!_logActive) { return; }
+
+  LogIt(CATEGORY_NETWORK, "%d-%d-%d", totalBytesSent, totalPacketsSent, ping);
+
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogMsg(const char* direction, UdpMsg* msg)
+{
+  const int MSG_SIZE = 1024;
+  char buf[MSG_SIZE];
+  memset(buf, 0, MSG_SIZE);
+
+  // TODO: Add the other data...
+  sprintf_s(buf, MSG_SIZE, "%s:", direction);
+
+  LogIt(CATEGORY_MESSAGE, buf);
+
+  // Original....
+  //switch (msg->header.type) {
+  //case UdpMsg::SyncRequest:
+  //  Log("%s sync-request (%d).\n", prefix,
+  //    msg->u.sync_request.random_request);
+  //  break;
+  //case UdpMsg::SyncReply:
+  //  Log("%s sync-reply (%d).\n", prefix,
+  //    msg->u.sync_reply.random_reply);
+  //  break;
+  //case UdpMsg::QualityReport:
+  //  Log("%s quality report.\n", prefix);
+  //  break;
+  //case UdpMsg::QualityReply:
+  //  Log("%s quality reply.\n", prefix);
+  //  break;
+  //case UdpMsg::KeepAlive:
+  //  Log("%s keep alive.\n", prefix);
+  //  break;
+  //case UdpMsg::Input:
+  //  Log("%s game-compressed-input %d (+ %d bits).\n", prefix, msg->u.input.start_frame, msg->u.input.num_bits);
+  //  break;
+  //case UdpMsg::InputAck:
+  //  Log("%s input ack.\n", prefix);
+  //  break;
+
+  //case UdpMsg::ChatCommand:
+  //  Log("%s chat.\n", prefix);
+  //  break;
+
+  //default:
+  //  ASSERT(FALSE && "Unknown UdpMsg type.");
+  //}
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void Utils::LogIt_v(const char* category, const char* fmt, va_list args) 
+{
+
+  if (!_logActive) { return; }
+
+
+  const size_t BUFFER_SIZE = 1024;
+  char buf[BUFFER_SIZE];
+
+  vsnprintf(buf, BUFFER_SIZE - 1, fmt, args);
+
+  // Now we can write the buffer to console / disk....
+  // TODO: Do it in hex for less chars?
+  fprintf(logHandle, "%d|%s|%s\n", Platform::GetCurrentTimeMS(), category, buf);
+
+  fflush(logHandle);
+
 }
 

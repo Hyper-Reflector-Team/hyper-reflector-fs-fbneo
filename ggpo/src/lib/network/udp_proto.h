@@ -16,6 +16,51 @@
 #include "ggponet.h"
 #include "ring_buffer.h"
 
+
+ // TODO: This struct will be un-nested.
+struct UdpEvent {
+  enum Type {
+    Unknown = -1,
+    Connected,
+    Synchronizing,
+    Synchronized,
+    Input,
+    Disconnected,
+    NetworkInterrupted,
+    NetworkResumed,
+    ChatCommand
+  };
+
+  Type      type;
+  union {
+    struct {
+      GameInput   input;
+    } input;
+
+    struct {
+      int         total;
+      int         count;
+    } synchronizing;
+
+    struct {
+      char playerName[MAX_NAME_SIZE];
+    } connected;
+
+    struct {
+      int         disconnect_timeout;
+    } network_interrupted;
+
+    struct {
+      char		text[MAX_GGPOCHAT_SIZE + 1];
+    } chat;
+
+  } u;			// REFACTOR: Rename this to 'data'
+
+  UdpEvent(Type t = Unknown) : type(t) {}
+};
+
+
+
 class UdpProtocol : public IPollSink
 {
 public:
@@ -27,46 +72,6 @@ public:
     Udp::Stats          udp;
   };
 
-  struct Event {
-    enum Type {
-      Unknown = -1,
-      Connected,
-      Synchronizing,
-      Synchronzied,
-      Input,
-      Disconnected,
-      NetworkInterrupted,
-      NetworkResumed,
-      ChatCommand
-    };
-
-    Type      type;
-    union {
-      struct {
-        GameInput   input;
-      } input;
-
-      struct {
-        int         total;
-        int         count;
-      } synchronizing;
-
-      struct { 
-        char playerName[MAX_NAME_SIZE];
-      } connected;
-
-      struct {
-        int         disconnect_timeout;
-      } network_interrupted;
-
-      struct {
-        char		text[MAX_GGPOCHAT_SIZE + 1];
-      } chat;
-
-    } u;			// REFACTOR: Rename this to 'data'
-
-    UdpProtocol::Event(Type t = Unknown) : type(t) {}
-  };
 
 public:
   virtual bool OnLoopPoll(void* cookie);
@@ -90,7 +95,7 @@ public:
   void Disconnect();
 
   void GetNetworkStats(struct GGPONetworkStats* stats);
-  bool GetEvent(UdpProtocol::Event& e);
+  bool GetEvent(UdpEvent& e);
   void GGPONetworkStats(Stats* stats);
   void SetLocalFrameNumber(int num);
   int RecommendFrameDelay();
@@ -100,12 +105,14 @@ public:
 
   void SetPlayerName(char* playerName_);
 protected:
+
   enum State {
     Syncing,
-    Synchronzied,
+    Synchronized,
     Running,
     Disconnected
   };
+
   struct QueueEntry {
     int         queue_time;
     sockaddr_in dest_addr;
@@ -117,11 +124,11 @@ protected:
 
   bool CreateSocket(int retries);
   void UpdateNetworkStats(void);
-  void QueueEvent(const UdpProtocol::Event& evt);
+  void QueueEvent(const UdpEvent& evt);
   void ClearSendQueue(void);
-  void Log(const char* fmt, ...);
-  void LogMsg(const char* prefix, UdpMsg* msg);
-  void LogEvent(const char* prefix, const UdpProtocol::Event& evt);
+  // void Log(const char* fmt, ...);
+  //void LogMsg(const char* prefix, UdpMsg* msg);
+  // void LogEvent(const char* prefix, const UdpEvent& evt);
   void SendSyncRequest();
   void SendMsg(UdpMsg* msg);
   void PumpSendQueue();
@@ -149,6 +156,9 @@ protected:
   bool           _connected;
   int            _send_latency;
   int            _oop_percent;
+
+  // NOTE: This is basically the same thing as 'QueueEntry' but with 'send_time' instead of 'queue_time'
+  // I think that we should just use queue time and change the prop name as needed...
   struct {
     int         send_time;
     sockaddr_in dest_addr;
@@ -157,11 +167,11 @@ protected:
   RingBuffer<QueueEntry, 64> _send_queue;
 
   /*
-   * Stats
+   * Network Stats
    */
-  int            _round_trip_time;
-  int            _packets_sent;
-  int            _bytes_sent;
+  int            _round_trip_time;            // REFACTOR: This is 'ping'
+  int            _packets_sent;               // REFACTOR: 'totalPacketsSent'
+  int            _bytes_sent;                 // REFACTOR: This is total bytes sent minus the UDP overhead... find a clever name....  'total packet bytes'?
   int            _kbps_sent;
   int            _stats_start_time;
 
@@ -171,6 +181,8 @@ protected:
   UdpMsg::connect_status* _local_connect_status;
   UdpMsg::connect_status _peer_connect_status[UDP_MSG_MAX_PLAYERS];
 
+  // TODO: This doesn't need to be a union.  We don't need to save 8 bytes of space
+  // for this level of extra work.
   State          _current_state;
   union {
     struct {
@@ -200,7 +212,7 @@ protected:
   unsigned int               _last_send_time;
   unsigned int               _last_recv_time;
   unsigned int               _shutdown_timeout;
-  unsigned int               _disconnect_event_sent;
+  bool                       _disconnect_event_sent;
   unsigned int               _disconnect_timeout;
   unsigned int               _disconnect_notify_start;
   bool                       _disconnect_notify_sent;
@@ -216,9 +228,9 @@ protected:
   /*
    * Event queue
    */
-  RingBuffer<UdpProtocol::Event, 64>  _event_queue;
+  RingBuffer<UdpEvent, 64>  _event_queue;
 
-  // You name.  This will be exchanged with other peers on sync.
+  // Your name.  This will be exchanged with other peers on sync.
   char _playerName[MAX_NAME_SIZE];
 
 };

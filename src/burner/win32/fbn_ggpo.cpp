@@ -6,6 +6,9 @@ extern "C" {
 #include "ggponet.h"
 }
 
+#include "../../ggpo/src/lib/log.h"
+
+
 const size_t MAX_HOST = 128;
 
 GGPOSession* ggpo = nullptr;
@@ -13,6 +16,10 @@ bool bSkipPerfmonUpdates = false;
 
 void QuarkInitPerfMon();
 void QuarkPerfMonUpdate(GGPONetworkStats* stats);
+
+namespace Utils {
+  extern void InitLogger(GGPOLogOptions& options_);
+}
 
 extern int nAcbVersion;
 extern int nAcbLoadState;
@@ -559,8 +566,11 @@ void ParseAddress(const char* addr, char* host, UINT16* port)
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------
-int InitDirectConnection(DirectConnectionOptions& ops)
+int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
 {
+
+  Utils::InitLogger(logOps);
+
   const UINT16 DEFAULT_LOCAL_PORT = 7000;
   const UINT16 DEFAULT_REMOTE_PORT = 7000;
 
@@ -865,8 +875,8 @@ void QuarkSendChatCmd(char* text, char cmd)
 
   // Print the chat line on our local:
   if (cmd == 'T' && _playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
-    auto playerName = ggpo_get_playerName(ggpo , _playerIndex);
-    wchar_t nameBuffer[16*2];
+    auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
+    wchar_t nameBuffer[16 * 2];
     wcscpy(nameBuffer, ANSIToTCHAR(playerName, NULL, NULL));
 
     VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(msgBuffer + 1, NULL, NULL));
@@ -880,6 +890,8 @@ void QuarkUpdateStats(double fps)
   GGPONetworkStats stats;
   ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
   VidSSetStats(fps, stats.network.ping, iDelay);
+
+  // NOTE: This is where the rollback, etc. data is sent.  Pretty sure that 'VidSSetStats' doesn't get used anymore, or is for other overlay systems that we will never see again.....
   VidOverlaySetStats(fps, stats.network.ping, iDelay);
 }
 
