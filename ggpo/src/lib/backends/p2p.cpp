@@ -11,10 +11,8 @@
 
 static const int RECOMMENDATION_INTERVAL = 240;
 
-// TEMP: We are hard coding the system to never time out for now.
-static const int NEVER_TIMEOUT = 0;
-static const int DEFAULT_DISCONNECT_TIMEOUT = NEVER_TIMEOUT;
-static const int DEFAULT_DISCONNECT_NOTIFY_START = NEVER_TIMEOUT;
+static const int DEFAULT_DISCONNECT_TIMEOUT = 5000;
+static const int DEFAULT_DISCONNECT_NOTIFY_START = 1000;
 
 // ----------------------------------------------------------------------------------------------------------
 Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
@@ -27,7 +25,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   uint32_t clientVersion)
   :
   _num_players(PLAYER_COUNT),
-  _input_size(INPUT_SIZE),
+  _input_size(0),
   _sync(_local_connect_status),
   _disconnect_timeout(DEFAULT_DISCONNECT_TIMEOUT),
   _disconnect_notify_start(DEFAULT_DISCONNECT_NOTIFY_START),
@@ -47,16 +45,6 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
 
 
   /*
-   * Initialize the synchronziation layer
-   */
-  Sync::Config config = { 0 };
-  config.num_players = PLAYER_COUNT;
-  config.input_size = INPUT_SIZE;
-  config.callbacks = _callbacks;
-  config.num_prediction_frames = MAX_PREDICTION_FRAMES;
-  _sync.Init(config);
-
-  /*
    * Initialize the UDP port
    */
   _udp.Init(localport, &_pollMgr, this);
@@ -67,11 +55,29 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
     _local_connect_status[i].last_frame = -1;
   }
 
-
   /*
-   * Preload the ROM
+   * Load the ROM first so NetworkInitInput() runs and the driver's input
+   * descriptors are populated before we configure the sync layer.
    */
   _callbacks.begin_game(gamename);
+
+  /*
+   * Query the real per-player input byte count from the emulator now that
+   * the ROM is loaded.  Fall back to INPUT_SIZE if the callback is absent.
+   */
+  _input_size = (_callbacks.get_input_size && _callbacks.get_input_size() > 0)
+    ? _callbacks.get_input_size()
+    : INPUT_SIZE;
+
+  /*
+   * Initialize the synchronization layer with the correct input size.
+   */
+  Sync::Config config = { 0 };
+  config.num_players = PLAYER_COUNT;
+  config.input_size = _input_size;
+  config.callbacks = _callbacks;
+  config.num_prediction_frames = MAX_PREDICTION_FRAMES;
+  _sync.Init(config);
 
 
   SetDisconnectTimeout(DEFAULT_DISCONNECT_TIMEOUT);
@@ -503,11 +509,12 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
     break;
 
   case UdpEvent::Datagram:
-
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
+    info.u.datagram.code = evt.u.chat.code;
+    info.u.datagram.dataSize = evt.u.chat.dataSize;
     memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, evt.u.chat.dataSize);
-
+    _callbacks.on_event(&info);
     break;
 
   }

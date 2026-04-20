@@ -282,6 +282,11 @@ extern "C" {
     /* Get the name of the player for the given index */
     char* (__cdecl* get_player_name)(uint8_t index);
 
+    /* get_input_size - Called after begin_game to query the per-player input
+     * byte count for the loaded ROM.  Return 0 to fall back to the compiled
+     * default (INPUT_SIZE).  Must be set before calling ggpo_start_session. */
+    int(__cdecl* get_input_size)();
+
   } GGPOSessionCallbacks;
 
   /*

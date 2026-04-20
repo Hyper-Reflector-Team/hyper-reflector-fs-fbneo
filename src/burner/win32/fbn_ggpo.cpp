@@ -161,6 +161,13 @@ void __cdecl ggpo_on_rollback(int onFrame, int frameCount)
   totalRollbackFrames += frameCount;
 }
 
+extern int NetworkGetInputSizePerPlayer();
+
+int __cdecl ggpo_get_input_size_callback()
+{
+  return NetworkGetInputSizePerPlayer();
+}
+
 // --------------------------------------------------------------------------------------------------------------------
 bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
 {
@@ -642,6 +649,7 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   cb.rollback_frame = ggpo_rollback_frame_callback;
   cb.on_event = ggpo_on_event_callback;
   cb.on_rollback = ggpo_on_rollback;
+  cb.get_input_size = ggpo_get_input_size_callback;
 
 
   // SET GLOBALS
