@@ -25,7 +25,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   uint32_t clientVersion)
   :
   _num_players(PLAYER_COUNT),
-  _input_size(0),
+  _input_size(INPUT_SIZE),
   _sync(_local_connect_status),
   _disconnect_timeout(DEFAULT_DISCONNECT_TIMEOUT),
   _disconnect_notify_start(DEFAULT_DISCONNECT_NOTIFY_START),
@@ -45,6 +45,17 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
 
 
   /*
+   * Initialize the synchronization layer with the fallback input size.
+   * The queues will be rebuilt with the real size after the ROM loads.
+   */
+  Sync::Config config = { 0 };
+  config.num_players = PLAYER_COUNT;
+  config.input_size = INPUT_SIZE;
+  config.callbacks = _callbacks;
+  config.num_prediction_frames = MAX_PREDICTION_FRAMES;
+  _sync.Init(config);
+
+  /*
    * Initialize the UDP port
    */
   _udp.Init(localport, &_pollMgr, this);
@@ -56,28 +67,20 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   }
 
   /*
-   * Load the ROM first so NetworkInitInput() runs and the driver's input
-   * descriptors are populated before we configure the sync layer.
+   * Load the ROM.  DrvInit -> NetworkInitInput runs inside this call, so
+   * the driver's input descriptors are populated when it returns.
    */
   _callbacks.begin_game(gamename);
 
   /*
-   * Query the real per-player input byte count from the emulator now that
-   * the ROM is loaded.  Fall back to INPUT_SIZE if the callback is absent.
+   * Now that the ROM is loaded, query the real per-player input byte count
+   * and update the sync layer if it differs from the fallback.
    */
-  _input_size = (_callbacks.get_input_size && _callbacks.get_input_size() > 0)
-    ? _callbacks.get_input_size()
-    : INPUT_SIZE;
-
-  /*
-   * Initialize the synchronization layer with the correct input size.
-   */
-  Sync::Config config = { 0 };
-  config.num_players = PLAYER_COUNT;
-  config.input_size = _input_size;
-  config.callbacks = _callbacks;
-  config.num_prediction_frames = MAX_PREDICTION_FRAMES;
-  _sync.Init(config);
+  // int realInputSize = (_callbacks.get_input_size && _callbacks.get_input_size() > 0)
+  //   ? _callbacks.get_input_size()
+  //   : INPUT_SIZE;
+  // _input_size = realInputSize;
+  // _sync.SetInputSize(realInputSize);
 
 
   SetDisconnectTimeout(DEFAULT_DISCONNECT_TIMEOUT);
@@ -567,6 +570,8 @@ void Peer2PeerBackend::DisconnectEx() {
 }
 
 // --------------------------------------------------------------------------------------------------------------
+#pragma warning(push)
+#pragma warning(disable: 4702)
 void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 {
   GGPOEvent info;
@@ -592,6 +597,7 @@ void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 
   CheckInitialSync();
 }
+#pragma warning(pop)
 
 
 // --------------------------------------------------------------------------------------------------------------

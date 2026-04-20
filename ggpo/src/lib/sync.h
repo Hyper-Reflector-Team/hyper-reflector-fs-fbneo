@@ -49,6 +49,7 @@ public:
   virtual ~Sync();
 
   void Init(Config& config);
+  void SetInputSize(int inputSize);
 
   void SetLastConfirmedFrame(int frame);
   void SetFrameDelay(int queue, int delay);

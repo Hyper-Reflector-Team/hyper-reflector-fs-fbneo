@@ -341,12 +341,13 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     nBurnDrvActive = i;
     if ((_tcscmp(BurnDrvGetText(DRV_NAME), tname) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
       if (!kNetSpectator) {
-        MediaInit();
-
         // NOTE: If this is not a kNetGame, then the default game state will be loaded in the DrvInit call.
         // In the block above (~line 288) we are loading a different state.  Since we are in a GGPO
         // callback, we can safely assume that kNetGame == true.
         DrvInit(i, true);
+
+        // MediaInit must come AFTER DrvInit so nVidWidth/nVidHeight are set before the renderer initializes.
+        MediaInit();
       }
       else {
         // I'm guessing we load this later so that sync up game state for the spectators later....?
