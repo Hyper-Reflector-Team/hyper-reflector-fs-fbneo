@@ -253,7 +253,7 @@ extern int bRunFrame;
 extern int bRunPause;
 extern int bAltPause;
 extern int bAlwaysDrawFrames;
-extern int bShowFPS;
+extern int showStatsMode;
 extern int kNetVersion;
 extern int kNetGame;
 extern int kNetSpectator;
@@ -469,11 +469,25 @@ void QuarkTogglePerfMon();
 void QuarkRunIdle(int ms);
 bool QuarkGetInput(void* values, int isize, int playerCount);
 bool QuarkIncrementFrame();
-void QuarkSendChatText(char* text);
-void QuarkSendChatCmd(char* text, char cmd);
+void QuarkSendChat(char* text);
+
+// [OBSOLETE]
+void QuarkSendChatCmd(char* text, char code);
+
+//enum EDatagramCode {
+//  DATAGRAM_CODE_INVALID = 0
+//  , DATAGRAM_CODE_MUTED = 1
+//  , DATAGRAM_CODE_CHAT = 2
+//  , DATAGRAM_CODE_GGPO_SETTINGS = 3
+//  , DATAGRAM_CODE_DISCONNECT = 4        // Player is disconnecting.
+//};
+
+void QuarkSendData(uint8_t code, void* data, UINT8 dataSize);
+
 void QuarkUpdateStats(double fps);
 void QuarkRecordReplay();
 void QuarkFinishReplay();
+void QuarkDisconnect();
 
 // replay.cpp
 extern int nReplayStatus;

@@ -19,6 +19,7 @@ extern "C" {
 #endif
 
 #include <stdarg.h>
+#include <stdint.h>
 
   // On windows, export at build time and import at runtime.
   // ELF systems don't need an explicit export/import.
@@ -43,14 +44,13 @@ extern "C" {
 #define GGPO_SPECTATOR_INPUT_INTERVAL     4
 
  // TODO: Share with main program / put this with defs elsewhere....
-  const static size_t MAX_GGPOCHAT_SIZE = 128;	 // 128 characters is enough?
+  const static size_t MAX_GGPO_DATA_SIZE = 128;	 // 128 characters is probably enough.
   const static size_t MAX_NAME_SIZE = 16;
 
 
   typedef struct GGPOSession GGPOSession;
 
-  typedef uint16 PlayerID;
-  static const PlayerID PLAYER_NOT_SET = 0xFFFF;
+  static const uint8_t PLAYER_NOT_SET = 0xFF;
 
   typedef enum {
     GGPO_PLAYERTYPE_LOCAL,
@@ -84,7 +84,7 @@ extern "C" {
   typedef struct GGPOPlayer {
     int               size;
     GGPOPlayerType    type;
-    uint16            player_index;
+    uint8_t            player_index;
     union {
       struct {
       } local;
@@ -163,8 +163,17 @@ extern "C" {
     GGPO_EVENTCODE_TIMESYNC = 1005,
     GGPO_EVENTCODE_CONNECTION_INTERRUPTED = 1006,
     GGPO_EVENTCODE_CONNECTION_RESUMED = 1007,
-    GGPO_EVENTCODE_CHATCOMMAND = 1008,
+    GGPO_EVENTCODE_DATAGRAM = 1008,
   } GGPOEventCode;
+
+
+  typedef enum {
+    DATAGRAM_CODE_INVALID = 0
+    , DATAGRAM_CODE_MUTED = 1
+    , DATAGRAM_CODE_CHAT = 2
+    , DATAGRAM_CODE_GGPO_SETTINGS = 3
+    , DATAGRAM_CODE_DISCONNECT = 4        // Player is disconnecting.
+  } EDatagramCode;
 
   /*
    * The GGPOEvent structure contains an asynchronous event notification sent
@@ -172,39 +181,35 @@ extern "C" {
    * explanation of each event.
    */
   typedef struct {
-    GGPOEventCode code;
+    // REFACTOR: 'player_index' can be a first class member of this struct, it is used so many times...
+    GGPOEventCode event_code;
+    uint8_t  player_index;
     union {
       struct {
-        PlayerID  player_index;
-        // char playerName[MAX_NAME_SIZE];
-      } connected;
-      struct {
-        PlayerID  player_index;
         int               count;
         int               total;
       } synchronizing;
+
       struct {
-        PlayerID  player_index;
-      } synchronized;
-      struct {
-        PlayerID  player_index;
-      } disconnected;
+        uint8_t delay;
+        uint8_t runahead;
+      } connected;
+
       struct {
         int               frames_ahead;
       } timesync;
       struct {
-        PlayerID  player_index;
         int               disconnect_timeout;
       } connection_interrupted;
       struct {
-        PlayerID  player_index;
       } connection_resumed;
 
       // NOTE: I expect to change this definition at some point....
       struct {
-        char* username;
-        char* text;
-      } chat;
+        uint8_t code;
+        uint8_t dataSize;
+        char data[MAX_GGPO_DATA_SIZE];
+      } datagram;
 
     } u;
   } GGPOEvent;
@@ -262,6 +267,10 @@ extern "C" {
      */
     bool(__cdecl* rollback_frame)(int flags);
 
+    // Gives information about the rollback.
+    // 'onFrame' = the frame # where the rollback was triggered.
+    // 'frameCount' = the number of frames that will be rolled back.
+    void(__cdecl* on_rollback)(int onFrame, int frameCount);
     /*
      * on_event - Notification that something has happened.  See the GGPOEventCode
      * structure above for more information.
@@ -271,7 +280,7 @@ extern "C" {
 
     // OBOSOLETE:  This will be removed!
     /* Get the name of the player for the given index */
-    char*(__cdecl* get_player_name)(PlayerID index);
+    char* (__cdecl* get_player_name)(uint8_t index);
 
   } GGPOSessionCallbacks;
 
@@ -353,9 +362,9 @@ extern "C" {
     uint16 localPort,
     char* remoteIp,
     uint16  remotePort,
-    PlayerID playerIndex,
-    char* playerName);
-
+    uint8_t playerIndex,
+    char* playerName,
+    uint32_t clientVersion);
 
   /*
    * ggpo_add_player --
@@ -370,7 +379,7 @@ extern "C" {
    */
   GGPO_API GGPOErrorCode __cdecl ggpo_add_player(GGPOSession* session,
     GGPOPlayer* player,
-    PlayerID* handle);
+    uint8_t* handle);
 
 
   /*
@@ -452,7 +461,7 @@ extern "C" {
    * Change the amount of frames ggpo will delay local input.  Must be called
    * before the first call to ggpo_synchronize_input.
    */
-  GGPO_API void __cdecl ggpo_set_frame_delay(GGPOSession*, int frame_delay);
+  GGPO_API void __cdecl ggpo_set_frame_delay(GGPOSession*, int frame_delay, int runahead);
 
   /*
    * ggpo_idle --
@@ -481,7 +490,7 @@ extern "C" {
    * size passed into ggpo_start_session.
    */
   GGPO_API GGPOErrorCode __cdecl ggpo_add_local_input(GGPOSession*,
-    PlayerID player,
+    uint8_t player,
     void* values,
     int totalSize);
 
@@ -514,14 +523,16 @@ extern "C" {
     int playerCount);
 
 
-  /*
-   * ggpo_disconnect_player --
-   *
-   * Disconnects a remote player from a game.  Will return GGPO_ERRORCODE_PLAYER_DISCONNECTED
-   * if you try to disconnect a player who has already been disconnected.
-   */
-  GGPO_API GGPOErrorCode __cdecl ggpo_disconnect_player(GGPOSession*,
-    PlayerID player);
+  ///*
+  // * ggpo_disconnect_player --
+  // *
+  // * Disconnects a remote player from a game.  Will return GGPO_ERRORCODE_PLAYER_DISCONNECTED
+  // * if you try to disconnect a player who has already been disconnected.
+  // */
+  //GGPO_API GGPOErrorCode __cdecl ggpo_disconnect_player(GGPOSession*, uint8_t playerIndex);
+
+  // Disconnect ourselves.
+  GGPO_API void __cdecl ggpo_disconnect(GGPOSession*);
 
   /*
    * ggpo_advance_frame --
@@ -544,7 +555,7 @@ extern "C" {
    * stats - Out parameter to the network statistics.
    */
    //GGPO_API GGPOErrorCode __cdecl ggpo_get_network_stats(GGPOSession*,
-   //	PlayerID player,
+   //	uint8_t player,
    //	GGPONetworkStats* stats);
 
    /*
@@ -552,7 +563,7 @@ extern "C" {
     *
     * Used to fetch some statistics about the quality of the network connection.
     */
-  GGPO_API bool __cdecl ggpo_get_stats(GGPOSession*, GGPONetworkStats* stats, PlayerID playerIndex);
+  GGPO_API bool __cdecl ggpo_get_stats(GGPOSession*, GGPONetworkStats* stats, uint8_t playerIndex);
 
   /*
    * ggpo_set_disconnect_timeout --
@@ -601,11 +612,15 @@ extern "C" {
     const char* fmt,
     va_list args);
 
-  GGPO_API bool __cdecl ggpo_client_chat(GGPOSession* ggpo, char* text);
+  GGPO_API bool __cdecl ggpo_send_chat(GGPOSession* ggpo, char* text);
 
   /* get the name of the player at the given index */
-  GGPO_API char* __cdecl ggpo_get_playerName(GGPOSession* ggpo, PlayerID index);
+  GGPO_API char* __cdecl ggpo_get_playerName(GGPOSession* ggpo, uint8_t playerIndex);
 
+  // Send some data to all endpoints.
+  // 'data' parameter is meant to be interpreted depending on the value of 'code'.
+  // It can be used for chat, and other data that needs to be exchanged (client versions, local stats, etc.)
+  GGPO_API void __cdecl ggpo_send_data(GGPOSession* ggpo, uint8_t code, void* data, uint8_t dataSize);
 
 #ifdef __cplusplus
 };

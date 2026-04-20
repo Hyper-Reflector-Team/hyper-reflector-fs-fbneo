@@ -1,6 +1,8 @@
-﻿#include "burner.h"
+﻿#include "version.h"
+#include "burner.h"
 #include "ggpoclient.h"
 #include "ggpo_perfmon.h"
+// #include "GGPOSession.h";
 
 extern "C" {
 #include "ggponet.h"
@@ -25,13 +27,21 @@ extern int nAcbVersion;
 extern int nAcbLoadState;
 extern int bMediaExit;
 
-PlayerID _playerIndex = PLAYER_NOT_SET;
-PlayerID _otherPlayerIndex = PLAYER_NOT_SET;
+uint8_t _playerIndex = PLAYER_NOT_SET;
+uint8_t _otherPlayerIndex = PLAYER_NOT_SET;
 
 // rollback counter
 // NOTE: These are only used in the video overlay. --> so they should be part of the overlay vars?
-int nRollbackFrames = 0;              // The number of frames that were rolled back.
-int nRollbackCount = 0;               // The total number of rollbacks.
+//int totalRollbackFrames = 0;              // The number of frames that were rolled back.
+//int rollbackCount = 0;               // The total number of rollbacks.
+//int lastRollbackFrame = 0;            // Frame number where the last rollback was encountered.
+//int avgRollbackFrames = 0;
+
+// rollback counter
+int totalRollbackFrames = 0;
+int totalRollbacks = 0;
+
+
 
 static char pGameName[MAX_PATH];
 static bool bDelayLoad = false;
@@ -144,21 +154,18 @@ bool __cdecl ggpo_on_client_event_callback(GGPOClientEvent* info)
   return true;
 }
 
-//bool __cdecl ggpo_on_client_game_callback(GGPOClientEvent *info)
-//{
-//	// DEPRECATED
-//	return true;
-//}
+// --------------------------------------------------------------------------------------------------------------------
+void __cdecl ggpo_on_rollback(int onFrame, int frameCount)
+{
+  totalRollbacks++;
+  totalRollbackFrames += frameCount;
+}
 
+// --------------------------------------------------------------------------------------------------------------------
 bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
 {
-  //if (ggpo_is_client_eventcode(info->code)) {
-  //	return ggpo_on_client_event_callback((GGPOClientEvent *)info);
-  //}
-  //if (ggpo_is_client_gameevent(info->code)) {
-  //	return ggpo_on_client_game_callback((GGPOClientEvent *)info);
-  //}
-  switch (info->code) {
+
+  switch (info->event_code) {
   case GGPO_EVENTCODE_CONNECTED_TO_PEER:
   {
     VidOverlaySetSystemMessage(_T("Connected to Peer"));
@@ -168,11 +175,11 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     char* p1 = ggpo_get_playerName(ggpo, 0);
     char* p2 = ggpo_get_playerName(ggpo, 1);
 
-    char p1Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
-    char p2Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars, which is dumb AF.
+    char p1Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars....
+    char p2Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars....
 
-    // WOOO!  MAKEWORK BULLSHIT!
-    // Look at all of the glorious string bullshit we need to do to pass parameters to a function!
+    // TODO: REFACTOR:  In no universe should be encoding args into strings, and passing them to a function that will pull them back out via scanf.
+    // This is a pretty gigundo inefficiency!
     sprintf(p1Final, "%s#0,0", p1);
     sprintf(p2Final, "%s#0,0", p2);
 
@@ -184,8 +191,11 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     buffer = ANSIToTCHAR(p2Final, NULL, NULL);
     wcscpy(p2w, buffer);
 
+
     VidOverlaySetGameInfo(p1w, p2w, false, false, _playerIndex);
-    int x = 10;
+
+    VidOverlaySetRemoteStats(info->u.connected.delay, info->u.connected.runahead);
+
   }
   break;
 
@@ -198,10 +208,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   case GGPO_EVENTCODE_RUNNING: {
     VidOverlaySetSystemMessage(_T(""));
     VidSSetSystemMessage(_T(""));
-    // send ReceiveVersion message
-    char temp[16];
-    sprintf(temp, "%d", NET_VERSION);
-    QuarkSendChatCmd(temp, 'V');
+
+    // NOTE: Version exchange happens during sync now.
     break;
   }
 
@@ -218,35 +226,57 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
 
-  case GGPO_EVENTCODE_CHATCOMMAND:
+  case GGPO_EVENTCODE_DATAGRAM:
 
-    if (strlen(info->u.chat.text) > 0) {
-      char& first = info->u.chat.text[0];
-      char* msg = info->u.chat.text + 1;
+    switch (info->u.datagram.code)
+    {
+    case DATAGRAM_CODE_GGPO_SETTINGS:
+    {
+      auto data = info->u.datagram.data;
 
-      if (first == 'T' || first == 'C')
-      {
-        TCHAR szUser[MAX_CHAT_SIZE];
-        TCHAR szText[MAX_CHAT_SIZE];
-
-        ANSIToTCHAR(info->u.chat.username, szUser, MAX_CHAT_SIZE);
-        ANSIToTCHAR(msg, szText, MAX_CHAT_SIZE);
-
-        // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
-        TCHAR* useName = first == 'C' ? _T("Command") : szUser;
-        VidOverlayAddChatLine(useName, szText);
-
-        // ummmm.... do we know what this is all about?
-        // --> It appears that there is some other overlay / OSD layer that isn't used.  Might be for the DDraw7 stuff which we don't care about.
-        // I think in 2025 that such a rendering approach can be ignored / removed.
-        //TCHAR szTemp[MAX_CHAT_SIZE];
-        //_sntprintf(szTemp, MAX_CHAT_SIZE, _T("«%.32hs» "), info->u.chat.username);
-        //VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
-      }
-
+      // DEFINED in vid_overlay.cpp
+      uint8_t delay = data[0];
+      uint8_t runahead = data[1];
+      VidOverlaySetRemoteStats(delay, runahead);
     }
     break;
 
+    case DATAGRAM_CODE_CHAT:
+    {
+      TCHAR szUser[MAX_CHAT_SIZE];
+      TCHAR szText[MAX_CHAT_SIZE];
+
+      auto msg = info->u.datagram.data;
+
+      // NOTE: I have the player index, but not the actual lookup table for them... that should come from the client...
+      // NOTE: I can't include 'ggposession.h' at this time because it will break the compilation.  I will go back and
+      // find a proper way to include it later......
+      char* playerName =  ggpo_get_playerName(ggpo, info->player_index);
+      ANSIToTCHAR(playerName, szUser, MAX_NAME_SIZE);
+
+      ANSIToTCHAR(msg, szText, info->u.datagram.dataSize);
+
+      // Chat messages must be zero terminated...
+      szText[info->u.datagram.dataSize] = 0;
+
+      // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
+      // TCHAR* useName = first == 'C' ? _T("Command") : szUser;
+      VidOverlayAddChatLine(szUser, szText);
+
+      // ummmm.... do we know what this is all about?
+      // --> It appears that there is some other overlay / OSD layer that isn't used.  Might be for the DDraw7 stuff which we don't care about.
+      // I think in 2025 that such a rendering approach can be ignored / removed.
+      //TCHAR szTemp[MAX_CHAT_SIZE];
+      //_sntprintf(szTemp, MAX_CHAT_SIZE, _T("«%.32hs» "), info->u.chat.username);
+      //VidSAddChatLine(szTemp, 0XFFA000, ANSIToTCHAR(info->u.chat.text, NULL, 0), 0xEEEEEE);
+    }
+    break;
+
+    default:
+      break;
+    }
+
+    break;
 
   default:
     break;
@@ -332,7 +362,6 @@ bool __cdecl ggpo_rollback_frame_callback(int flags)
 {
   bSkipPerfmonUpdates = true;
   nFramesEmulated--;
-  nRollbackFrames++;
 
   // Run the frame.  This will not sync inputs and will draw / do sound, etc.
   // NOTE: The reference implementation syncs inputs on rollback....
@@ -498,8 +527,6 @@ bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
   nAcbLoadState = 0;
   nAcbVersion = nBurnVer;
 
-
-  nRollbackCount++;
   return true;
 }
 
@@ -614,6 +641,7 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   cb.free_buffer = ggpo_free_buffer_callback;
   cb.rollback_frame = ggpo_rollback_frame_callback;
   cb.on_event = ggpo_on_event_callback;
+  cb.on_rollback = ggpo_on_rollback;
 
 
   // SET GLOBALS
@@ -626,9 +654,9 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iDelay = ops.frameDelay;
   iSeed = 0;
 
-  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, _playerIndex, ops.playerName.data());
+  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, _playerIndex, ops.playerName.data(), FS_VERSION);
 
-  ggpo_set_frame_delay(ggpo, ops.frameDelay);
+  ggpo_set_frame_delay(ggpo, ops.frameDelay, nVidRunahead);
   VidOverlaySetSystemMessage(_T("Connecting..."));
 
   return 0;
@@ -824,6 +852,13 @@ void QuarkRunIdle(int ms)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
+// Disconnect ourselves from the system...
+void QuarkDisconnect()
+{
+  ggpo_disconnect(ggpo);
+}
+
+// -------------------------------------------------------------------------------------------------------------------
 bool QuarkGetInput(void* values, int isize, int playerIndex)
 {
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
@@ -858,30 +893,53 @@ bool QuarkIncrementFrame()
 }
 
 // --------------------------------------------------------------------------------------------------------
-void QuarkSendChatText(char* text)
+void QuarkSendChat(char* text)
 {
-  QuarkSendChatCmd(text, 'T');
-
+  ggpo_send_chat(ggpo, text);
 }
 
+
 // --------------------------------------------------------------------------------------------------------
-void QuarkSendChatCmd(char* text, char cmd)
+void QuarkSendData(uint8_t code, void* data, uint8_t dataSize)
 {
-  static char msgBuffer[MAX_CHAT_SIZE]; // command chat  +1 for command char +1 for zero termination.
-  memset(msgBuffer, 0, MAX_CHAT_SIZE);
+  if (code == 'T' && _playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted)
+  {
+    static char msgBuffer[MAX_GGPO_DATA_SIZE]; // command chat  +1 for command char +1 for zero termination.
+    auto useSize = (std::min)(dataSize, (uint8_t)(MAX_GGPO_DATA_SIZE - 1));
+    memcpy_s(msgBuffer, MAX_GGPO_DATA_SIZE, data, useSize);
+    msgBuffer[useSize] = 0;
 
-  msgBuffer[0] = cmd;
-  strncpy(&msgBuffer[1], text, MAX_CHAT_SIZE - 1);
-
-  // Print the chat line on our local:
-  if (cmd == 'T' && _playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
     auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
     wchar_t nameBuffer[16 * 2];
     wcscpy(nameBuffer, ANSIToTCHAR(playerName, NULL, NULL));
 
     VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(msgBuffer + 1, NULL, NULL));
   }
-  ggpo_client_chat(ggpo, msgBuffer);
+
+
+  ggpo_send_data(ggpo, code, data, dataSize);
+}
+
+// --------------------------------------------------------------------------------------------------------
+// [OBSOLETE:  THIS DOES NOTHING!]
+void QuarkSendChatCmd(char* text, char code)
+{
+  return;
+
+  static char msgBuffer[MAX_CHAT_SIZE]; // command chat  +1 for command char +1 for zero termination.
+  memset(msgBuffer, 0, MAX_CHAT_SIZE);
+
+  msgBuffer[0] = code;
+  strncpy(&msgBuffer[1], text, MAX_CHAT_SIZE - 1);
+
+  // Print the chat line on our local:
+  if (code == 'T' && _playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
+    auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
+    wchar_t nameBuffer[16 * 2];
+    wcscpy(nameBuffer, ANSIToTCHAR(playerName, NULL, NULL));
+
+  }
+  ggpo_send_chat(ggpo, msgBuffer);
 }
 
 // --------------------------------------------------------------------------------------------------------
@@ -889,7 +947,7 @@ void QuarkUpdateStats(double fps)
 {
   GGPONetworkStats stats;
   ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
-  VidSSetStats(fps, stats.network.ping, iDelay);
+  // VidSSetStats(fps, stats.network.ping, iDelay);
 
   // NOTE: This is where the rollback, etc. data is sent.  Pretty sure that 'VidSSetStats' doesn't get used anymore, or is for other overlay systems that we will never see again.....
   VidOverlaySetStats(fps, stats.network.ping, iDelay);

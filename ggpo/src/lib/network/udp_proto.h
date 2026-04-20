@@ -28,7 +28,7 @@ struct UdpEvent {
     Disconnected,
     NetworkInterrupted,
     NetworkResumed,
-    ChatCommand
+    Datagram
   };
 
   Type      type;
@@ -42,8 +42,11 @@ struct UdpEvent {
       int         count;
     } synchronizing;
 
+
     struct {
       char playerName[MAX_NAME_SIZE];
+      uint8_t delay;
+      uint8_t runahead;
     } connected;
 
     struct {
@@ -51,10 +54,12 @@ struct UdpEvent {
     } network_interrupted;
 
     struct {
-      char		text[MAX_GGPOCHAT_SIZE + 1];
-    } chat;
+      uint8_t code;
+      uint8_t dataSize;
+      char		data[MAX_GGPO_DATA_SIZE];
+    } chat;   // REFACTOR: Rename to 'data' or something like that...
 
-  } u;			// REFACTOR: Rename this to 'data'
+  } u;			// REFACTOR: Rename this to something descriptive.
 
   UdpEvent(Type t = Unknown) : type(t) {}
 };
@@ -80,7 +85,7 @@ public:
   UdpProtocol();
   virtual ~UdpProtocol();
 
-  void Init(Udp* udp, PollManager& p, int queue, char* ip, u_short port, UdpMsg::connect_status* status);
+  void Init(Udp* udp, PollManager& p, int queue, char* ip, u_short port, UdpMsg::connect_status* status, uint32_t clientVersion, uint8_t delay_, uint8_t runahead_);
 
   void Synchronize();
   bool GetPeerConnectStatus(int id, int* frame);
@@ -89,10 +94,14 @@ public:
   bool IsRunning() { return _current_state == Running; }
   void SendInput(GameInput& input);
   void SendChat(char* text);
+  void SendData(uint8_t command, void* data, uint8_t dataSize);
   void SendInputAck();
   bool HandlesMsg(sockaddr_in& from, UdpMsg* msg);
   void OnMsg(UdpMsg* msg, int len);
+
+  // [OBSOLETE]  --> This functionality will be replaced with 'DisconnectEx' in the future.
   void Disconnect();
+  void DisconnectEx(int onFrame);
 
   void GetNetworkStats(struct GGPONetworkStats* stats);
   bool GetEvent(UdpEvent& e);
@@ -132,6 +141,8 @@ protected:
   void SendSyncRequest();
   void SendMsg(UdpMsg* msg);
   void PumpSendQueue();
+
+  // REFACTOR:  All of the 'len' types should be 'size_t'
   void DispatchMsg(uint8* buffer, int len);
   void SendPendingOutput();
   bool OnInvalid(UdpMsg* msg, int len);
@@ -142,7 +153,7 @@ protected:
   bool OnQualityReport(UdpMsg* msg, int len);
   bool OnQualityReply(UdpMsg* msg, int len);
   bool OnKeepAlive(UdpMsg* msg, int len);
-  bool OnChat(UdpMsg* msg, int len);
+  bool OnData(UdpMsg* msg, int len);
 
 protected:
   /*
@@ -169,9 +180,9 @@ protected:
   /*
    * Network Stats
    */
-  int            _round_trip_time;            // REFACTOR: This is 'ping'
-  int            _packets_sent;               // REFACTOR: 'totalPacketsSent'
-  int            _bytes_sent;                 // REFACTOR: This is total bytes sent minus the UDP overhead... find a clever name....  'total packet bytes'?
+  int            _round_trip_time = 0;            // REFACTOR: This is 'ping'
+  int            _packets_sent = 0;               // REFACTOR: 'totalPacketsSent'
+  int            _bytes_sent = 0;                 // REFACTOR: This is total bytes sent minus the UDP overhead... find a clever name....  'total packet bytes'?
   int            _kbps_sent;
   int            _stats_start_time;
 
@@ -180,6 +191,9 @@ protected:
    */
   UdpMsg::connect_status* _local_connect_status;
   UdpMsg::connect_status _peer_connect_status[UDP_MSG_MAX_PLAYERS];
+  uint32_t _client_version = 0;
+  uint8_t _delay = 0;
+  uint8_t _runahead = 0;
 
   // TODO: This doesn't need to be a union.  We don't need to save 8 bytes of space
   // for this level of extra work.

@@ -33,6 +33,12 @@ static const char* CATEGORY_UDP = "UDP";
 static const char* CATEGORY_INPUT_QUEUE = "INPQ";
 static const char* CATEGORY_TIMESYNC = "TIME";
 
+// This happens when we attempt to retrieve an input from 'SynchronizeInputs' but frame data
+// from the remote is not available.  It isn't a real input, and may get rolled back!
+static const char* CATEGORY_PREDICTED_INPUT = "PI";
+
+static const int LOG_VERSION = 1;
+
 // =======================================================================================
 struct GGPOLogOptions {
   bool LogToFile = false;
@@ -40,9 +46,14 @@ struct GGPOLogOptions {
 
   // Comma delimited list of categories that will be logged.  All others will be ignored.
   // If empty, all categories will be logged.
-  std::string AllowedCategories;
+  std::string ActiveCategories;
 };
 
+// =======================================================================================
+enum EMsgDirection {
+  Send = 0,
+  Receive = 1
+};
 
 
 namespace Utils {
@@ -55,8 +66,8 @@ namespace Utils {
   void LogIt(const char* fmt, ...);
   void LogIt_v(const char* fmt, va_list args);
 
-  void LogMsg(const char* direction, UdpMsg* msg);
-  void LogEvent(const char* msg, const UdpEvent& evt);
+  void LogMsg(EMsgDirection dir, UdpMsg* msg);
+  void LogEvent(const UdpEvent& evt);
 
   void LogNetworkStats(int totalBytesSent, int totalPacketsSent, int ping);
 

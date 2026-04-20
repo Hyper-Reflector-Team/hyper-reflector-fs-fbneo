@@ -5,10 +5,10 @@
  * in the LICENSE file.
  */
 
-#include "types.h"
+#include "network/udp_proto.h"
 
 static GGPOLogOptions _logOps;
-static bool _logActive = false;
+static bool _isLogActive = false;
 
 static FILE* logHandle = nullptr;
 static bool logInitialized = false;
@@ -16,13 +16,13 @@ static bool logInitialized = false;
 // ----------------------------------------------------------------------------------------------------------------
 // Simple check to see if the given category is active.
 // Might get weird if you don't use categories defined in log.h
-bool CategoryActive(const char* category) {
+bool IsCategoryActive(const char* category) {
 
   // Log everything.
-  if (_logOps.AllowedCategories.length() == 0) { return true; }
-  
+  if (_logOps.ActiveCategories.length() == 0) { return true; }
+
   // Log some things.
-  int match = _logOps.AllowedCategories.find(category);
+  int match = _logOps.ActiveCategories.find(category);
   return match != std::string::npos;
 }
 
@@ -33,28 +33,38 @@ void Utils::InitLogger(GGPOLogOptions& options_) {
   logInitialized = true;
 
   _logOps = options_;
-  _logActive = _logOps.LogToFile;
+  _isLogActive = _logOps.LogToFile;
 
   // Fire up the log file, if needed....
   if (_logOps.LogToFile) {
     fopen_s(&logHandle, _logOps.FilePath.data(), "w");
+
+    // Write the init message...
+    // TODO: Maybe we could add some more information about the current GGPO settings?  delay, etc.?
+    fprintf(logHandle, "# GGPO-LOG\n");
+    fprintf(logHandle, "# VERSION:%d\n", LOG_VERSION);
+
+    size_t len = _logOps.ActiveCategories.length();
+    fprintf(logHandle, "# ACTIVE: %s\n", len == 0 ? "[ALL]" : _logOps.ActiveCategories.data());
+    fprintf(logHandle, "# START:%d\n", Platform::GetCurrentTimeMS());
+
+    if (logHandle == nullptr) {
+      throw std::exception("could not open log file!");
+    }
   }
 
-  // Write the init message...
-  // TODO: Maybe we could add some more information about the current GGPO settings?  delay, etc.?
-  Utils::LogIt("INITIALIZED");
-
+  
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-void Utils::FlushLog() 
+void Utils::FlushLog()
 {
-  if (!_logActive || !logHandle) { return; }
+  if (!_isLogActive || !logHandle) { return; }
   fflush(logHandle);
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-void Utils::CloseLog() 
+void Utils::CloseLog()
 {
   if (logHandle) {
     FlushLog();
@@ -66,8 +76,7 @@ void Utils::CloseLog()
 // ----------------------------------------------------------------------------------------------------------------
 void Utils::LogIt(const char* category, const char* fmt, ...)
 {
-  if (!_logActive) { return; }
-  if (!CategoryActive(category)) { return; }
+  if (!_isLogActive || !IsCategoryActive(category)) { return; }
 
   va_list args;
   va_start(args, fmt);
@@ -80,7 +89,7 @@ void Utils::LogIt(const char* category, const char* fmt, ...)
 // ----------------------------------------------------------------------------------------------------------------
 void Utils::LogIt(const char* fmt, ...)
 {
-  if (!_logActive) { return; }
+  if (!_isLogActive) { return; }
 
   va_list args;
   va_start(args, fmt);
@@ -95,82 +104,76 @@ void Utils::LogIt_v(const char* fmt, va_list args)
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-void Utils::LogEvent(const char* msg, const UdpEvent& evt)
+void Utils::LogEvent(const UdpEvent& evt)
 {
-  if (!_logActive) { return; }
+  if (!_isLogActive || !IsCategoryActive(CATEGORY_EVENT)) { return; }
 
   const int MSG_SIZE = 1024;
   char buf[MSG_SIZE];
   memset(buf, 0, MSG_SIZE);
 
-  // TODO: Add some more information....
-
-  sprintf_s(buf, MSG_SIZE, "%s|", msg);
-
-  LogIt(CATEGORY_EVENT, buf);
+  LogIt(CATEGORY_EVENT, "%d", evt.type);
 }
 
 // ----------------------------------------------------------------------------------------------------------------
 void Utils::LogNetworkStats(int totalBytesSent, int totalPacketsSent, int ping)
 {
-  if (!_logActive) { return; }
+  if (!_isLogActive || !IsCategoryActive(CATEGORY_NETWORK)) { return; }
 
-  LogIt(CATEGORY_NETWORK, "%d-%d-%d", totalBytesSent, totalPacketsSent, ping);
-
+  LogIt(CATEGORY_NETWORK, "%d:%d:%d", totalBytesSent, totalPacketsSent, ping);
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-void Utils::LogMsg(const char* direction, UdpMsg* msg)
+void Utils::LogMsg(EMsgDirection dir, UdpMsg* msg)
 {
-  const int MSG_SIZE = 1024;
-  char buf[MSG_SIZE];
-  memset(buf, 0, MSG_SIZE);
+  if (!_isLogActive || !IsCategoryActive(CATEGORY_MESSAGE)) { return; }
 
-  // TODO: Add the other data...
-  sprintf_s(buf, MSG_SIZE, "%s:", direction);
+  const int MSG_BUF_SIZE = 1024;
+  char msgBuf[MSG_BUF_SIZE];
 
-  LogIt(CATEGORY_MESSAGE, buf);
+  // TODO: Is there a way be can log the sequenced?
+  int pos = sprintf_s(msgBuf, MSG_BUF_SIZE, "%d:%d:%d", dir, msg->header.type, msg->header.sequence_number);
+
 
   // Original....
-  //switch (msg->header.type) {
-  //case UdpMsg::SyncRequest:
-  //  Log("%s sync-request (%d).\n", prefix,
-  //    msg->u.sync_request.random_request);
-  //  break;
-  //case UdpMsg::SyncReply:
-  //  Log("%s sync-reply (%d).\n", prefix,
-  //    msg->u.sync_reply.random_reply);
-  //  break;
-  //case UdpMsg::QualityReport:
-  //  Log("%s quality report.\n", prefix);
-  //  break;
-  //case UdpMsg::QualityReply:
-  //  Log("%s quality reply.\n", prefix);
-  //  break;
-  //case UdpMsg::KeepAlive:
-  //  Log("%s keep alive.\n", prefix);
-  //  break;
-  //case UdpMsg::Input:
-  //  Log("%s game-compressed-input %d (+ %d bits).\n", prefix, msg->u.input.start_frame, msg->u.input.num_bits);
-  //  break;
-  //case UdpMsg::InputAck:
-  //  Log("%s input ack.\n", prefix);
-  //  break;
+  switch (msg->header.type) {
+  case UdpMsg::SyncRequest:
+    pos += sprintf_s(msgBuf + pos, MSG_BUF_SIZE - pos - 1, ":%d", msg->u.sync_request.random_request);
+    break;
 
-  //case UdpMsg::ChatCommand:
-  //  Log("%s chat.\n", prefix);
-  //  break;
+  case UdpMsg::SyncReply:
+    pos += sprintf_s(msgBuf + pos, MSG_BUF_SIZE - pos - 1, ":%d", msg->u.sync_reply.random_reply);
+    break;
 
-  //default:
-  //  ASSERT(FALSE && "Unknown UdpMsg type.");
-  //}
+  case UdpMsg::Input:
+    pos += sprintf_s(msgBuf + pos, MSG_BUF_SIZE - pos - 1, ":%d:%d", msg->u.input.start_frame, msg->u.input.num_bits);
+    break;
+
+  case UdpMsg::QualityReport:
+    break;
+  case UdpMsg::QualityReply:
+    break;
+  case UdpMsg::KeepAlive:
+    break;
+  case UdpMsg::InputAck:
+    break;
+  case UdpMsg::Datagram:
+    break;
+
+  default:
+    ASSERT(false && "Unknown UdpMsg type.");
+    break;
+  }
+
+
+  LogIt(CATEGORY_MESSAGE, "%s", msgBuf);
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-void Utils::LogIt_v(const char* category, const char* fmt, va_list args) 
+void Utils::LogIt_v(const char* category, const char* fmt, va_list args)
 {
 
-  if (!_logActive) { return; }
+  if (!_isLogActive) { return; }
 
 
   const size_t BUFFER_SIZE = 1024;

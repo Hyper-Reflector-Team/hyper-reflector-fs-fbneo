@@ -58,7 +58,7 @@ void Sync::SetLastConfirmedFrame(int frame)
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
-bool Sync::AddLocalInput(PlayerID playerIndex, GameInput& input)
+bool Sync::AddLocalInput(uint8_t playerIndex, GameInput& input)
 {
   int frames_behind = _curFrame - _last_confirmed_frame;
   if (_curFrame >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
@@ -78,7 +78,7 @@ bool Sync::AddLocalInput(PlayerID playerIndex, GameInput& input)
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
-void Sync::AddRemoteInput(PlayerID playerIndex, GameInput& input)
+void Sync::AddRemoteInput(uint8_t playerIndex, GameInput& input)
 {
   _input_queues[playerIndex].AddInput(input);
 }
@@ -124,8 +124,12 @@ int Sync::SynchronizeInputs(void* values, int totalSize)
       input.erase();
     }
     else {
+      // Copy the input bytes to 'input';
       _input_queues[i].GetInput(_curFrame, &input);
     }
+
+    // Write the input bytes to their location in the output bytes.  This data is then used by
+    // the game to set inputs for all players + advance gameplay.
     memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
   }
   return disconnect_flags;
@@ -143,17 +147,23 @@ void Sync::CheckSimulation(int timeout)
 // ------------------------------------------------------------------------------------------------------------------------
 void Sync::IncrementFrame(void)
 {
+  Utils::LogIt(CATEGORY_SYNC, "EOF: %d", _curFrame);
+
   _curFrame++;
   SaveCurrentFrame();
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
+// This is the rollback!
 void Sync::AdjustSimulation(int seek_to)
 {
   int prevFrame = _curFrame;
   int count = _curFrame - seek_to;   // This is assumed to be positive b/c we are rolling back to an earlier frame.  Therefore, _framecount is always > seek_to.
 
-  Utils::LogIt(CATEGORY_SYNC, "Catching up");
+  Utils::LogIt(CATEGORY_SYNC, "RB:%d,%d", _curFrame, count);
+
+  _callbacks.on_rollback(_curFrame, count);
+  
   _rollingback = true;
 
   /*
@@ -164,10 +174,8 @@ void Sync::AdjustSimulation(int seek_to)
 
   // Now that we have updated _framecount to seek_to, it will be == to (oldFrameCount - count).
 
-  /*
-   * Advance frame by frame (stuffing notifications back to
-   * the master).
-   */
+
+   // Advance frame by frame (stuffing notifications back to the master).
   ResetPrediction(_curFrame);
   for (int i = 0; i < count; i++) {
     _callbacks.rollback_frame(0);
@@ -178,7 +186,7 @@ void Sync::AdjustSimulation(int seek_to)
 
   _rollingback = false;
 
-  Utils::LogIt(CATEGORY_SYNC, "---");
+  // Utils::LogIt(CATEGORY_SYNC, "---");
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
@@ -266,10 +274,11 @@ bool Sync::CreateQueues(Config& config)
 // ------------------------------------------------------------------------------------------------------------------------
 bool Sync::CheckSimulationConsistency(int* seekTo)
 {
+  // Gets the first incorrect frame for ANY of the players.
   int first_incorrect = GameInput::NullFrame;
   for (int i = 0; i < _config.num_players; i++) {
     int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-    Utils::LogIt(CATEGORY_SYNC, "considering incorrect frame %d reported by queue %d.", incorrect, i);
+    Utils::LogIt(CATEGORY_SYNC, "Incorrect frame? %d by player %d.", incorrect, i);
 
     if (incorrect != GameInput::NullFrame && (first_incorrect == GameInput::NullFrame || incorrect < first_incorrect)) {
       first_incorrect = incorrect;

@@ -15,6 +15,7 @@
 
 #pragma pack(push, 1)
 
+
 struct UdpMsg
 {
   enum MsgType {
@@ -26,12 +27,17 @@ struct UdpMsg
     QualityReply = 5,
     KeepAlive = 6,
     InputAck = 7,
-    ChatCommand = 8
+    Datagram = 8      // REFACTOR: -> 'Datagram' -> update related nomeclature too!
   };
 
   // This struct saves us one byte of space.
   // Makes ports to other languages a bit annoying to deal with, so
   // do we really need to save one byte on the packets?
+  // NOTE: The implementation in fbneo doesn't really get used at all, so I am going to remix the whole thing...
+  // I think that broadcasting a datagram that indicates we are disconnecting is the cleanest way to handle this
+  // as the current approach to disconnect requires that the disconnecting player queues input packets, and then sends them
+  // out to indicate that they have disconnected.  Not really ideal in the scenario where someone slaps the 'x' button and
+  // quits immediately.  With the datagram approach, they can quickly and easily blast out the disconnect message to all listening endpoints.
   struct connect_status {
     unsigned int   disconnected : 1;
     int            last_frame : 31;
@@ -52,6 +58,9 @@ struct UdpMsg
 
     struct {
       uint32      random_reply;           /* OK, here's your random data back */
+      uint32      client_version;       // Version of this client, in 8 byte chunks: MAJOR - MINOR - REVISION - GGPO (protocol version)
+      uint8_t delay;                    // current delay setting.
+      uint8_t runahead;                 // current runahead setting.
       char playerName[MAX_NAME_SIZE];   /* The name of the player we synced to: */
     } sync_reply;
 
@@ -83,8 +92,10 @@ struct UdpMsg
     } input_ack;
 
     struct {
-      char text[MAX_GGPOCHAT_SIZE + 1];
-    } chat;
+      uint8_t code;
+      uint8_t dataSize;
+      char data[MAX_GGPO_DATA_SIZE];
+    } datagram;
 
   } u;
 
@@ -101,6 +112,7 @@ public:
     case SyncRequest:   return sizeof(u.sync_request);
     case SyncReply:
     {
+      // TODO: We could/shoud fix the size of the reply to be dependent on the player name.
       int res = sizeof(u.sync_reply);
       return res;
     }
@@ -126,9 +138,11 @@ public:
 
       return size;
 
-    case ChatCommand:
-      // Include one extra byte to ensure zero termination.
-      size = strnlen_s(u.chat.text, MAX_GGPOCHAT_SIZE) + 1;
+    case Datagram:
+      size = sizeof(uint8_t) * 2;     // code + dataSize
+      size += u.datagram.dataSize;
+
+      // size = strnlen_s(u.chat.data, MAX_GGPO_DATA_SIZE) + 1;
       return size;
     }
 

@@ -2,12 +2,9 @@
 #include "burner.h"
 #include "neocdlist.h"
 
-int bDrvOkay = 0;						// 1 if the Driver has been initted okay, and it's okay to use the BurnDrv functions
+int bDrvOkay = 0; // 1 if the Driver has been initted okay, and it's okay to use the BurnDrv functions
 
-TCHAR szAppRomPaths[DIRS_MAX][MAX_PATH] = { { _T("") }, { _T("") }, { _T("") }, { _T("") }, { _T("") },
-											{ _T("") }, { _T("roms/nes/") }, { _T("roms/nes_fds/") }, { _T("roms/nes_hb/") }, { _T("roms/spectrum/") },
-											{ _T("roms/msx/") }, { _T("roms/sms/") }, { _T("roms/gamegear/") }, { _T("roms/sg1000/") }, { _T("roms/coleco/") },
-											{ _T("roms/tg16/") }, { _T("roms/sgx/") }, { _T("roms/pce/") }, { _T("roms/megadrive/") }, { _T("roms/") } };
+TCHAR szAppRomPaths[DIRS_MAX][MAX_PATH] = {{_T("")}, {_T("")}, {_T("")}, {_T("")}, {_T("")}, {_T("")}, {_T("roms/nes/")}, {_T("roms/nes_fds/")}, {_T("roms/nes_hb/")}, {_T("roms/spectrum/")}, {_T("roms/msx/")}, {_T("roms/sms/")}, {_T("roms/gamegear/")}, {_T("roms/sg1000/")}, {_T("roms/coleco/")}, {_T("roms/tg16/")}, {_T("roms/sgx/")}, {_T("roms/pce/")}, {_T("roms/megadrive/")}, {_T("roms/")}};
 
 static bool bSaveRAM = false;
 
@@ -18,14 +15,18 @@ static int DrvBzipOpen()
 	BzipOpen(false);
 
 	// If there is a problem with the romset, report it
-	switch (BzipStatus()) {
-	case BZIP_STATUS_BADDATA: {
-		if (!bHideROMWarnings) {
+	switch (BzipStatus())
+	{
+	case BZIP_STATUS_BADDATA:
+	{
+		if (!bHideROMWarnings)
+		{
 			FBAPopupDisplay(PUF_TYPE_WARNING);
 		}
 		break;
 	}
-	case BZIP_STATUS_ERROR: {
+	case BZIP_STATUS_ERROR:
+	{
 		FBAPopupDisplay(PUF_TYPE_ERROR);
 
 #if 0 || !defined FBNEO_DEBUG
@@ -36,56 +37,63 @@ static int DrvBzipOpen()
 
 		break;
 	}
-	default: {
+	default:
+	{
 
 #if 0 && defined FBNEO_DEBUG
 		FBAPopupDisplay(PUF_TYPE_INFO);
 #else
 		FBAPopupDisplay(PUF_TYPE_INFO | PUF_TYPE_LOGONLY);
 #endif
-
 	}
 	}
 
 	return 0;
 }
 
-static int DoLibInit()					// Do Init of Burn library driver
+static int DoLibInit() // Do Init of Burn library driver
 {
 	int nRet = 0;
 
-	if (DrvBzipOpen()) {
+	if (DrvBzipOpen())
+	{
 		return 1;
 	}
 
-	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) != HARDWARE_SNK_MVS) {
-		if (!bQuietLoading) ProgressCreate();
+	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) != HARDWARE_SNK_MVS)
+	{
+		if (!bQuietLoading)
+			ProgressCreate();
 	}
 
 	nRet = BurnDrvInit();
 
 	BzipClose();
 
-	if (!bQuietLoading) ProgressDestroy();
+	if (!bQuietLoading)
+		ProgressDestroy();
 
-	if (nRet) {
+	if (nRet)
+	{
 		return 3;
 	}
-	else {
+	else
+	{
 		return 0;
 	}
 }
 
 // Catch calls to BurnLoadRom() once the emulation has started;
 // Intialise the zip module before forwarding the call, and exit cleanly.
-static int __cdecl DrvLoadRom(unsigned char* Dest, int* pnWrote, int i)
+static int __cdecl DrvLoadRom(unsigned char *Dest, int *pnWrote, int i)
 {
 	int nRet;
 
 	BzipOpen(false);
 
-	if ((nRet = BurnExtLoadRom(Dest, pnWrote, i)) != 0) {
-		char* pszFilename;
+	if ((nRet = BurnExtLoadRom(Dest, pnWrote, i)) != 0)
+	{
+		char *pszFilename;
 
 		BurnDrvGetRomName(&pszFilename, i, 0);
 
@@ -104,15 +112,19 @@ static int __cdecl DrvLoadRom(unsigned char* Dest, int* pnWrote, int i)
 
 int __cdecl DrvCartridgeAccess(BurnCartrigeCommand nCommand)
 {
-	switch (nCommand) {
+	switch (nCommand)
+	{
 	case CART_INIT_START:
-		if (!bQuietLoading) ProgressCreate();
-		if (DrvBzipOpen()) {
+		if (!bQuietLoading)
+			ProgressCreate();
+		if (DrvBzipOpen())
+		{
 			return 1;
 		}
 		break;
 	case CART_INIT_END:
-		if (!bQuietLoading) ProgressDestroy();
+		if (!bQuietLoading)
+			ProgressDestroy();
 		BzipClose();
 		break;
 	case CART_EXIT:
@@ -126,7 +138,8 @@ int __cdecl DrvCartridgeAccess(BurnCartrigeCommand nCommand)
 
 void NeoCDZRateChangeback()
 {
-	if (nNeoCDZnAudSampleRateSave != 0) {
+	if (nNeoCDZnAudSampleRateSave != 0)
+	{
 		bprintf(PRINT_IMPORTANT, _T("Switching sound rate back to user-selected %dhz\n"), nNeoCDZnAudSampleRateSave);
 		nAudSampleRate[nAudSelect] = nNeoCDZnAudSampleRateSave;
 		nNeoCDZnAudSampleRateSave = 0;
@@ -136,7 +149,8 @@ void NeoCDZRateChangeback()
 // -----------------------------------------------------------------------------------------------------------------------------
 static void NeoCDZRateChange()
 {
-	if (nAudSampleRate[nAudSelect] != 44100) {
+	if (nAudSampleRate[nAudSelect] != 44100)
+	{
 		nNeoCDZnAudSampleRateSave = nAudSampleRate[nAudSelect];
 		bprintf(PRINT_IMPORTANT, _T("Switching sound rate to 44100hz (from %dhz) as required by NeoGeo CDZ\n"), nNeoCDZnAudSampleRateSave);
 		nAudSampleRate[nAudSelect] = 44100; // force 44100hz for CDDA
@@ -148,25 +162,30 @@ int DrvInit(int nDrvNum, bool bRestore)
 {
 	int nStatus;
 
-	DrvExit();						// Make sure exitted
+	DrvExit(); // Make sure exitted
 	MediaExit(false);
 
-	nBurnDrvActive = nDrvNum;		// Set the driver number
+	nBurnDrvActive = nDrvNum; // Set the driver number
 
-	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_MVS) {
+	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_MVS)
+	{
 
 		BurnExtCartridgeSetupCallback = DrvCartridgeAccess;
 
-		if (!bQuietLoading) {		// not from cmdline - show slot selector
-			if (SelMVSDialog()) {
+		if (!bQuietLoading)
+		{ // not from cmdline - show slot selector
+			if (SelMVSDialog())
+			{
 				POST_INITIALISE_MESSAGE;
 				return 0;
 			}
 		}
 	}
 
-	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOCD) {
-		if (CDEmuInit()) {
+	if ((BurnDrvGetHardwareCode() & HARDWARE_PUBLIC_MASK) == HARDWARE_SNK_NEOCD)
+	{
+		if (CDEmuInit())
+		{
 			FBAPopupAddText(PUF_TEXT_DEFAULT, MAKEINTRESOURCE(IDS_ERR_CDEMU_INI_FAIL));
 			FBAPopupDisplay(PUF_TYPE_ERROR);
 
@@ -179,7 +198,8 @@ int DrvInit(int nDrvNum, bool bRestore)
 		NeoCDZRateChange();
 	}
 
-	if (bVidAutoSwitchFull && !bVidAutoSwitchFullDisable) {
+	if (bVidAutoSwitchFull && !bVidAutoSwitchFullDisable)
+	{
 		nVidFullscreen = 1;
 	}
 
@@ -196,21 +216,25 @@ int DrvInit(int nDrvNum, bool bRestore)
 	nMaxPlayers = BurnDrvGetMaxPlayers();
 	GameInpInit(); // Init game input
 
-	if (ConfigGameLoad(true)) {
+	if (ConfigGameLoad(true))
+	{
 		ConfigGameLoadHardwareDefaults();
 	}
 	InputMake(true);
 	GameInpDefault();
 
-	if (kNetGame) {
+	if (kNetGame)
+	{
 		nBurnCPUSpeedAdjust = 0x0100;
 	}
 
-	nStatus = DoLibInit();			// Init the Burn library's driver
+	nStatus = DoLibInit(); // Init the Burn library's driver
 
-	if (nStatus) {
-		if (nStatus & 2) {
-			BurnDrvExit();			// Exit the driver
+	if (nStatus)
+	{
+		if (nStatus & 2)
+		{
+			BurnDrvExit(); // Exit the driver
 
 			ScrnTitle();
 
@@ -228,15 +252,17 @@ int DrvInit(int nDrvNum, bool bRestore)
 
 	BurnExtLoadRom = DrvLoadRom;
 
-	bDrvOkay = 1;						// Okay to use all BurnDrv functions
+	bDrvOkay = 1; // Okay to use all BurnDrv functions
 
-	if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL) {
+	if (BurnDrvGetFlags() & BDF_ORIENTATION_VERTICAL)
+	{
 		nScreenSize = nScreenSizeVer;
 		bVidArcaderes = bVidArcaderesVer;
 		nVidWidth = nVidVerWidth;
 		nVidHeight = nVidVerHeight;
 	}
-	else {
+	else
+	{
 		nScreenSize = nScreenSizeHor;
 		bVidArcaderes = bVidArcaderesHor;
 		nVidWidth = nVidHorWidth;
@@ -244,12 +270,15 @@ int DrvInit(int nDrvNum, bool bRestore)
 	}
 
 	bSaveRAM = false;
-	if (kNetGame) {
+	if (kNetGame)
+	{
 		NetworkInitInput();
 		NetworkGetInput();
 	}
-	else {
-		if (bRestore) {
+	else
+	{
+		if (bRestore)
+		{
 			StatedAuto(0);
 			bSaveRAM = true;
 
@@ -257,7 +286,7 @@ int DrvInit(int nDrvNum, bool bRestore)
 		}
 	}
 
-	nBurnLayer = 0xFF;				// show all layers
+	nBurnLayer = 0xFF; // show all layers
 
 	// Reset the speed throttling code, so we don't 'jump' after the load
 	RunReset();
@@ -267,7 +296,8 @@ int DrvInit(int nDrvNum, bool bRestore)
 	CallRegisteredLuaFunctions(LUACALL_ONSTART);
 
 	// Again, what are we doing here?  Can this be a 'plugin' type approach?
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1")) {
+	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1"))
+	{ // I think its a problem here
 		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A)
 		{
 			WriteValueAtHardwareAddress(0x638FC63, 0x0B, 1, 0);
@@ -284,7 +314,8 @@ int DrvInitCallback()
 
 int DrvExit()
 {
-	if (bDrvOkay) {
+	if (bDrvOkay)
+	{
 		NeoCDZRateChangeback();
 
 		StopReplay();
@@ -292,35 +323,38 @@ int DrvExit()
 		VidExit();
 
 		InvalidateRect(hScrnWnd, NULL, 1);
-		UpdateWindow(hScrnWnd);			// Blank screen window
+		UpdateWindow(hScrnWnd); // Blank screen window
 
-		DestroyWindow(hInpdDlg);		// Make sure the Input Dialog is exited
-		DestroyWindow(hInpDIPSWDlg);	// Make sure the DipSwitch Dialog is exited
-		DestroyWindow(hInpCheatDlg);	// Make sure the Cheat Dialog is exited
+		DestroyWindow(hInpdDlg);	 // Make sure the Input Dialog is exited
+		DestroyWindow(hInpDIPSWDlg); // Make sure the DipSwitch Dialog is exited
+		DestroyWindow(hInpCheatDlg); // Make sure the Cheat Dialog is exited
 
-		if (nBurnDrvActive < nBurnDrvCount) {
-			MemCardEject();				// Eject memory card if present
+		if (nBurnDrvActive < nBurnDrvCount)
+		{
+			MemCardEject(); // Eject memory card if present
 
-			if (bSaveRAM) {
-				StatedAuto(1);			// Save NV (or full) RAM
+			if (bSaveRAM)
+			{
+				StatedAuto(1); // Save NV (or full) RAM
 				bSaveRAM = false;
 			}
 
 			ConfigGameSave(bSaveInputs);
 
-			GameInpExit();				// Exit game input
+			GameInpExit(); // Exit game input
 
-			BurnDrvExit();				// Exit the driver
+			BurnDrvExit(); // Exit the driver
 		}
 	}
 
 	BurnExtLoadRom = NULL;
 
-	bDrvOkay = 0;					// Stop using the BurnDrv functions
+	bDrvOkay = 0; // Stop using the BurnDrv functions
 
-	bRunPause = 0;					// Don't pause when exitted
+	bRunPause = 0; // Don't pause when exitted
 
-	if (bAudOkay) {
+	if (bAudOkay)
+	{
 		// Write silence into the sound buffer on exit, and for drivers which don't use pBurnSoundOut
 		AudWriteSilence();
 	}
@@ -329,7 +363,7 @@ int DrvExit()
 
 	BurnExtCartridgeSetupCallback = NULL;
 
-	nBurnDrvActive = ~0U;			// no driver selected
+	nBurnDrvActive = ~0U; // no driver selected
 
 	return 0;
 }

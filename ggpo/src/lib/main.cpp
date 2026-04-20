@@ -41,8 +41,9 @@ GGPOSession* ggpo_start_session(
   uint16 localPort,
   char* remoteIp,
   uint16 remotePort,
-  PlayerID playerIndex,
-  char* playerName)
+  uint8_t playerIndex,
+  char* playerName,
+  uint32_t clientVersion)
 {
   auto res = (GGPOSession*)new Peer2PeerBackend(cb,
     gameName,
@@ -50,7 +51,8 @@ GGPOSession* ggpo_start_session(
     remoteIp,
     remotePort,
     playerIndex,
-    playerName);
+    playerName,
+    clientVersion);
   return res;
 }
 
@@ -75,14 +77,13 @@ ggpo_start_synctest(GGPOSession** ggpo,
   int frames)
 {
   return GGPO_ERRORCODE_UNSUPPORTED;
-  //*ggpo = (GGPOSession *)new SyncTestBackend(cb, game, frames, num_players);
-  //return GGPO_OK;
 }
 
-void ggpo_set_frame_delay(GGPOSession* ggpo, int frame_delay) {
-  ggpo->SetFrameDelay(frame_delay);
+void ggpo_set_frame_delay(GGPOSession* ggpo, int frame_delay, int runahead) {
+  ggpo->SetFrameDelay(frame_delay, runahead);
 }
 
+// ----------------------------------------------------------------------------------------------------------------
 GGPOErrorCode
 ggpo_idle(GGPOSession* ggpo, int timeout)
 {
@@ -92,33 +93,8 @@ ggpo_idle(GGPOSession* ggpo, int timeout)
   return ggpo->DoPoll(timeout);
 }
 
-//GGPOErrorCode
-//ggpo_add_local_input(GGPOSession *ggpo,
-//                     PlayerID player,
-//                     void *values,
-//                     int isize)
-//{
-//   if (!ggpo) {
-//      return GGPO_ERRORCODE_INVALID_SESSION;
-//   }
-//   return ggpo->AddLocalInput(player, values, isize);
-//}
-
-// LEGACY
-//GGPOErrorCode
-//ggpo_synchronize_input(GGPOSession *ggpo,
-//                       void *values,
-//                       int isize,
-//                       int *disconnect_flags)
-//{
-//   if (!ggpo) {
-//      return GGPO_ERRORCODE_INVALID_SESSION;
-//   }
-//   return ggpo->SyncInput(values, isize, disconnect_flags);
-//}
-
-GGPOErrorCode
-ggpo_synchronize_input(GGPOSession* ggpo,
+// ----------------------------------------------------------------------------------------------------------------
+GGPOErrorCode ggpo_synchronize_input(GGPOSession* ggpo,
   void* values,
   int isize,
   int playerCount)
@@ -129,59 +105,50 @@ ggpo_synchronize_input(GGPOSession* ggpo,
   return ggpo->SyncInput(values, isize, playerCount);
 }
 
-GGPOErrorCode ggpo_disconnect_player(GGPOSession* ggpo,
-  PlayerID player)
+// ----------------------------------------------------------------------------------------------------------------
+void ggpo_disconnect(GGPOSession* ggpo)
 {
   if (!ggpo) {
-    return GGPO_ERRORCODE_INVALID_SESSION;
+    return;
   }
-  return ggpo->DisconnectPlayer(player);
+  return ggpo->DisconnectEx();
 }
 
-GGPOErrorCode
-ggpo_advance_frame(GGPOSession* ggpo)
-{
-  if (!ggpo) {
-    return GGPO_ERRORCODE_INVALID_SESSION;
-  }
-  return ggpo->IncrementFrame();
-}
-
-//// ORIGINAL:
-//GGPOErrorCode
-//ggpo_client_chat(GGPOSession* ggpo, char* text)
+//// ----------------------------------------------------------------------------------------------------------------
+//GGPOErrorCode ggpo_disconnect_player(GGPOSession* ggpo, uint8_t playerIndex)
 //{
-//	if (!ggpo) {
-//		return GGPO_ERRORCODE_INVALID_SESSION;
-//	}
-//	return ggpo->ChatCommand(text);
-//}
-
-// NOTE: ChatCommand is not actually implemented in the open source GGPO code.
-// We will have to figure this out, but shouldn't be too hard.....
-bool ggpo_client_chat(GGPOSession* ggpo, char* text)
-{
-  if (!ggpo) {
-    return false;
-  }
-  bool res = ggpo->ChatCommand(text);
-  return res;
-}
-
-// Original:
-//GGPOErrorCode
-//ggpo_get_network_stats(GGPOSession* ggpo,
-//	PlayerID player,
-//	GGPONetworkStats* stats)
-//{
-//	if (!ggpo) {
-//		return GGPO_ERRORCODE_INVALID_SESSION;
-//	}
-//	return ggpo->GetNetworkStats(stats, player);
+//  if (!ggpo) {
+//    return GGPO_ERRORCODE_INVALID_SESSION;
+//  }
+//  return ggpo->DisconnectPlayer(playerIndex);
 //}
 
 // ----------------------------------------------------------------------------------------------------------------
-bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats, PlayerID playerIndex)
+GGPOErrorCode ggpo_advance_frame(GGPOSession* ggpo)
+{
+  if (!ggpo) { return GGPO_ERRORCODE_INVALID_SESSION; }
+  return ggpo->IncrementFrame();
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+// NOTE: ChatCommand is not actually implemented in the open source GGPO code.
+// We will have to figure this out, but shouldn't be too hard.....
+bool ggpo_send_chat(GGPOSession* ggpo, char* text)
+{
+  if (!ggpo) { return false; }
+  bool res = ggpo->SendChat(text);
+  return res;
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+void ggpo_send_data(GGPOSession* ggpo, uint8_t code, void* data, uint8_t dataSize) {
+  if (!ggpo) { return; }
+
+  ggpo->SendData(code, data, dataSize);
+}
+
+// ----------------------------------------------------------------------------------------------------------------
+bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats, uint8_t playerIndex)
 {
   if (!ggpo) {
     return false;
@@ -191,9 +158,9 @@ bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats, PlayerID playerI
 }
 
 // ----------------------------------------------------------------------------------------------------------------
-char* ggpo_get_playerName(GGPOSession* ggpo, PlayerID index) {
+char* ggpo_get_playerName(GGPOSession* ggpo, uint8_t playerIndex) {
   if (!ggpo) { return nullptr; }
-  auto res = ggpo->GetPlayerName(index);
+  auto res = ggpo->GetPlayerName(playerIndex);
   return res;
 }
 

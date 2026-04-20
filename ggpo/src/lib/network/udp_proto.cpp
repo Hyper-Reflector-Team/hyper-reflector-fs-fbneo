@@ -52,6 +52,7 @@ UdpProtocol::UdpProtocol() :
   memset(&_peer_addr, 0, sizeof _peer_addr);
   _oo_packet.msg = NULL;
 
+  // TODO: These should come from command line + other options that are fed into the proto, probably in 'init!'
   _send_latency = Platform::GetConfigInt(L"ggpo.network.delay");
   _oop_percent = Platform::GetConfigInt(L"ggpo.oop.percent");
 
@@ -75,11 +76,17 @@ void UdpProtocol::Init(Udp* udp,
   int queue,
   char* ip,
   u_short port,
-  UdpMsg::connect_status* status)
+  UdpMsg::connect_status* status,
+  uint32_t clientVersion,
+  uint8_t delay_,
+  uint8_t runahead_)
 {
   _udp = udp;
   _queue = queue;
   _local_connect_status = status;
+  _client_version = clientVersion;
+  _delay = delay_;
+  _runahead = runahead_;
 
   _peer_addr.sin_family = AF_INET;
   _peer_addr.sin_port = htons(port);
@@ -92,20 +99,27 @@ void UdpProtocol::Init(Udp* udp,
 }
 
 // ----------------------------------------------------------------------------------------------------------
+void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
+  if (_udp && _current_state == Running) {
+
+    UdpMsg* msg = new UdpMsg(UdpMsg::Datagram);
+
+    msg->u.datagram.code = code;
+    msg->u.datagram.dataSize = dataSize;
+    if (data != nullptr) {
+      memcpy_s(msg->u.datagram.data, MAX_GGPO_DATA_SIZE, data, dataSize);
+    }
+
+    SendMsg(msg);
+  }
+}
+
+// ----------------------------------------------------------------------------------------------------------
 void UdpProtocol::SendChat(char* text) {
 
-  if (_udp) {
-    if (_current_state == Running) {
-
-      UdpMsg* msg = new UdpMsg(UdpMsg::ChatCommand);
-      size_t len = strnlen_s(text, MAX_GGPOCHAT_SIZE);
-
-      // copy string + zero terminate.
-      memcpy_s(msg->u.chat.text, MAX_GGPOCHAT_SIZE, text, len);
-      msg->u.chat.text[len] = 0;
-
-      SendMsg(msg);
-    }
+  if (_udp && _current_state == Running) {
+    size_t len = strnlen_s(text, MAX_GGPO_DATA_SIZE);
+    SendData('T', text, (uint8_t)len);
   }
 }
 
@@ -273,8 +287,7 @@ bool UdpProtocol::OnLoopPoll(void* cookie)
       SendMsg(new UdpMsg(UdpMsg::KeepAlive));
     }
 
-    if (_disconnect_timeout && _disconnect_notify_start &&
-      !_disconnect_notify_sent && (_last_recv_time + _disconnect_notify_start < now)) {
+    if (_disconnect_timeout && _disconnect_notify_start && !_disconnect_notify_sent && (_last_recv_time + _disconnect_notify_start < now)) {
       Utils::LogIt(CATEGORY_CONNECTION, "Endpoint has stopped receiving packets for %d ms.  Sending notification.", _disconnect_notify_start);
 
       UdpEvent e(UdpEvent::NetworkInterrupted);
@@ -306,10 +319,29 @@ bool UdpProtocol::OnLoopPoll(void* cookie)
 }
 
 // ------------------------------------------------------------------------------------------------
-void UdpProtocol::Disconnect()
+void UdpProtocol::DisconnectEx(int onFrame)
 {
+  // We send out duplicate message packets in case of packet loss.
+  const int MSG_COUNT = 3;
+  for (size_t i = 0; i < MSG_COUNT; i++)
+  {
+    UdpMsg* msg = new UdpMsg(UdpMsg::MsgType::Datagram);
+    msg->u.datagram.code = DATAGRAM_CODE_DISCONNECT;
+
+    *(int*)msg->u.datagram.data = onFrame;
+    msg->u.datagram.dataSize = sizeof(int);
+
+    SendMsg(msg);
+  }
+
   _current_state = Disconnected;
   _shutdown_timeout = Platform::GetCurrentTimeMS() + UDP_SHUTDOWN_TIMER;
+}
+
+// ------------------------------------------------------------------------------------------------
+void UdpProtocol::Disconnect()
+{
+  throw std::exception("OBSOLETE!");
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -324,8 +356,6 @@ void UdpProtocol::SendSyncRequest()
 // ------------------------------------------------------------------------------------------------
 void UdpProtocol::SendMsg(UdpMsg* msg)
 {
-  Utils::LogMsg("send", msg);
-
   _packets_sent++;
   _last_send_time = Platform::GetCurrentTimeMS();
   _bytes_sent += msg->PacketSize();
@@ -334,6 +364,8 @@ void UdpProtocol::SendMsg(UdpMsg* msg)
   msg->header.sequence_number = _next_send_seq++;
 
   _send_queue.push(QueueEntry(Platform::GetCurrentTimeMS(), _peer_addr, msg));
+
+  Utils::LogMsg(EMsgDirection::Send, msg);
   PumpSendQueue();
 }
 
@@ -366,10 +398,10 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
      &UdpProtocol::OnQualityReply,        /* QualityReply */
      &UdpProtocol::OnKeepAlive,           /* KeepAlive */
      &UdpProtocol::OnInputAck,            /* InputAck */
-     &UdpProtocol::OnChat					/* ChatCommand - A chat message / command was received */
+     &UdpProtocol::OnData					        /* Data Exchange - A chat message or other type of data was received */
   };
 
-  // filter out messages that don't match what we expect
+  // Filter out messages that don't match what we expect
   uint16 seq = msg->header.sequence_number;
   if (msg->header.type != UdpMsg::SyncRequest && msg->header.type != UdpMsg::SyncReply) {
     if (msg->header.magic != _remote_magic_number) {
@@ -386,7 +418,7 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
   }
 
   _next_recv_seq = seq;
-  Utils::LogMsg("recv", msg);
+  Utils::LogMsg(EMsgDirection::Receive, msg);
   if (msg->header.type >= ARRAY_SIZE(msgHandlers)) {
     OnInvalid(msg, len);
   }
@@ -414,7 +446,7 @@ void UdpProtocol::UpdateNetworkStats(void)
   int total_bytes_sent = _bytes_sent + (UDP_HEADER_SIZE * _packets_sent);
   float seconds = (float)((now - _stats_start_time) / 1000.0);
   float bytes_sec = total_bytes_sent / seconds;
-//  float udp_overhead = (float)(100.0 * (UDP_HEADER_SIZE * _packets_sent) / _bytes_sent);
+  //  float udp_overhead = (float)(100.0 * (UDP_HEADER_SIZE * _packets_sent) / _bytes_sent);
 
   _kbps_sent = (int)(bytes_sec / 1024);
 
@@ -425,7 +457,7 @@ void UdpProtocol::UpdateNetworkStats(void)
 // ----------------------------------------------------------------------------------------------------------
 void UdpProtocol::QueueEvent(const UdpEvent& evt)
 {
-  Utils::LogEvent("Queuing event", evt);
+  Utils::LogEvent(evt);
   _event_queue.push(evt);
 }
 
@@ -462,6 +494,9 @@ bool UdpProtocol::OnSyncRequest(UdpMsg* msg, int len)
   }
   UdpMsg* reply = new UdpMsg(UdpMsg::SyncReply);
   reply->u.sync_reply.random_reply = msg->u.sync_request.random_request;
+  reply->u.sync_reply.client_version = _client_version;
+  reply->u.sync_reply.delay = _delay;
+  reply->u.sync_reply.runahead = _runahead;
 
   strcpy_s(reply->u.sync_reply.playerName, _playerName);
 
@@ -478,14 +513,17 @@ bool UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
   }
 
   if (msg->u.sync_reply.random_reply != _state.sync.random) {
-    Utils::LogIt(CATEGORY_SYNC, "mismatched reply: %d != %d",
-      msg->u.sync_reply.random_reply, _state.sync.random);
+    Utils::LogIt(CATEGORY_SYNC, "mismatched reply: %d != %d", msg->u.sync_reply.random_reply, _state.sync.random);
     return false;
   }
 
   if (!_connected) {
     auto evt = UdpEvent(UdpEvent::Connected);
     strcpy_s(evt.u.connected.playerName, msg->u.sync_reply.playerName);
+
+    evt.u.connected.delay = msg->u.sync_reply.delay;
+    evt.u.connected.runahead = msg->u.sync_reply.runahead;
+
     QueueEvent(evt);
 
     _connected = true;
@@ -494,6 +532,7 @@ bool UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
   Utils::LogIt(CATEGORY_SYNC, "%d round trips remaining", _state.sync.roundtrips_remaining);
   if (--_state.sync.roundtrips_remaining == 0) {
     QueueEvent(UdpEvent(UdpEvent::Synchronized));
+
     _current_state = Running;
     _last_received_input.frame = -1;
     _remote_magic_number = msg->header.magic;
@@ -509,12 +548,14 @@ bool UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::OnChat(UdpMsg* msg, int msgLen)
+bool UdpProtocol::OnData(UdpMsg* msg, int dataSize)
 {
+  UdpEvent evt(UdpEvent::Datagram);
+  auto dataLen = (uint8_t)(dataSize - sizeof(UdpMsg::header));
 
-  UdpEvent evt(UdpEvent::ChatCommand);
-  int textlen = msgLen - sizeof(UdpMsg::header);
-  strcpy_s(evt.u.chat.text, textlen + 1, msg->u.chat.text);
+  evt.u.chat.code = msg->u.datagram.code;
+  evt.u.chat.dataSize = msg->u.datagram.dataSize;
+  memcpy_s(evt.u.chat.data, MAX_GGPO_DATA_SIZE, msg->u.datagram.data, dataLen);
 
   QueueEvent(evt);
 
@@ -524,9 +565,7 @@ bool UdpProtocol::OnChat(UdpMsg* msg, int msgLen)
 // ----------------------------------------------------------------------------------------------------------
 bool UdpProtocol::OnInput(UdpMsg* msg, int len)
 {
-  /*
-   * If a disconnect is requested, go ahead and disconnect now.
-   */
+  // If a disconnect is requested, go ahead and disconnect now.
   bool disconnect_requested = msg->u.input.disconnect_requested;
   if (disconnect_requested) {
     if (_current_state != Disconnected && !_disconnect_event_sent) {
@@ -535,10 +574,8 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
     }
   }
   else {
-    /*
-     * Update the peer connection status if this peer is still considered to be part
-     * of the network.
-     */
+    // Update the peer connection status if this peer is still considered to be part
+    // of the network.
     UdpMsg::connect_status* remote_status = msg->u.input.peer_connect_status;
     for (int i = 0; i < ARRAY_SIZE(_peer_connect_status); i++) {
       ASSERT(remote_status[i].last_frame >= _peer_connect_status[i].last_frame);
@@ -547,9 +584,8 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
     }
   }
 
-  /*
-   * Decompress the input.
-   */
+  // TODO: Application should be responsible for compress / decompress.
+  // Decompress the input.
   int last_received_frame_number = _last_received_input.frame;
   if (msg->u.input.num_bits) {
     int offset = 0;
@@ -594,9 +630,7 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
         ASSERT(currentFrame == _last_received_input.frame + 1);
         _last_received_input.frame = currentFrame;
 
-        /*
-         * Send the event to the emualtor
-         */
+        // Send the accepted input event.
         UdpEvent evt(UdpEvent::Input);
         evt.u.input.input = _last_received_input;
 
@@ -626,8 +660,7 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
   /*
    * Get rid of our buffered input
    */
-  while (_pending_output.size() &&
-    _pending_output.front().frame < msg->u.input.ack_frame) {
+  while (_pending_output.size() && _pending_output.front().frame < msg->u.input.ack_frame) {
     Utils::LogIt(CATEGORY_INPUT, "Nixed output:%d", _pending_output.front().frame);
     _last_acked_input = _pending_output.front();
     _pending_output.pop();

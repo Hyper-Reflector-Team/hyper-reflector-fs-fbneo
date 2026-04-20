@@ -7,13 +7,14 @@ int bAltPause = 0;
 int bAlwaysDrawFrames = 0;
 
 // REFACTOR: Rename to 'ShowStats' or similar.  
-int bShowFPS = SHOWSTATS_NONE;
+int showStatsMode = SHOWSTATS_NONE;
 
 static unsigned int nDoFPS = 0;
 
 static bool bMute = false;
 static int nOldAudVolume;
 
+// TODO: At this point we can assume that the net version is going to be 14, and never change.
 int kNetVersion = NET_VERSION;			// Network version
 int kNetGame = 0;						// Non-zero if network is being used
 int kNetSpectator = 0;					// Non-zero if network replay is active
@@ -24,7 +25,7 @@ char kNetQuarkId[128] = {};				// Network quark id
 int counter;								// General purpose variable used when debugging
 #endif
 
-static double nFrameLast = 0;
+static double nFrameLast = 0;   // REFACTOR: --> 'lastFrameTime' or similar.
 static bool bAppDoStep = 0;
 static bool bAppDoFast = 0;
 static bool bAppDoFastToggled = 0;
@@ -164,20 +165,64 @@ static int GetInput(bool bCopy)
   return 0;
 }
 
-static time_t fpstimer;
+static LONGLONG lastTime;
 static unsigned int nPreviousFrames;
 
-static void DisplayFPSInit()
+static void InitOverlay()
 {
   nDoFPS = 0;
-  fpstimer = 0;
+  lastTime = 0;
   nPreviousFrames = nFramesRendered;
 }
 
-static void DisplayFPS()
+// TODO: We should put this in its own class or something....
+static bool is_clock_init = false;
+static LARGE_INTEGER clock_freq;
+static float pcFreq = 0.0f;
+
+static const int MS_PER_SEC = 1000;
+
+// ------------------------------------------------------------------------------------------------
+static void init_clock() {
+  if (!is_clock_init)
+  {
+    LARGE_INTEGER freq;
+    bool getFreq = QueryPerformanceFrequency(&clock_freq);
+    if (!getFreq) {
+      throw std::exception("could not get clock frequency!");
+    }
+
+    is_clock_init = true;
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// NOTE: This is not linux compatible.....  maybe use <chrono> in the future?
+static LONGLONG get_ms() {
+  // TODO: Find a better place to init this clock.....
+  init_clock();
+
+  LARGE_INTEGER time;
+  QueryPerformanceCounter(&time);
+
+  time.QuadPart *= 1000;
+
+  // TODO: Make this a multiply......
+  time.QuadPart /= clock_freq.QuadPart;
+  return time.QuadPart;
+}
+
+// ------------------------------------------------------------------------------------------------
+static void UpdateOverlay()
 {
-  time_t temptime = clock();
-  double fps = (double)(nFramesRendered - nPreviousFrames) * CLOCKS_PER_SEC / (temptime - fpstimer);
+  auto now = get_ms();
+  auto elapsed = now - lastTime;
+
+  int frameDiff = nFramesRendered - nPreviousFrames;
+
+  // NOTE: in run.cpp there is nFPS, which is the current FPS, already computed.....
+  // that is what actually runs the emulator, so to me it makes sense that we might use that instead of recomputing the FPS.
+  double fps = (double)(frameDiff * MS_PER_SEC) / elapsed;
   if (bAppDoFast) {
     fps *= nFastSpeed + 1;
   }
@@ -188,16 +233,17 @@ static void DisplayFPS()
     QuarkUpdateStats(fps);
   }
   else {
-    if (fpstimer && (temptime - fpstimer) > 0) { // avoid strange fps values
+    if (lastTime && elapsed > 0) { // avoid strange fps values
       VidSSetStats(fps, 0, 0);
       VidOverlaySetStats(fps, 0, 0);
     }
   }
 
-  fpstimer = temptime;
+  lastTime = now;
   nPreviousFrames = nFramesRendered;
 }
 
+// ------------------------------------------------------------------------------------------------
 // define this function somewhere above RunMessageLoop()
 void ToggleLayer(unsigned char thisLayer)
 {
@@ -466,26 +512,31 @@ int RunIdle()
   VidPaint(3);
 
   // fps
+  // OPTIONS:
+  const int FPS_UPDATE_RATE = 30;
   if (nDoFPS < nFramesRendered) {
-    DisplayFPS();
-    nDoFPS = nFramesRendered + 30;
+    UpdateOverlay();
+    nDoFPS = nFramesRendered + FPS_UPDATE_RATE;
   }
 
   return 0;
 }
 
+// --------------------------------------------------------------------------------------------------------------------
 // TODO: Find a better name for this function!
 int RunReset()
 {
   // Reset FPS display
-  DisplayFPSInit();
+  InitOverlay();
 
   // Reset the speed throttling code
+  // TODO: Use our new clock-based code.
   nFrameLast = timeGetTime();
 
   return 0;
 }
 
+// --------------------------------------------------------------------------------------------------------------------
 int RunInit()
 {
   AudSoundPlay();
@@ -523,19 +574,20 @@ static void BurnerHandlerKeyCallback(MSG* Msg, INT32 KeyDown, INT32 KeyType)
   }
 }
 
+// --------------------------------------------------------------------------------------------------------------------
 // The main message loop
 int RunMessageLoop()
 {
-  MSG Msg;
+  MSG msg;
 
   do {
     bRestartVideo = 0;
     bDrvExit = 0;
 
     // Remove pending initialisation messages from the queue
-    while (PeekMessage(&Msg, NULL, WM_APP + 0, WM_APP + 0, PM_NOREMOVE)) {
-      if (Msg.message != WM_QUIT) {
-        PeekMessage(&Msg, NULL, WM_APP + 0, WM_APP + 0, PM_REMOVE);
+    while (PeekMessage(&msg, NULL, WM_APP + 0, WM_APP + 0, PM_NOREMOVE)) {
+      if (msg.message != WM_QUIT) {
+        PeekMessage(&msg, NULL, WM_APP + 0, WM_APP + 0, PM_REMOVE);
       }
     }
 
@@ -563,13 +615,15 @@ int RunMessageLoop()
     */
 
     while (true) {
-      if (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE)) {
+      if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
         // A message is waiting to be processed
-        if (Msg.message == WM_QUIT) {											// Quit program
-          VidOverlayQuit();
+        if (msg.message == WM_QUIT) {											// Quit program
+
+          QuarkDisconnect();
+
           break;
         }
-        if (Msg.message == (WM_APP + 0)) {										// Restart video
+        if (msg.message == (WM_APP + 0)) {                // Restart video
           bRestartVideo = 1;
           break;
         }
@@ -588,15 +642,15 @@ int RunMessageLoop()
         }
 
         if (bMenuEnabled && nVidFullscreen == 0) {								// Handle keyboard messages for the menu
-          if (MenuHandleKeyboard(&Msg)) {
+          if (MenuHandleKeyboard(&msg)) {
             continue;
           }
         }
 
-        if (Msg.message == WM_SYSKEYDOWN || Msg.message == WM_KEYDOWN) {
-          if (Msg.lParam & 0x20000000) {
+        if (msg.message == WM_SYSKEYDOWN || msg.message == WM_KEYDOWN) {
+          if (msg.lParam & 0x20000000) {
             // An Alt/AltGr-key was pressed
-            switch (Msg.wParam) {
+            switch (msg.wParam) {
 
 #if defined (FBNEO_DEBUG)
             case 'C': {
@@ -726,7 +780,7 @@ int RunMessageLoop()
             case '8':
             case '9':
               if (kNetLua) {
-                CallRegisteredLuaFunctions((LuaCallID)(LUACALL_HOTKEY_1 + Msg.wParam - '1'));
+                CallRegisteredLuaFunctions((LuaCallID)(LUACALL_HOTKEY_1 + msg.wParam - '1'));
               }
               break;
             }
@@ -734,9 +788,9 @@ int RunMessageLoop()
           else {
 
             if (cBurnerKeyCallback)
-              BurnerHandlerKeyCallback(&Msg, (Msg.message == WM_KEYDOWN) ? 1 : 0, 0);
+              BurnerHandlerKeyCallback(&msg, (msg.message == WM_KEYDOWN) ? 1 : 0, 0);
 
-            switch (Msg.wParam) {
+            switch (msg.wParam) {
 
 #if 0	//defined (FBNEO_DEBUG)
             case 'N':
@@ -788,7 +842,7 @@ int RunMessageLoop()
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);
-                    QuarkSendChatText(text);
+                    QuarkSendChat(text);
                   }
 
                 }
@@ -806,7 +860,7 @@ int RunMessageLoop()
 
             case VK_F1:
               if (!kNetGame) {
-                if (Msg.lParam & 0x20000000) {
+                if (msg.lParam & 0x20000000) {
                   bool bOldAppDoFast = bAppDoFast;
 
                   if (((GetAsyncKeyState(VK_CONTROL) | GetAsyncKeyState(VK_SHIFT)) & 0x80000000) == 0) {
@@ -824,7 +878,7 @@ int RunMessageLoop()
                   }
 
                   if (bOldAppDoFast != bAppDoFast) {
-                    DisplayFPSInit(); // resync fps display
+                    InitOverlay(); // resync fps display
                   }
                 }
               }
@@ -839,18 +893,16 @@ int RunMessageLoop()
                 }
               }
               else if (!bEditActive) { // Backspace: toggles FPS
-                bShowFPS = (bShowFPS + 1) % (kNetGame ? 4 : 2);
-                VidOverlaySetWarning(-5000, 1);
-                VidOverlaySetWarning(-5000, 2);
-                VidOverlaySetWarning(-5000, 3);
-                DisplayFPS();
+                showStatsMode = (showStatsMode + 1) % (kNetGame ? SHOWSTATS_MAX: 2);
+                VidOverlayClearWarnings();
+                UpdateOverlay();
                 MenuUpdate();
               }
               break;
 
             case 'T':
               if (kNetGame && !bEditActive) {
-                if (AppMessage(&Msg)) {
+                if (AppMessage(&msg)) {
                   ActivateChat();
                 }
               }
@@ -944,12 +996,12 @@ int RunMessageLoop()
           }
         }
         else {
-          if (Msg.message == WM_SYSKEYUP || Msg.message == WM_KEYUP) {
+          if (msg.message == WM_SYSKEYUP || msg.message == WM_KEYUP) {
 
             if (cBurnerKeyCallback)
-              BurnerHandlerKeyCallback(&Msg, (Msg.message == WM_KEYDOWN) ? 1 : 0, 0);
+              BurnerHandlerKeyCallback(&msg, (msg.message == WM_KEYDOWN) ? 1 : 0, 0);
 
-            switch (Msg.wParam) {
+            switch (msg.wParam) {
             case VK_MENU:
               continue;
             case VK_F1:
@@ -960,7 +1012,7 @@ int RunMessageLoop()
                   bAppDoFast = 0;
                 bAppDoFastToggled = 0;
                 if (bOldAppDoFast != bAppDoFast) {
-                  DisplayFPSInit(); // resync fps display
+                  InitOverlay(); // resync fps display
                 }
               }
               break;
@@ -969,12 +1021,12 @@ int RunMessageLoop()
         }
 
         // Check for messages for dialogs etc.
-        if (AppMessage(&Msg)) {
-          if (TranslateAccelerator(hScrnWnd, hAccel, &Msg) == 0) {
+        if (AppMessage(&msg)) {
+          if (TranslateAccelerator(hScrnWnd, hAccel, &msg) == 0) {
             if (bEditActive) {
-              TranslateMessage(&Msg);
+              TranslateMessage(&msg);
             }
-            DispatchMessage(&Msg);
+            DispatchMessage(&msg);
           }
         }
       }
