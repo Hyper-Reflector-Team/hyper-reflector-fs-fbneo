@@ -11,10 +11,8 @@
 
 static const int RECOMMENDATION_INTERVAL = 240;
 
-// TEMP: We are hard coding the system to never time out for now.
-static const int NEVER_TIMEOUT = 0;
-static const int DEFAULT_DISCONNECT_TIMEOUT = NEVER_TIMEOUT;
-static const int DEFAULT_DISCONNECT_NOTIFY_START = NEVER_TIMEOUT;
+static const int DEFAULT_DISCONNECT_TIMEOUT = 5000;
+static const int DEFAULT_DISCONNECT_NOTIFY_START = 1000;
 
 // ----------------------------------------------------------------------------------------------------------
 Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
@@ -45,10 +43,9 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   inet_pton(AF_INET, remoteIp, &_RemoteAddr);
   _RemotePort = htons(remotePort);
 
-
   /*
-   * Initialize the synchronziation layer
-   */
+  * Initialize the synchronziation layer
+  */
   Sync::Config config = { 0 };
   config.num_players = PLAYER_COUNT;
   config.input_size = INPUT_SIZE;
@@ -67,12 +64,10 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
     _local_connect_status[i].last_frame = -1;
   }
 
-
   /*
-   * Preload the ROM
-   */
+  * Preload the ROM
+  */
   _callbacks.begin_game(gamename);
-
 
   SetDisconnectTimeout(DEFAULT_DISCONNECT_TIMEOUT);
   SetDisconnectNotifyStart(DEFAULT_DISCONNECT_TIMEOUT);
@@ -454,7 +449,7 @@ void Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpEvent& evt, uint8_t playerIndex
 // ----------------------------------------------------------------------------------------------------------
 void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
 {
-  GGPOEvent info;
+  GGPOEvent info = {};
 
   switch (evt.type) {
   case UdpEvent::Connected:
@@ -506,8 +501,12 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
 
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
-    memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, evt.u.chat.dataSize);
-
+    info.u.datagram.code = evt.u.chat.code;
+    info.u.datagram.dataSize = (uint8_t)(std::min)((size_t)evt.u.chat.dataSize, (size_t)MAX_GGPO_DATA_SIZE);
+    if (info.u.datagram.dataSize > 0) {
+      memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, info.u.datagram.dataSize);
+    }
+    _callbacks.on_event(&info);
     break;
 
   }
@@ -559,6 +558,9 @@ void Peer2PeerBackend::DisconnectEx() {
   }
 }
 
+// silence build error
+#pragma warning(push)
+#pragma warning(disable: 4702)
 // --------------------------------------------------------------------------------------------------------------
 void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 {
@@ -585,7 +587,7 @@ void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 
   CheckInitialSync();
 }
-
+#pragma warning(pop)
 
 // --------------------------------------------------------------------------------------------------------------
 bool Peer2PeerBackend::GetNetworkStats(GGPONetworkStats* stats, uint8_t playerIndex)

@@ -242,6 +242,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
     case DATAGRAM_CODE_CHAT:
+    // Backwards compatibility: older builds used ASCII 'T' for chat datagrams.
+    case 'T':
     {
       TCHAR szUser[MAX_CHAT_SIZE];
       TCHAR szText[MAX_CHAT_SIZE];
@@ -251,13 +253,14 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       // NOTE: I have the player index, but not the actual lookup table for them... that should come from the client...
       // NOTE: I can't include 'ggposession.h' at this time because it will break the compilation.  I will go back and
       // find a proper way to include it later......
-      char* playerName =  ggpo_get_playerName(ggpo, info->player_index);
-      ANSIToTCHAR(playerName, szUser, MAX_NAME_SIZE);
+      char* playerName = ggpo_get_playerName(ggpo, info->player_index);
+      ANSIToTCHAR(playerName ? playerName : "Unknown", szUser, MAX_NAME_SIZE);
 
-      ANSIToTCHAR(msg, szText, info->u.datagram.dataSize);
+      const uint8_t safeSize = (uint8_t)(std::min)((uint32_t)info->u.datagram.dataSize, (uint32_t)(MAX_CHAT_SIZE - 1));
+      ANSIToTCHAR(msg, szText, safeSize);
 
       // Chat messages must be zero terminated...
-      szText[info->u.datagram.dataSize] = 0;
+      szText[safeSize] = 0;
 
       // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
       // TCHAR* useName = first == 'C' ? _T("Command") : szUser;
@@ -300,9 +303,33 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     // ranked savestate
     if (iRanked) {
       _stprintf(tfilename, _T("savestates\\%s_fbneo_ranked.fs"), tname);
-      if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+      HANDLE hFind = FindFirstFile(tfilename, &fd);
+      if (hFind != INVALID_HANDLE_VALUE) {
+        FindClose(hFind);
         // Load our save-state file (freeplay, event mode, etc.)
-        BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        if (loadRes == 0) {
+          DetectorLoad(name, false, iSeed);
+          // if playing a direct game, we never get match information, so put anonymous
+          if (bDirect) {
+            //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+            VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          }
+          return 0;
+        }
+        // If the savestate exists but can't be loaded (wrong format / wrong version),
+        // fall back to normal game init instead of leaving the emulator half-initialized.
+      }
+    }
+
+    // regular savestate
+    _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
+    HANDLE hFind = FindFirstFile(tfilename, &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+      FindClose(hFind);
+      // Load our save-state file (freeplay, event mode, etc.)
+      const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+      if (loadRes == 0) {
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
@@ -311,20 +338,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         }
         return 0;
       }
-    }
-
-    // regular savestate
-    _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
-    if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
-      // Load our save-state file (freeplay, event mode, etc.)
-      BurnStateLoad(tfilename, 1, &DrvInitCallback);
-      DetectorLoad(name, false, iSeed);
-      // if playing a direct game, we never get match information, so put anonymous
-      if (bDirect) {
-        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-      }
-      return 0;
+      // Fall back to normal init if load failed.
     }
   }
 
@@ -335,7 +349,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     if ((_tcscmp(BurnDrvGetText(DRV_NAME), tname) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
       if (!kNetSpectator) {
         MediaInit();
-
+        
         // NOTE: If this is not a kNetGame, then the default game state will be loaded in the DrvInit call.
         // In the block above (~line 288) we are loading a different state.  Since we are in a GGPO
         // callback, we can safely assume that kNetGame == true.
@@ -811,7 +825,9 @@ void QuarkInit(TCHAR* tconnect)
         WIN32_FIND_DATA fd;
         TCHAR tfilename[MAX_PATH];
         _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tgame);
-        if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+        HANDLE hFind = FindFirstFile(tfilename, &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+          FindClose(hFind);
           BurnStateLoad(tfilename, 1, &DrvInitCallback);
         }
         DetectorLoad(gameName, true, iSeed);
@@ -895,6 +911,12 @@ bool QuarkIncrementFrame()
 // --------------------------------------------------------------------------------------------------------
 void QuarkSendChat(char* text)
 {
+  if (_playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
+    auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
+    wchar_t nameBuffer[16 * 2];
+    wcscpy(nameBuffer, ANSIToTCHAR(playerName ? playerName : "Unknown", NULL, NULL));
+    VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(text, NULL, NULL));
+  }
   ggpo_send_chat(ggpo, text);
 }
 
