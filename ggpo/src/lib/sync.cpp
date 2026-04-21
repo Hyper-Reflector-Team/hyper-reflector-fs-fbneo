@@ -47,15 +47,6 @@ void Sync::Init(Sync::Config& config)
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
-void Sync::SetInputSize(int inputSize)
-{
-  if (_config.input_size == inputSize) return;
-  _config.input_size = inputSize;
-  Config dummy = { 0 };
-  CreateQueues(dummy);
-}
-
-// ------------------------------------------------------------------------------------------------------------------------
 void Sync::SetLastConfirmedFrame(int frame)
 {
   _last_confirmed_frame = frame;

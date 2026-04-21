@@ -494,7 +494,6 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
   case UdpEvent::Datagram:
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
-    info.u.datagram.code = evt.u.chat.code;
     memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, evt.u.chat.dataSize);
     break;
 
