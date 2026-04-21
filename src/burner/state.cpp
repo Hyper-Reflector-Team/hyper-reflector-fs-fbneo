@@ -209,7 +209,10 @@ INT32 BurnStateLoadEmbed(FILE *fp, INT32 nOffset, INT32 bAll, INT32 (*pLoadGame)
 		return -1;
 	}
 	memset(Def, 0, nDefLen);
-	fread(Def, 1, nDefLen, fp); // Read in deflated block
+	if (fread(Def, 1, nDefLen, fp) != (size_t)nDefLen) { // Read in deflated block
+		free(Def);
+		return -1;
+	}
 
 	nRet = BurnStateDecompress(Def, nDefLen, bAll); // Decompress block into driver
 	free(Def);										// free deflated block
@@ -246,11 +249,30 @@ INT32 BurnStateLoad(TCHAR *filename, INT32 bAll, INT32 (*pLoadGame)())
 
 	nAcbLoadState = 1;
 
-	fread(szReadHeader, 1, 4, fp); // Read identifier
-	if (memcmp(szReadHeader, szHeader, 4) == 0)
-	{ // Check filetype
+	if (fread(szReadHeader, 1, 4, fp) != 4) { // Read identifier
+		nAcbLoadState = 0;
+		fclose(fp);
+		return 1;
+	}
+	if (memcmp(szReadHeader, szHeader, 4) == 0) {
+		// Standard FBNeo savestate wrapper: "FB1 " followed by an embedded "FS1 " chunk.
 		nRet = BurnStateLoadEmbed(fp, -1, bAll, pLoadGame);
 		nAcbVersion = nBurnVer;
+	} else {
+		// Some older tooling saved raw "FS1 " chunks without the "FB1 " wrapper.
+		// Support those as well.
+		const char szChunkHeader[] = "FS1 ";
+		if (memcmp(szReadHeader, szChunkHeader, 4) == 0) {
+			fseek(fp, -4, SEEK_CUR);
+			nRet = BurnStateLoadEmbed(fp, -1, bAll, pLoadGame);
+			nAcbVersion = nBurnVer;
+		} else {
+			// Not a valid savestate file. Previously this would fall through as "success",
+			// which could leave the emulator in an uninitialized state (and crash later).
+			nAcbLoadState = 0;
+			fclose(fp);
+			return 1;
+		}
 	}
 
 	nAcbLoadState = 0;
@@ -342,10 +364,12 @@ INT32 BurnStateLoad(TCHAR *filename, INT32 bAll, INT32 (*pLoadGame)())
 
 	fclose(fp);
 
-	luasav_load(_TtoA(filename));
+	if (nRet == 0) {
+		luasav_load(_TtoA(filename));
+	}
 
 	// NOTE: What are we doing here, and can this be some kind of 'plugin' type approach?
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1"))
+	if (nRet == 0 && nBurnDrvActive < nBurnDrvCount && BurnDrvGetTextA(DRV_NAME) && !strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1"))
 	{
 		// Same here seems to be the culprit for other games not loading
 		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A)

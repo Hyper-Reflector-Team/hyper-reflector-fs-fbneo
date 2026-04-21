@@ -303,9 +303,33 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     // ranked savestate
     if (iRanked) {
       _stprintf(tfilename, _T("savestates\\%s_fbneo_ranked.fs"), tname);
-      if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+      HANDLE hFind = FindFirstFile(tfilename, &fd);
+      if (hFind != INVALID_HANDLE_VALUE) {
+        FindClose(hFind);
         // Load our save-state file (freeplay, event mode, etc.)
-        BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        if (loadRes == 0) {
+          DetectorLoad(name, false, iSeed);
+          // if playing a direct game, we never get match information, so put anonymous
+          if (bDirect) {
+            //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+            VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          }
+          return 0;
+        }
+        // If the savestate exists but can't be loaded (wrong format / wrong version),
+        // fall back to normal game init instead of leaving the emulator half-initialized.
+      }
+    }
+
+    // regular savestate
+    _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
+    HANDLE hFind = FindFirstFile(tfilename, &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+      FindClose(hFind);
+      // Load our save-state file (freeplay, event mode, etc.)
+      const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+      if (loadRes == 0) {
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
@@ -314,20 +338,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         }
         return 0;
       }
-    }
-
-    // regular savestate
-    _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
-    if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
-      // Load our save-state file (freeplay, event mode, etc.)
-      BurnStateLoad(tfilename, 1, &DrvInitCallback);
-      DetectorLoad(name, false, iSeed);
-      // if playing a direct game, we never get match information, so put anonymous
-      if (bDirect) {
-        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-      }
-      return 0;
+      // Fall back to normal init if load failed.
     }
   }
 
@@ -814,7 +825,9 @@ void QuarkInit(TCHAR* tconnect)
         WIN32_FIND_DATA fd;
         TCHAR tfilename[MAX_PATH];
         _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tgame);
-        if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+        HANDLE hFind = FindFirstFile(tfilename, &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+          FindClose(hFind);
           BurnStateLoad(tfilename, 1, &DrvInitCallback);
         }
         DetectorLoad(gameName, true, iSeed);
