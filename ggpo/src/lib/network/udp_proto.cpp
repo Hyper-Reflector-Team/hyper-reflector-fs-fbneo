@@ -8,6 +8,7 @@
 #include "types.h"
 #include "udp_proto.h"
 #include "bitvector.h"
+#include <algorithm>
 
  // OPTIONS: These should all be configurable at some point....
 static const int SYNC_PACKETS_COUNT = 5;
@@ -105,9 +106,10 @@ void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
     UdpMsg* msg = new UdpMsg(UdpMsg::Datagram);
 
     msg->u.datagram.code = code;
-    msg->u.datagram.dataSize = dataSize;
-    if (data != nullptr) {
-      memcpy_s(msg->u.datagram.data, MAX_GGPO_DATA_SIZE, data, dataSize);
+    uint8_t useSize = (uint8_t)(std::min)((size_t)dataSize, (size_t)MAX_GGPO_DATA_SIZE);
+    msg->u.datagram.dataSize = useSize;
+    if (data != nullptr && useSize > 0) {
+      memcpy_s(msg->u.datagram.data, MAX_GGPO_DATA_SIZE, data, useSize);
     }
 
     SendMsg(msg);
@@ -118,8 +120,9 @@ void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
 void UdpProtocol::SendChat(char* text) {
 
   if (_udp && _current_state == Running) {
-    size_t len = strnlen_s(text, MAX_GGPO_DATA_SIZE);
-    SendData('T', text, (uint8_t)len);
+    // Leave room for the receiver to add a null terminator safely.
+    size_t len = strnlen_s(text, MAX_GGPO_DATA_SIZE - 1);
+    SendData(DATAGRAM_CODE_CHAT, text, (uint8_t)len);
   }
 }
 

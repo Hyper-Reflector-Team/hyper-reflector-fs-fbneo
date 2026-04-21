@@ -449,7 +449,7 @@ void Peer2PeerBackend::OnUdpProtocolPeerEvent(UdpEvent& evt, uint8_t playerIndex
 // ----------------------------------------------------------------------------------------------------------
 void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
 {
-  GGPOEvent info;
+  GGPOEvent info = {};
 
   switch (evt.type) {
   case UdpEvent::Connected:
@@ -498,9 +498,14 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
     break;
 
   case UdpEvent::Datagram:
+
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
-    memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, evt.u.chat.dataSize);
+    info.u.datagram.code = evt.u.chat.code;
+    info.u.datagram.dataSize = (uint8_t)(std::min)((size_t)evt.u.chat.dataSize, (size_t)MAX_GGPO_DATA_SIZE);
+    if (info.u.datagram.dataSize > 0) {
+      memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, info.u.datagram.dataSize);
+    }
     _callbacks.on_event(&info);
     break;
 
@@ -553,7 +558,7 @@ void Peer2PeerBackend::DisconnectEx() {
   }
 }
 
-// Temporarily disable errors.
+// silence build error
 #pragma warning(push)
 #pragma warning(disable: 4702)
 // --------------------------------------------------------------------------------------------------------------

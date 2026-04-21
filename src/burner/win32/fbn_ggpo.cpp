@@ -242,6 +242,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
     case DATAGRAM_CODE_CHAT:
+    // Backwards compatibility: older builds used ASCII 'T' for chat datagrams.
+    case 'T':
     {
       TCHAR szUser[MAX_CHAT_SIZE];
       TCHAR szText[MAX_CHAT_SIZE];
@@ -251,13 +253,14 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       // NOTE: I have the player index, but not the actual lookup table for them... that should come from the client...
       // NOTE: I can't include 'ggposession.h' at this time because it will break the compilation.  I will go back and
       // find a proper way to include it later......
-      char* playerName =  ggpo_get_playerName(ggpo, info->player_index);
-      ANSIToTCHAR(playerName, szUser, MAX_NAME_SIZE);
+      char* playerName = ggpo_get_playerName(ggpo, info->player_index);
+      ANSIToTCHAR(playerName ? playerName : "Unknown", szUser, MAX_NAME_SIZE);
 
-      ANSIToTCHAR(msg, szText, info->u.datagram.dataSize);
+      const uint8_t safeSize = (uint8_t)(std::min)((uint32_t)info->u.datagram.dataSize, (uint32_t)(MAX_CHAT_SIZE - 1));
+      ANSIToTCHAR(msg, szText, safeSize);
 
       // Chat messages must be zero terminated...
-      szText[info->u.datagram.dataSize] = 0;
+      szText[safeSize] = 0;
 
       // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
       // TCHAR* useName = first == 'C' ? _T("Command") : szUser;
@@ -895,6 +898,12 @@ bool QuarkIncrementFrame()
 // --------------------------------------------------------------------------------------------------------
 void QuarkSendChat(char* text)
 {
+  if (_playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
+    auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
+    wchar_t nameBuffer[16 * 2];
+    wcscpy(nameBuffer, ANSIToTCHAR(playerName ? playerName : "Unknown", NULL, NULL));
+    VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(text, NULL, NULL));
+  }
   ggpo_send_chat(ggpo, text);
 }
 
