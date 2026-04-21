@@ -501,6 +501,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
     memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, evt.u.chat.dataSize);
+    _callbacks.on_event(&info);
     break;
 
   }
@@ -552,6 +553,9 @@ void Peer2PeerBackend::DisconnectEx() {
   }
 }
 
+// Temporarily disable errors.
+#pragma warning(push)
+#pragma warning(disable: 4702)
 // --------------------------------------------------------------------------------------------------------------
 void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 {
@@ -578,7 +582,7 @@ void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 
   CheckInitialSync();
 }
-
+#pragma warning(pop)
 
 // --------------------------------------------------------------------------------------------------------------
 bool Peer2PeerBackend::GetNetworkStats(GGPONetworkStats* stats, uint8_t playerIndex)
