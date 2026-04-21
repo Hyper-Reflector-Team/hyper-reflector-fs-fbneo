@@ -43,11 +43,6 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   inet_pton(AF_INET, remoteIp, &_RemoteAddr);
   _RemotePort = htons(remotePort);
 
-
-  /*
-   * Initialize the synchronization layer with the fallback input size.
-   * The queues will be rebuilt with the real size after the ROM loads.
-   */
   Sync::Config config = { 0 };
   config.num_players = PLAYER_COUNT;
   config.input_size = INPUT_SIZE;
@@ -66,22 +61,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
     _local_connect_status[i].last_frame = -1;
   }
 
-  /*
-   * Load the ROM.  DrvInit -> NetworkInitInput runs inside this call, so
-   * the driver's input descriptors are populated when it returns.
-   */
   _callbacks.begin_game(gamename);
-
-  /*
-   * Now that the ROM is loaded, query the real per-player input byte count
-   * and update the sync layer if it differs from the fallback.
-   */
-  // int realInputSize = (_callbacks.get_input_size && _callbacks.get_input_size() > 0)
-  //   ? _callbacks.get_input_size()
-  //   : INPUT_SIZE;
-  // _input_size = realInputSize;
-  // _sync.SetInputSize(realInputSize);
-
 
   SetDisconnectTimeout(DEFAULT_DISCONNECT_TIMEOUT);
   SetDisconnectNotifyStart(DEFAULT_DISCONNECT_TIMEOUT);
@@ -515,9 +495,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, uint8_t playerIndex)
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
     info.u.datagram.code = evt.u.chat.code;
-    info.u.datagram.dataSize = evt.u.chat.dataSize;
     memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, evt.u.chat.dataSize);
-    _callbacks.on_event(&info);
     break;
 
   }
@@ -570,8 +548,6 @@ void Peer2PeerBackend::DisconnectEx() {
 }
 
 // --------------------------------------------------------------------------------------------------------------
-#pragma warning(push)
-#pragma warning(disable: 4702)
 void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 {
   GGPOEvent info;
@@ -597,7 +573,6 @@ void Peer2PeerBackend::DisconnectPlayer(uint8_t playerIndex, int syncto)
 
   CheckInitialSync();
 }
-#pragma warning(pop)
 
 
 // --------------------------------------------------------------------------------------------------------------
