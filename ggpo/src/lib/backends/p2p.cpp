@@ -43,6 +43,9 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   inet_pton(AF_INET, remoteIp, &_RemoteAddr);
   _RemotePort = htons(remotePort);
 
+  /*
+  * Initialize the synchronziation layer
+  */
   Sync::Config config = { 0 };
   config.num_players = PLAYER_COUNT;
   config.input_size = INPUT_SIZE;
@@ -61,6 +64,9 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
     _local_connect_status[i].last_frame = -1;
   }
 
+  /*
+  * Preload the ROM
+  */
   _callbacks.begin_game(gamename);
 
   SetDisconnectTimeout(DEFAULT_DISCONNECT_TIMEOUT);
