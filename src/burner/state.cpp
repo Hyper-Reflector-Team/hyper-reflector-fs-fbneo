@@ -345,7 +345,7 @@ INT32 BurnStateLoad(TCHAR *filename, INT32 bAll, INT32 (*pLoadGame)())
 	luasav_load(_TtoA(filename));
 
 	// NOTE: What are we doing here, and can this be some kind of 'plugin' type approach?
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "vsavj"))
+	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1"))
 	{
 		// Same here seems to be the culprit for other games not loading
 		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A)

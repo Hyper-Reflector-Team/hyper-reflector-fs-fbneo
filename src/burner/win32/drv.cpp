@@ -296,7 +296,7 @@ int DrvInit(int nDrvNum, bool bRestore)
 	CallRegisteredLuaFunctions(LUACALL_ONSTART);
 
 	// Again, what are we doing here?  Can this be a 'plugin' type approach?
-	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "vsavj"))
+	if (!strcmp(BurnDrvGetTextA(DRV_NAME), "sfiii3nr1"))
 	{ // I think its a problem here
 		if (ReadValueAtHardwareAddress(0x638FC63, 1, 0) == 0x0A)
 		{
