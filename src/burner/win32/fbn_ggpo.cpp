@@ -26,6 +26,7 @@ namespace Utils {
 extern int nAcbVersion;
 extern int nAcbLoadState;
 extern int bMediaExit;
+extern int nGGPOTimesyncFrames;
 
 uint8_t _playerIndex = PLAYER_NOT_SET;
 uint8_t _otherPlayerIndex = PLAYER_NOT_SET;
@@ -223,6 +224,9 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
+    // GGPO recommends idling a few frames to reduce excessive prediction/rollback.
+    // Delay 0 tends to cause more rollbacks without this.
+    nGGPOTimesyncFrames = (std::max)(nGGPOTimesyncFrames, info->u.timesync.frames_ahead);
     break;
 
 

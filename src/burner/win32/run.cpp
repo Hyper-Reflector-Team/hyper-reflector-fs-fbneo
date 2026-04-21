@@ -33,6 +33,10 @@ static int nFastSpeed = 10;
 static int nSkipFrames = 0;
 static int nRunQuark = 1;
 
+// Set by GGPO via `GGPO_EVENTCODE_TIMESYNC` to temporarily slow the local emulator
+// (reduces excessive prediction/rollback "network stutter" at low frame delay).
+int nGGPOTimesyncFrames = 0;
+
 int bRestartVideo = 0;
 int bDrvExit = 0;
 int bMediaExit = 0;
@@ -299,6 +303,11 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
     return 1;
   }
 
+  // During GGPO rollback we may simulate multiple frames which will never be displayed.
+  // Those frames should be silent (and avoid expensive overlay/debug work) to prevent
+  // "stutter" under low delay settings where rollbacks are more frequent.
+  const bool isRollbackSim = kNetGame && !updateNetInputs;
+
   if (bPause && !bAppDoFast) {
     GetInput(false);						// Update burner inputs, but not game inputs
   }
@@ -319,13 +328,9 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
         DetectTurbo();
       }
       else {
-        VidDisplayInputs(0, 3);
         if (NetworkGetInput()) {
-          VidDisplayInputs(1, 1);
-          DetectFreeze();
           return 1;
         }
-        VidDisplayInputs(1, 4);
       }
     }
     else {
@@ -388,7 +393,7 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
     }
     else {
       pBurnDraw = NULL;
-      pBurnSoundOut = nAudNextSound;
+      pBurnSoundOut = isRollbackSim ? NULL : nAudNextSound;
       BurnDrvFrame();
     }
 
@@ -396,15 +401,17 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
       QuarkIncrementFrame();
     }
 
-    DetectorUpdate();
+    if (!isRollbackSim) {
+      DetectorUpdate();
+    }
 
-    if (kNetLua) {
+    if (!isRollbackSim && kNetLua) {
       FBA_LuaFrameBoundary();
       CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION); // TODO: find proper place
     }
 
 #ifdef INCLUDE_AVI_RECORDING
-    if (nAviStatus) {
+    if (!isRollbackSim && nAviStatus) {
       if (AviRecordFrame(bDraw)) {
         AviStop();
       }
@@ -427,6 +434,17 @@ int RunIdle()
   double nAccTime = nTime - nFrameLast;
   double nFps = 1000.0 * 100.0 / nAppVirtualFps;
   double nFpsIdle = nFps - 1.0;
+
+  // GGPO timesync: deliberately idle for a few frames to let the other client catch up.
+  // Important: consume `nFps` from the accumulator (advance `nFrameLast`) so we don't
+  // immediately "catch up" by running extra frames right after sleeping.
+  if (kNetGame && nGGPOTimesyncFrames > 0) {
+    nGGPOTimesyncFrames--;
+    nFrameLast += nFps;
+    GetInput(false);
+    QuarkRunIdle(1);
+    return 0;
+  }
 
   if (nAccTime < nFps || (kNetGame && nRunQuark)) {
     // No need to do anything for a bit
