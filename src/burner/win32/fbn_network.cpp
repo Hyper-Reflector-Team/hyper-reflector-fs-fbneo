@@ -81,33 +81,6 @@ int NetworkInitInput()
 	return 0;
 }
 
-// Returns the per-player input byte count for the currently loaded ROM.
-// Must be called after NetworkInitInput() (i.e. after DrvInit).
-int NetworkGetInputSizePerPlayer()
-{
-	int j = 0;
-
-	// Digital P1 inputs packed as bits
-	j += nPlayerInputs[0] + nConstInputs;
-	j = (j + 7) >> 3;
-
-	// Analog P1 inputs: 2 bytes each for short-val, 1 byte for byte-val
-	struct BurnInputInfo bii;
-	memset(&bii, 0, sizeof(bii));
-	for (int i = 0; i < nPlayerInputs[0]; i++) {
-		BurnDrvGetInputInfo(&bii, i + nPlayerOffset[0]);
-		if (bii.nType & BIT_GROUP_ANALOG)
-			j += 2;
-		else if (bii.nType != BIT_DIGITAL && *bii.pVal)
-			j += 1;
-	}
-
-	// DIP switches: one byte each
-	j += nDIPInputs;
-
-	return j + 1;
-}
-
 int NetworkGetInput()
 {
 	int i, j;
@@ -203,7 +176,7 @@ int NetworkGetInput()
 
 	// Analog inputs
 	for (i = 0; i < nPlayerInputs[0]; i++) {
-		BurnDrvGetInputInfo(&bii, i + nPlayerOffset[0]);
+		BurnDrvGetInputInfo(&bii, i + nDIPOffset);
 		if (bii.nType & BIT_GROUP_ANALOG) {
 			*bii.pShortVal = (nControls[j] << 8) | nControls[j + 1];
 			j += 2;
