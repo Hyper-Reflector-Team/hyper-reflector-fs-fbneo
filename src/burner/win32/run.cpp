@@ -303,11 +303,6 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
     return 1;
   }
 
-  // During GGPO rollback we may simulate multiple frames which will never be displayed.
-  // Those frames should be silent (and avoid expensive overlay/debug work) to prevent
-  // "stutter" under low delay settings where rollbacks are more frequent.
-  const bool isRollbackSim = kNetGame && !updateNetInputs;
-
   if (bPause && !bAppDoFast) {
     GetInput(false);						// Update burner inputs, but not game inputs
   }
@@ -328,9 +323,13 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
         DetectTurbo();
       }
       else {
+        VidDisplayInputs(0, 3);
         if (NetworkGetInput()) {
+          VidDisplayInputs(1, 1);
+          DetectFreeze();
           return 1;
         }
+        VidDisplayInputs(1, 4);
       }
     }
     else {
@@ -393,7 +392,7 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
     }
     else {
       pBurnDraw = NULL;
-      pBurnSoundOut = isRollbackSim ? NULL : nAudNextSound;
+      pBurnSoundOut = nAudNextSound;
       BurnDrvFrame();
     }
 
@@ -401,17 +400,15 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
       QuarkIncrementFrame();
     }
 
-    if (!isRollbackSim) {
-      DetectorUpdate();
-    }
+    DetectorUpdate();
 
-    if (!isRollbackSim && kNetLua) {
+    if (kNetLua) {
       FBA_LuaFrameBoundary();
       CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION); // TODO: find proper place
     }
 
 #ifdef INCLUDE_AVI_RECORDING
-    if (!isRollbackSim && nAviStatus) {
+    if (nAviStatus) {
       if (AviRecordFrame(bDraw)) {
         AviStop();
       }
