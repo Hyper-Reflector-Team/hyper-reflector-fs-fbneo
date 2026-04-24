@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 #define GGPO_MAX_PLAYERS                  4
-#define GGPO_MAX_PREDICTION_FRAMES        8
+#define GGPO_MAX_PREDICTION_FRAMES        15 // Cover 15 frames of predictions +2 for state records.
 #define GGPO_MAX_SPECTATORS              32
 
 #define GGPO_SPECTATOR_INPUT_INTERVAL     4

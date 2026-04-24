@@ -224,9 +224,15 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
-    // GGPO recommends idling a few frames to reduce excessive prediction/rollback.
-    // Delay 0 tends to cause more rollbacks without this.
-    nGGPOTimesyncFrames = (std::max)(nGGPOTimesyncFrames, info->u.timesync.frames_ahead);
+    // Frontend-driven timesync: ask the main loop to gently idle upcoming frame intervals.
+    // NOTE: UDP protocol already requires "idle enough" input before recommending a stall.
+    if (!kNetSpectator) {
+      const int add = info->u.timesync.frames_ahead;
+      if (add > 0) {
+        // Clamp to avoid accumulating a large stall debt if events arrive back-to-back.
+        nGGPOTimesyncFrames = (std::min)(nGGPOTimesyncFrames + add, 12);
+      }
+    }
     break;
 
 
@@ -646,6 +652,7 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iRanked = 0;
   _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -706,6 +713,7 @@ void QuarkInit(TCHAR* tconnect)
   iRanked = 0;
   _playerIndex = 0;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -851,6 +859,7 @@ void QuarkEnd()
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
   kNetGame = 0;
+  nGGPOTimesyncFrames = 0;
   bMediaExit = true;
 
 }
