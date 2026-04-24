@@ -16,7 +16,7 @@
 #include "network/udp_msg.h"
 
 // REFACTOR: Make this a const + move to consts container
-#define MAX_PREDICTION_FRAMES    8
+#define MAX_PREDICTION_FRAMES    15 // Cover 15 frames of predictions +2 for state records. 
 
 class SyncTestBackend;
 

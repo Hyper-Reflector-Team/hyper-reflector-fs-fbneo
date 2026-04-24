@@ -745,8 +745,11 @@ void UdpProtocol::SetLocalFrameNumber(int localFrame)
 // ----------------------------------------------------------------------------------------------------------
 int UdpProtocol::RecommendFrameDelay()
 {
-  // XXX: require idle input should be a configuration parameter
-  return _timesync.recommend_frame_wait_duration(false);
+  // Keep timesync stalls gentle:
+  // - Require idle input so we don't induce slowdown during active motions/combos.
+  // - Clamp the recommendation so the frontend doesn't apply large multi-frame stalls.
+  const int frames = _timesync.recommend_frame_wait_duration(true);
+  return (std::min)(frames, 2);
 }
 
 
