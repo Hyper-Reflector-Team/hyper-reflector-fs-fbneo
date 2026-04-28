@@ -227,7 +227,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     if (!kNetSpectator) {
       const int add = info->u.timesync.frames_ahead;
       if (add > 0) {
-        // Cap stall at 2 frames per event to prevent unbounded frame gap growth
+        // Cap stall at 2 frames per event, no accumulation
         nGGPOTimesyncFrames = (std::min)(add, 2);
       }
     }
