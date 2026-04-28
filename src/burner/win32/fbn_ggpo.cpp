@@ -224,15 +224,6 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
-    // Frontend-driven timesync: ask the main loop to gently idle upcoming frame intervals.
-    // NOTE: UDP protocol already requires "idle enough" input before recommending a stall.
-    if (!kNetSpectator) {
-      const int add = info->u.timesync.frames_ahead;
-      if (add > 0) {
-        // Clamp to avoid accumulating a large stall debt if events arrive back-to-back.
-        nGGPOTimesyncFrames = (std::min)(nGGPOTimesyncFrames + add, 12);
-      }
-    }
     break;
 
 
