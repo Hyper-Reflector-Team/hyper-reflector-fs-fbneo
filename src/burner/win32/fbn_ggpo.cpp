@@ -224,6 +224,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
+    if (!kNetSpectator) {
+      const int add = info->u.timesync.frames_ahead;
+      if (add > 0) {
+        // Cap stall at 2 frames per event to prevent unbounded frame gap growth
+        nGGPOTimesyncFrames = (std::min)(add, 2);
+      }
+    }
     break;
 
 
