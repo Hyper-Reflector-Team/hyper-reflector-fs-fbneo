@@ -644,6 +644,7 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
   nGGPOTimesyncFrames = 0;
+  nVidRunahead = 0; // reset so stale config value isn't sent to peer as our runahead
 
 #ifdef _DEBUG
   kNetLua = 1;

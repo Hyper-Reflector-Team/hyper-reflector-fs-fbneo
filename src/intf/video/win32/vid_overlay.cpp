@@ -1420,7 +1420,8 @@ void VidOverlaySetRemoteStats(uint8_t delay, uint8_t runahead) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 void VidOverlaySetStats(double fps, int ping, int delay)
 {
-  if (ping > 0 && totalRollbacks > 0 && prev_runahead != nVidRunahead) {
+  // Send immediately on ping — don't wait for first rollback or remote shows stale/garbage runahead
+  if (ping > 0 && prev_runahead != nVidRunahead) {
     prev_runahead = nVidRunahead;
     SendToPeer(delay, nVidRunahead);
   }
@@ -1488,7 +1489,7 @@ void VidOverlaySetStats(double fps, int ping, int delay)
       jitterPingAvg = pingSum / PINGSIZE;
       jitterAvg = jitterSum / (PINGSIZE - 1);
       jitterArrayPos++;
-      if (jitterArrayPos > PINGSIZE) {
+      if (jitterArrayPos >= PINGSIZE) {
         jitterArrayPos = 0;
       }
     }
