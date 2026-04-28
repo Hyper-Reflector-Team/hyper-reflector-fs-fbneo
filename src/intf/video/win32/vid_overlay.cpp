@@ -962,6 +962,7 @@ static Text system_message;
 static Text stats_line1;
 static Text stats_line2;
 static Text stats_line3;
+static Text stats_line4;
 static Text info;
 static Text volume;
 static Text warning;
@@ -1123,11 +1124,13 @@ void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_
     stats_line1.color = (stats_line1.warningAmount >= 100) ? 0xffff0000 : 0xffffffff;
     stats_line2.color = (stats_line2.warningAmount >= 100) ? 0xffff0000 : 0xffffffff;
     stats_line3.color = (stats_line3.warningAmount >= 100) ? 0xffff0000 : 0xffffffff;
+    stats_line4.color = 0xffffff00; // yellow for sync indicator
 
     // TODO: Having pixel based coords would probably be a good thing!
     stats_line1.Render(frame_width - 0.0035f, 0.003f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     stats_line2.Render(frame_width - 0.0035f, 0.023f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     stats_line3.Render(frame_width - 0.0035f, 0.043f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
+    stats_line4.Render(frame_width - 0.0035f, 0.063f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
 
   }
 
@@ -1396,6 +1399,12 @@ static int prev_runahead = -1;
 
 extern int totalRollbackFrames;
 extern int totalRollbacks;
+extern int nGGPOTimesyncFrames;
+extern bool bTimesyncDelayBumped;
+extern float g_timesync_advantage;
+extern float g_timesync_radvantage;
+static int nSyncDisplayCountdown = 0;
+static int nTimesyncTotalCount = 0;
 
 static int lastTotalRollbacks = 0;
 static UINT32 lastTotalRollbackFrames = 0;
@@ -1446,7 +1455,7 @@ void VidOverlaySetStats(double fps, int ping, int delay)
       }
 
     }
-    else if (nFramesEmulated > nLastRollbackAt + 600) {
+    else {
       nRollbackRealtime = 0;
     }
   }
@@ -1523,13 +1532,29 @@ void VidOverlaySetStats(double fps, int ping, int delay)
     }
 
     if (game_playerIndex == 0) {
-      swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d   "), delay, nVidRunahead, op_delay, op_runahead);
+      swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d"), delay, nVidRunahead, op_delay, op_runahead);
     }
     else {
-      swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d   "), op_delay, op_runahead, delay, nVidRunahead);
+      swprintf(buf_line3, 64, _T("P1: d%d-ra%d  |  P2: d%d-ra%d"), op_delay, op_runahead, delay, nVidRunahead);
     }
-
     stats_line3.Set(buf_line3);
+
+    if (bTimesyncDelayBumped) {
+      nSyncDisplayCountdown = 60; // 1 second at 60fps — adjust if needed
+      nTimesyncTotalCount++;
+      bTimesyncDelayBumped = false;
+    }
+    else if (nSyncDisplayCountdown > 0) nSyncDisplayCountdown--;
+
+    // Total count always visible. "timesync active" shows for 1 second after trigger.
+    wchar_t buf_line4[64];
+    if (nSyncDisplayCountdown > 0) {
+      swprintf(buf_line4, 64, _T("timesync active  |  total: %d  |  adv: %.1f r: %.1f"), nTimesyncTotalCount, g_timesync_advantage, g_timesync_radvantage);
+    }
+    else {
+      swprintf(buf_line4, 64, _T("sync total: %d  |  adv: %.1f r: %.1f"), nTimesyncTotalCount, g_timesync_advantage, g_timesync_radvantage);
+    }
+    stats_line4.Set(buf_line4);
   }
   else {
     stats_line3.SetActive(false);
@@ -1740,6 +1765,7 @@ void VidOverlayClearWarnings()
   stats_line1.AddWarning(-1000000);
   stats_line2.AddWarning(-1000000);
   stats_line3.AddWarning(-1000000);
+  stats_line4.AddWarning(-1000000);
 }
 
 

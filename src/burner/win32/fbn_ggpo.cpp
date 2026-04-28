@@ -55,6 +55,12 @@ static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
 //static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
+// Dynamic timesync delay: when GGPO detects the local client is running ahead, we temporarily
+// bump frame delay by 1 to let the remote catch up. No frame skips — just holds inputs one
+// frame longer. Restores to the player's original delay after TIMESYNC_DELAY_DURATION frames.
+bool bTimesyncDelayBumped = false;
+int nTimesyncDelayCountdown = 0;
+static const int TIMESYNC_DELAY_DURATION = 120; // ~2 seconds at 60fps
 
 const int ggpo_state_header_size = 6 * sizeof(int);
 
@@ -224,11 +230,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
+    // Frame-skip approach: stall the ahead client by up to 2 frames during idle.
+    // ggpo_set_frame_delay is not safe mid-match (breaks input frame sequencing).
     if (!kNetSpectator) {
       const int add = info->u.timesync.frames_ahead;
       if (add > 0) {
-        // Cap stall at 2 frames per event, no accumulation
         nGGPOTimesyncFrames = (std::min)(add, 2);
+        bTimesyncDelayBumped = true; // signal overlay — overlay clears this after latching
       }
     }
     break;
@@ -651,6 +659,8 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
   nGGPOTimesyncFrames = 0;
+  bTimesyncDelayBumped = false;
+  nTimesyncDelayCountdown = 0;
   nVidRunahead = 0; // reset so stale config value isn't sent to peer as our runahead
 
 #ifdef _DEBUG
@@ -853,12 +863,27 @@ void QuarkInit(TCHAR* tconnect)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
+// Called once per frame from the main loop. Counts down the timesync delay bump and
+// restores the original frame delay when the correction window expires.
+void GGPOTimesyncTick()
+{
+  if (!bTimesyncDelayBumped || nTimesyncDelayCountdown <= 0) return;
+  nTimesyncDelayCountdown--;
+  if (nTimesyncDelayCountdown == 0) {
+    ggpo_set_frame_delay(ggpo, iDelay, nVidRunahead);
+    bTimesyncDelayBumped = false;
+  }
+}
+
+// -------------------------------------------------------------------------------------------------------------------
 void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
+  bTimesyncDelayBumped = false;
+  nTimesyncDelayCountdown = 0;
   bMediaExit = true;
 
 }

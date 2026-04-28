@@ -25,6 +25,9 @@ void TimeSync::rollback_frame(GameInput& input, int localAdvantage, int remoteAd
 }
 
 
+float g_timesync_advantage = 0;
+float g_timesync_radvantage = 0;
+
 // ----------------------------------------------------------------------------------------------------
 int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
 {
@@ -48,6 +51,9 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   // See if someone should take action.  The person furthest ahead
   // needs to slow down so the other user can catch up.
   // Only do this if both clients agree on who's ahead!!
+  g_timesync_advantage = advantage;
+  g_timesync_radvantage = radvantage;
+  Utils::LogIt(CATEGORY_TIMESYNC, "timesync check: advantage=%.2f radvantage=%.2f diff=%.2f", advantage, radvantage, radvantage - advantage);
   if (advantage >= radvantage) {
     return 0;
   }
@@ -70,9 +76,12 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   // user's input isn't sweeping in arcs (e.g. fireball motions in
   // Street Fighter), which could cause the player to miss moves.
   if (require_idle_input) {
-    // 8-frame window (~133ms idle) — fires during natural pauses without triggering mid-motion
-    for (i = 1; i < 8; i++) {
-      if (!_last_inputs[i].equal(_last_inputs[0])) {
+    // Idle window before timesync is allowed to fire. Tune between 8 (~133ms) and 16 (~267ms).
+    // Lower = fires sooner after input stops. Higher = more conservative, less correction.
+    const int IDLE_WINDOW = 8;
+    for (i = 1; i < IDLE_WINDOW; i++) {
+      // Compare bits only — equal() also checks frame number which always differs, so it always rejects.
+      if (memcmp(_last_inputs[i].bits, _last_inputs[0].bits, _last_inputs[0].size) != 0) {
         Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  rejecting due to input stuff at position %d...!!!", count, i);
         return 0;
       }

@@ -432,20 +432,13 @@ int RunIdle()
   double nFps = 1000.0 * 100.0 / nAppVirtualFps;
   double nFpsIdle = nFps - 1.0;
 
-  // GGPO timesync: if we're running ahead, intentionally "burn" a frame interval
-  // by idling instead of emulating. Do at most one per RunIdle() call so the
-  // slowdown is gentle and evenly distributed.
+  // GGPO timesync: if we're running ahead, skip a frame to let the remote catch up.
+  // Only fires during idle input (require_idle_input=true) to avoid disrupting active play.
   if (kNetGame && !kNetSpectator && !bRunPause && !bAppDoFast && nGGPOTimesyncFrames > 0) {
-    // Only apply when we'd otherwise be due to run a frame.
     if (nAccTime >= nFps) {
       nGGPOTimesyncFrames--;
-
-      // Keep inputs/UI responsive and continue pumping GGPO while we idle.
       GetInput(false);
       QuarkRunIdle(1);
-
-      // Advance the accumulator baseline by one frame interval so we don't
-      // immediately try to "catch up" and undo the intended slowdown.
       nFrameLast += nFps;
       return 0;
     }

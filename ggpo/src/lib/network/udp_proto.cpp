@@ -748,6 +748,8 @@ int UdpProtocol::RecommendFrameDelay()
   // Keep timesync stalls gentle:
   // - Require idle input so we don't induce slowdown during active motions/combos.
   // - Clamp the recommendation so the frontend doesn't apply large multi-frame stalls.
+  // true = only fires during idle input (IDLE_WINDOW=8 frames in timesync.cpp, ~133ms without input).
+  // false = fires during active input — may cause FPS dips from frame-skip during combos/motions.
   const int frames = _timesync.recommend_frame_wait_duration(true);
   return (std::min)(frames, 1);
 }
