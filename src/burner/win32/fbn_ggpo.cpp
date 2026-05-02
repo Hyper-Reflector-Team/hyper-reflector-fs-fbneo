@@ -26,6 +26,7 @@ namespace Utils {
 extern int nAcbVersion;
 extern int nAcbLoadState;
 extern int bMediaExit;
+extern int nGGPOTimesyncFrames;
 
 uint8_t _playerIndex = PLAYER_NOT_SET;
 uint8_t _otherPlayerIndex = PLAYER_NOT_SET;
@@ -642,6 +643,8 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iRanked = 0;
   _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
+  nVidRunahead = 0; // reset so stale config value isn't sent to peer as our runahead
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -702,6 +705,7 @@ void QuarkInit(TCHAR* tconnect)
   iRanked = 0;
   _playerIndex = 0;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -847,6 +851,7 @@ void QuarkEnd()
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
   kNetGame = 0;
+  nGGPOTimesyncFrames = 0;
   bMediaExit = true;
 
 }

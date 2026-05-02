@@ -21,6 +21,8 @@
 
 #include <wininet.h>
 #include <winsock.h>
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 
 #if defined (FBNEO_DEBUG)
@@ -1014,6 +1016,15 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   std::string logPath = "";
   app.add_option("--logf", logPath, "File where GGPO data will be logged.");
 
+  // Artificial network send latency for local testing. This maps to the GGPO env var read by
+  // `Platform::GetConfigInt(L\"ggpo.network.delay\")`.
+  // Examples:
+  // `--net-delay on`  -> 200ms
+  // `--net-delay 200` -> 200ms
+  // `--net-delay off` -> unset
+  std::string netDelayOpt = "";
+  app.add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
+
   // @@AAR:
   // There was some legacy code in there that was used to output lists of information.
   // At time of writing it was putting that data in stdout, which just gets black-holed
@@ -1039,6 +1050,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   list->add_option("-o,--option", listOption, "Filter for output list")
     ->required(false)
     ->transform(CLI::CheckedTransformer(listOptions, CLI::ignore_case));
+  list->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
 
   // Options to initiate a direct connection to another player.
@@ -1049,11 +1061,13 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_option("-p,--player", directOps.playerNumber, "Player number (1, 2, etc.)")->required()->check(CLI::Validator(CLI::Range(1, 4)));
   directConnect->add_option("-n,--name", directOps.playerName, "Your name")->required();
   directConnect->add_option("-d,--delay", directOps.frameDelay, "Frame delay.  1 is default");
+  directConnect->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
 
   std::string loadPath = "";
   auto load = app.add_subcommand("load", "Load a game state (.fs), or replay file (.fr)");
   load->add_option("-f,--file", loadPath, "Path of the file to load.");
+  load->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
 
   // Only allow one subcommand.
@@ -1084,6 +1098,36 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   // TODO: Handle general stuff here.... setting of lua scripts and so on.
   if (scriptName != "") {
     FBA_LoadLuaCode(scriptName.data());
+  }
+
+  // Apply artificial network delay if requested.
+  if (!netDelayOpt.empty()) {
+    std::string v = netDelayOpt;
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+    int delayMs = 0;
+    bool unset = false;
+    if (v == "on" || v == "true" || v == "1") {
+      delayMs = 200;
+    } else if (v == "off" || v == "false" || v == "0") {
+      unset = true;
+    } else {
+      try {
+        delayMs = std::stoi(v);
+      } catch (...) {
+        delayMs = 0;
+      }
+      if (delayMs <= 0) {
+        unset = true;
+      }
+    }
+
+    if (unset) {
+      SetEnvironmentVariableW(L"ggpo.network.delay", nullptr);
+    } else {
+      const std::wstring delayStr = std::to_wstring(delayMs);
+      SetEnvironmentVariableW(L"ggpo.network.delay", delayStr.c_str());
+    }
   }
 
   // Apply flags.

@@ -16,7 +16,7 @@ static const int SYNC_RETRY_INTERVAL = 2000;
 static const int SYNC_FIRST_RETRY_INTERVAL = 500;
 static const int RUNNING_RETRY_INTERVAL = 200;
 static const int KEEP_ALIVE_INTERVAL = 200;
-static const int QUALITY_REPORT_INTERVAL = 1000;
+static const int QUALITY_REPORT_INTERVAL = 200;
 static const int NETWORK_STATS_INTERVAL = 1000;
 static const int UDP_SHUTDOWN_TIMER = 5000;
 static const int MAX_SEQ_DISTANCE = (1 << 15);
@@ -745,8 +745,11 @@ void UdpProtocol::SetLocalFrameNumber(int localFrame)
 // ----------------------------------------------------------------------------------------------------------
 int UdpProtocol::RecommendFrameDelay()
 {
-  // XXX: require idle input should be a configuration parameter
-  return _timesync.recommend_frame_wait_duration(false);
+  // Keep timesync stalls gentle:
+  // - Require idle input so we don't induce slowdown during active motions/combos.
+  // - Clamp the recommendation so the frontend doesn't apply large multi-frame stalls.
+  const int frames = _timesync.recommend_frame_wait_duration(true);
+  return (std::min)(frames, 2);
 }
 
 
