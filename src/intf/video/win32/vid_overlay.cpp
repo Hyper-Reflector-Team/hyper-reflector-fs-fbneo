@@ -963,6 +963,8 @@ static Text stats_line1;
 static Text stats_line2;
 static Text stats_line3;
 static Text stats_line4;
+static Text stats_line5;
+static Text stats_line6;
 static Text info;
 static Text volume;
 static Text warning;
@@ -1037,6 +1039,37 @@ void VidOverlaySetSize(const RECT& dest, float size)
   frame_width = 1.f;
   frame_height = frame_width * (dest.bottom - dest.top) / (dest.right - dest.left);
 }
+
+struct PalDmaWrite { UINT32 dest; UINT32 len; };
+extern PalDmaWrite g_pal_dma_log[32];
+extern int g_pal_dma_log_count;
+extern UINT32 cps3_char_pal_mask;
+struct CharPalSample { UINT8 r, g, b; };
+extern CharPalSample g_char_pal_samples[12][64];
+extern UINT16 g_costume_mask_p1;
+extern UINT16 g_costume_mask_p2;
+extern UINT8  g_p1_char_id;
+extern UINT8  g_p2_char_id;
+extern UINT8  g_p1_color_idx;
+extern UINT8  g_p2_color_idx;
+
+static const wchar_t* cps3_char_name_w(UINT8 id)
+{
+  switch (id) {
+    case  1: return _T("Alex");    case  2: return _T("Ryu");
+    case  3: return _T("Yun");     case  4: return _T("Dudley");
+    case  5: return _T("Necro");   case  6: return _T("Hugo");
+    case  7: return _T("Ibuki");   case  8: return _T("Elena");
+    case  9: return _T("Oro");     case 10: return _T("Yang");
+    case 11: return _T("Ken");     case 12: return _T("Sean");
+    case 13: return _T("Urien");   case 14: return _T("Gouki");
+    case 16: return _T("Chun-Li"); case 17: return _T("Makoto");
+    case 18: return _T("Q");       case 19: return _T("Twelve");
+    case 20: return _T("Remy");
+    default: return _T("?");
+  }
+}
+static int cps3_selected_slot = 0;
 
 // --------------------------------------------------------------------------------------------------------------------
 void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_intensity)
@@ -1131,6 +1164,27 @@ void VidOverlayRender(const RECT& dest, int gameWidth, int gameHeight, int scan_
     stats_line2.Render(frame_width - 0.0035f, 0.023f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     stats_line3.Render(frame_width - 0.0035f, 0.043f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
     stats_line4.Render(frame_width - 0.0035f, 0.063f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
+    // stats_line5.Render(frame_width - 0.0035f, 0.083f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
+
+    // Colored swatches: one block per palette entry for the selected slot (up to 64).
+    // Shows shifted colors when slot is ON, original colors when slot is OFF.
+    // fontWrite must be called from inside VidOverlayRender (renderer is active here).
+    // if (showStatsMode == SHOWSTATS_ALL) {
+    //   bool  slot_is_on      = (cps3_char_pal_mask >> cps3_selected_slot) & 1;
+    //   bool  slot_has_costume = (g_costume_mask_p1  >> cps3_selected_slot) & 1;
+    //   // Swatches show costume colors directly; no hue shift applied.
+    //   (void)slot_is_on;
+    //   const float swatch_y    = 0.103f;
+    //   const float swatch_step = 0.008f;
+    //   for (int i = 0; i < 64; i++) {
+    //     const CharPalSample& s = g_char_pal_samples[cps3_selected_slot][i];
+    //     UINT32 col = 0xff000000 | ((UINT32)s.r << 16) | ((UINT32)s.g << 8) | s.b;
+    //     float sx = frame_width - 0.0035f - (63 - i) * swatch_step;
+    //     fontWrite(_T("#"), sx, swatch_y, col, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
+    //   }
+    // }
+
+    // stats_line6.Render(frame_width - 0.0035f, 0.123f, 0.90f, FNT_MED * 0.9f, FONT_ALIGN_RIGHT);
 
   }
 
@@ -1403,6 +1457,7 @@ extern int nGGPOTimesyncFrames;
 extern bool bTimesyncDelayBumped;
 extern float g_timesync_advantage;
 extern float g_timesync_radvantage;
+
 static int nSyncDisplayCountdown = 0;
 static int nTimesyncTotalCount = 0;
 
@@ -1555,9 +1610,53 @@ void VidOverlaySetStats(double fps, int ping, int delay)
       swprintf(buf_line4, 64, _T("sync total: %d  |  adv: %.1f r: %.1f"), nTimesyncTotalCount, g_timesync_advantage, g_timesync_radvantage);
     }
     stats_line4.Set(buf_line4);
+
+    // Arrow key navigation for palette slot toggling.
+    // Up/Down selects a slot (0-11), Left/Right toggles it on/off.
+    // Edge-detect so each keypress fires once.
+    {
+      static UINT32 prev_keys = 0;
+      UINT32 cur_keys = 0;
+      if (GetAsyncKeyState(VK_UP)    & 0x8000) cur_keys |= 1;
+      if (GetAsyncKeyState(VK_DOWN)  & 0x8000) cur_keys |= 2;
+      if (GetAsyncKeyState(VK_LEFT)  & 0x8000) cur_keys |= 4;
+      if (GetAsyncKeyState(VK_RIGHT) & 0x8000) cur_keys |= 8;
+      UINT32 just_pressed = cur_keys & ~prev_keys;
+      if (just_pressed & 1) cps3_selected_slot = (cps3_selected_slot + 11) % 12;  // up
+      if (just_pressed & 2) cps3_selected_slot = (cps3_selected_slot +  1) % 12;  // down
+      if (just_pressed & 4) cps3_char_pal_mask &= ~(1u << cps3_selected_slot);    // left = off
+      if (just_pressed & 8) cps3_char_pal_mask |=  (1u << cps3_selected_slot);    // right = on
+      prev_keys = cur_keys;
+
+      static const UINT32 offsets[12] = {
+        0x0000,0x0040,0x0080,0x00C0,0x0180,0x01C0,
+        0x0200,0x0240,0x0280,0x02C0,0x0380,0x03C0
+      };
+      bool slot_on      = (cps3_char_pal_mask   >> cps3_selected_slot) & 1;
+      bool slot_costume = (g_costume_mask_p1    >> cps3_selected_slot) & 1;
+      stats_line5.color = slot_costume ? 0xff00ff88 : (slot_on ? 0xff00ffff : 0xffff8800);
+      wchar_t buf_line5[128];
+      swprintf(buf_line5, 128, _T("slot %d/%04X:[%s%s]  mask:%03X"),
+               cps3_selected_slot, offsets[cps3_selected_slot],
+               slot_costume ? _T("C") : (slot_on ? _T("ON") : _T("OFF")),
+               slot_costume ? (slot_on ? _T("+ON") : _T("+OFF")) : _T(""),
+               cps3_char_pal_mask);
+      stats_line5.Set(buf_line5);
+
+      wchar_t buf_line6[512];
+      swprintf(buf_line6, 512, _T("p1:%s c%d%s  p2:%s c%d%s"),
+               cps3_char_name_w(g_p1_char_id), (int)g_p1_color_idx,
+               g_costume_mask_p1 ? _T("[C]") : _T(""),
+               cps3_char_name_w(g_p2_char_id), (int)g_p2_color_idx,
+               g_costume_mask_p2 ? _T("[C]") : _T(""));
+      stats_line6.color = 0xffaaaaaa;
+      stats_line6.Set(buf_line6);
+    }
   }
   else {
     stats_line3.SetActive(false);
+    stats_line5.SetActive(false);
+    stats_line6.SetActive(false);
   }
 }
 

@@ -846,15 +846,15 @@ int RunMessageLoop()
               if (bEditActive) {
                 if (kNetGame) {
 
-                  bool allSpaces = true;
-                  for (size_t i = 0; i < MAX_CHAT_SIZE; i++)
+                  bool hasContent = false;
+                  for (size_t i = 0; i < MAX_CHAT_SIZE && EditText[i] != L'\0'; i++)
                   {
-                    if (EditText[i] != 0x20) {
-                      allSpaces = false;
+                    if (EditText[i] != L' ') {
+                      hasContent = true;
                       break;
                     }
                   }
-                  if (!allSpaces)
+                  if (hasContent)
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);
