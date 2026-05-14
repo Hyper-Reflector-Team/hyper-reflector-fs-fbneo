@@ -19,9 +19,9 @@
  // TEMP:  Using assumed player and input sizes for now.
 static const uint16 PLAYER_COUNT = 2;
 
-// NOTE: This is the input size that 3s uses.  We should not have a hard-coded way of doing this,
-// or we should actually probably just change the way we do the asserts....
-static const uint16 INPUT_SIZE = 5;
+// Fixed per-player input size matching GAMEINPUT_MAX_BYTES. NetworkGetInput always
+// pads its output to this size so the InputQueue prediction size never mismatches.
+static const uint16 INPUT_SIZE = 7;
 
 // ==========================================================================================================
 class Peer2PeerBackend : public GGPOSession, IPollSink, Udp::Callbacks {

@@ -8,6 +8,7 @@
 #include "types.h"
 #include "udp_proto.h"
 #include "bitvector.h"
+#include <algorithm>
 
  // OPTIONS: These should all be configurable at some point....
 static const int SYNC_PACKETS_COUNT = 5;
@@ -15,7 +16,7 @@ static const int SYNC_RETRY_INTERVAL = 2000;
 static const int SYNC_FIRST_RETRY_INTERVAL = 500;
 static const int RUNNING_RETRY_INTERVAL = 200;
 static const int KEEP_ALIVE_INTERVAL = 200;
-static const int QUALITY_REPORT_INTERVAL = 1000;
+static const int QUALITY_REPORT_INTERVAL = 200;
 static const int NETWORK_STATS_INTERVAL = 1000;
 static const int UDP_SHUTDOWN_TIMER = 5000;
 static const int MAX_SEQ_DISTANCE = (1 << 15);
@@ -105,9 +106,10 @@ void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
     UdpMsg* msg = new UdpMsg(UdpMsg::Datagram);
 
     msg->u.datagram.code = code;
-    msg->u.datagram.dataSize = dataSize;
-    if (data != nullptr) {
-      memcpy_s(msg->u.datagram.data, MAX_GGPO_DATA_SIZE, data, dataSize);
+    uint8_t useSize = (uint8_t)(std::min)((size_t)dataSize, (size_t)MAX_GGPO_DATA_SIZE);
+    msg->u.datagram.dataSize = useSize;
+    if (data != nullptr && useSize > 0) {
+      memcpy_s(msg->u.datagram.data, MAX_GGPO_DATA_SIZE, data, useSize);
     }
 
     SendMsg(msg);
@@ -118,8 +120,9 @@ void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
 void UdpProtocol::SendChat(char* text) {
 
   if (_udp && _current_state == Running) {
-    size_t len = strnlen_s(text, MAX_GGPO_DATA_SIZE);
-    SendData('T', text, (uint8_t)len);
+    // Leave room for the receiver to add a null terminator safely.
+    size_t len = strnlen_s(text, MAX_GGPO_DATA_SIZE - 1);
+    SendData(DATAGRAM_CODE_CHAT, text, (uint8_t)len);
   }
 }
 
@@ -742,8 +745,13 @@ void UdpProtocol::SetLocalFrameNumber(int localFrame)
 // ----------------------------------------------------------------------------------------------------------
 int UdpProtocol::RecommendFrameDelay()
 {
-  // XXX: require idle input should be a configuration parameter
-  return _timesync.recommend_frame_wait_duration(false);
+  // Keep timesync stalls gentle:
+  // - Require idle input so we don't induce slowdown during active motions/combos.
+  // - Clamp the recommendation so the frontend doesn't apply large multi-frame stalls.
+  // true = only fires during idle input (IDLE_WINDOW=8 frames in timesync.cpp, ~133ms without input).
+  // false = fires during active input — may cause FPS dips from frame-skip during combos/motions.
+  const int frames = _timesync.recommend_frame_wait_duration(true);
+  return (std::min)(frames, 1);
 }
 
 

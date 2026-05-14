@@ -21,6 +21,10 @@ int kNetSpectator = 0;					// Non-zero if network replay is active
 int kNetLua = 1;						// Allow lua in network game
 char kNetQuarkId[128] = {};				// Network quark id
 
+// GGPO timesync: number of upcoming frame intervals we should intentionally idle
+// (frontend-driven throttling based on GGPO_EVENTCODE_TIMESYNC).
+int nGGPOTimesyncFrames = 0;
+
 #ifdef FBNEO_DEBUG
 int counter;								// General purpose variable used when debugging
 #endif
@@ -428,6 +432,18 @@ int RunIdle()
   double nFps = 1000.0 * 100.0 / nAppVirtualFps;
   double nFpsIdle = nFps - 1.0;
 
+  // GGPO timesync: if we're running ahead, skip a frame to let the remote catch up.
+  // Only fires during idle input (require_idle_input=true) to avoid disrupting active play.
+  if (kNetGame && !kNetSpectator && !bRunPause && !bAppDoFast && nGGPOTimesyncFrames > 0) {
+    if (nAccTime >= nFps) {
+      nGGPOTimesyncFrames--;
+      GetInput(false);
+      QuarkRunIdle(1);
+      nFrameLast += nFps;
+      return 0;
+    }
+  }
+
   if (nAccTime < nFps || (kNetGame && nRunQuark)) {
     // No need to do anything for a bit
     if (kNetGame) {
@@ -830,15 +846,15 @@ int RunMessageLoop()
               if (bEditActive) {
                 if (kNetGame) {
 
-                  bool allSpaces = true;
-                  for (size_t i = 0; i < MAX_CHAT_SIZE; i++)
+                  bool hasContent = false;
+                  for (size_t i = 0; i < MAX_CHAT_SIZE && EditText[i] != L'\0'; i++)
                   {
-                    if (EditText[i] != 0x20) {
-                      allSpaces = false;
+                    if (EditText[i] != L' ') {
+                      hasContent = true;
                       break;
                     }
                   }
-                  if (!allSpaces)
+                  if (hasContent)
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);

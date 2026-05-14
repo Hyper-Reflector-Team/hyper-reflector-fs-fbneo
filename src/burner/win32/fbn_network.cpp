@@ -135,8 +135,10 @@ int NetworkGetInput()
 		nControls[j] = *bii.pVal;
 	}
 
-	// k is the size in bytes of all inputs for one player
-	int k = j + 1;
+	// k is the size in bytes of all inputs for one player.
+	// Pad to 7 bytes (GAMEINPUT_MAX_BYTES) so it always matches INPUT_SIZE in p2p.h.
+	// nControls is zero-initialized above, so any bytes beyond j+1 are already zero.
+	int k = 7;
 
 	// Send the control block to the Network DLL & retrieve all controls
 	if (kNetGame) {

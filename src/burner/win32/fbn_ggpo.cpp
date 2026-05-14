@@ -26,6 +26,7 @@ namespace Utils {
 extern int nAcbVersion;
 extern int nAcbLoadState;
 extern int bMediaExit;
+extern int nGGPOTimesyncFrames;
 
 uint8_t _playerIndex = PLAYER_NOT_SET;
 uint8_t _otherPlayerIndex = PLAYER_NOT_SET;
@@ -54,6 +55,12 @@ static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
 //static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
+// Dynamic timesync delay: when GGPO detects the local client is running ahead, we temporarily
+// bump frame delay by 1 to let the remote catch up. No frame skips — just holds inputs one
+// frame longer. Restores to the player's original delay after TIMESYNC_DELAY_DURATION frames.
+bool bTimesyncDelayBumped = false;
+int nTimesyncDelayCountdown = 0;
+static const int TIMESYNC_DELAY_DURATION = 120; // ~2 seconds at 60fps
 
 const int ggpo_state_header_size = 6 * sizeof(int);
 
@@ -223,6 +230,15 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
+    // Frame-skip approach: stall the ahead client by up to 2 frames during idle.
+    // ggpo_set_frame_delay is not safe mid-match (breaks input frame sequencing).
+    if (!kNetSpectator) {
+      const int add = info->u.timesync.frames_ahead;
+      if (add > 0) {
+        nGGPOTimesyncFrames = (std::min)(add, 2);
+        bTimesyncDelayBumped = true; // signal overlay — overlay clears this after latching
+      }
+    }
     break;
 
 
@@ -242,6 +258,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
     case DATAGRAM_CODE_CHAT:
+    // Backwards compatibility: older builds used ASCII 'T' for chat datagrams.
+    case 'T':
     {
       TCHAR szUser[MAX_CHAT_SIZE];
       TCHAR szText[MAX_CHAT_SIZE];
@@ -251,13 +269,14 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       // NOTE: I have the player index, but not the actual lookup table for them... that should come from the client...
       // NOTE: I can't include 'ggposession.h' at this time because it will break the compilation.  I will go back and
       // find a proper way to include it later......
-      char* playerName =  ggpo_get_playerName(ggpo, info->player_index);
-      ANSIToTCHAR(playerName, szUser, MAX_NAME_SIZE);
+      char* playerName = ggpo_get_playerName(ggpo, info->player_index);
+      ANSIToTCHAR(playerName ? playerName : "Unknown", szUser, MAX_NAME_SIZE);
 
-      ANSIToTCHAR(msg, szText, info->u.datagram.dataSize);
+      const uint8_t safeSize = (uint8_t)(std::min)((uint32_t)info->u.datagram.dataSize, (uint32_t)(MAX_CHAT_SIZE - 1));
+      ANSIToTCHAR(msg, szText, safeSize);
 
       // Chat messages must be zero terminated...
-      szText[info->u.datagram.dataSize] = 0;
+      szText[safeSize] = 0;
 
       // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
       // TCHAR* useName = first == 'C' ? _T("Command") : szUser;
@@ -300,9 +319,33 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     // ranked savestate
     if (iRanked) {
       _stprintf(tfilename, _T("savestates\\%s_fbneo_ranked.fs"), tname);
-      if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+      HANDLE hFind = FindFirstFile(tfilename, &fd);
+      if (hFind != INVALID_HANDLE_VALUE) {
+        FindClose(hFind);
         // Load our save-state file (freeplay, event mode, etc.)
-        BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        if (loadRes == 0) {
+          DetectorLoad(name, false, iSeed);
+          // if playing a direct game, we never get match information, so put anonymous
+          if (bDirect) {
+            //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+            VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          }
+          return 0;
+        }
+        // If the savestate exists but can't be loaded (wrong format / wrong version),
+        // fall back to normal game init instead of leaving the emulator half-initialized.
+      }
+    }
+
+    // regular savestate
+    _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
+    HANDLE hFind = FindFirstFile(tfilename, &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+      FindClose(hFind);
+      // Load our save-state file (freeplay, event mode, etc.)
+      const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+      if (loadRes == 0) {
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
@@ -311,20 +354,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         }
         return 0;
       }
-    }
-
-    // regular savestate
-    _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
-    if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
-      // Load our save-state file (freeplay, event mode, etc.)
-      BurnStateLoad(tfilename, 1, &DrvInitCallback);
-      DetectorLoad(name, false, iSeed);
-      // if playing a direct game, we never get match information, so put anonymous
-      if (bDirect) {
-        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-      }
-      return 0;
+      // Fall back to normal init if load failed.
     }
   }
 
@@ -335,7 +365,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     if ((_tcscmp(BurnDrvGetText(DRV_NAME), tname) == 0) && (!(BurnDrvGetFlags() & BDF_BOARDROM))) {
       if (!kNetSpectator) {
         MediaInit();
-
+        
         // NOTE: If this is not a kNetGame, then the default game state will be loaded in the DrvInit call.
         // In the block above (~line 288) we are loading a different state.  Since we are in a GGPO
         // callback, we can safely assume that kNetGame == true.
@@ -628,6 +658,10 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iRanked = 0;
   _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
+  bTimesyncDelayBumped = false;
+  nTimesyncDelayCountdown = 0;
+  nVidRunahead = 0; // reset so stale config value isn't sent to peer as our runahead
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -688,6 +722,7 @@ void QuarkInit(TCHAR* tconnect)
   iRanked = 0;
   _playerIndex = 0;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -811,7 +846,9 @@ void QuarkInit(TCHAR* tconnect)
         WIN32_FIND_DATA fd;
         TCHAR tfilename[MAX_PATH];
         _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tgame);
-        if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+        HANDLE hFind = FindFirstFile(tfilename, &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+          FindClose(hFind);
           BurnStateLoad(tfilename, 1, &DrvInitCallback);
         }
         DetectorLoad(gameName, true, iSeed);
@@ -826,11 +863,27 @@ void QuarkInit(TCHAR* tconnect)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
+// Called once per frame from the main loop. Counts down the timesync delay bump and
+// restores the original frame delay when the correction window expires.
+void GGPOTimesyncTick()
+{
+  if (!bTimesyncDelayBumped || nTimesyncDelayCountdown <= 0) return;
+  nTimesyncDelayCountdown--;
+  if (nTimesyncDelayCountdown == 0) {
+    ggpo_set_frame_delay(ggpo, iDelay, nVidRunahead);
+    bTimesyncDelayBumped = false;
+  }
+}
+
+// -------------------------------------------------------------------------------------------------------------------
 void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
   kNetGame = 0;
+  nGGPOTimesyncFrames = 0;
+  bTimesyncDelayBumped = false;
+  nTimesyncDelayCountdown = 0;
   bMediaExit = true;
 
 }
@@ -895,6 +948,12 @@ bool QuarkIncrementFrame()
 // --------------------------------------------------------------------------------------------------------
 void QuarkSendChat(char* text)
 {
+  if (_playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
+    auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
+    wchar_t nameBuffer[16 * 2];
+    wcscpy(nameBuffer, ANSIToTCHAR(playerName ? playerName : "Unknown", NULL, NULL));
+    VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(text, NULL, NULL));
+  }
   ggpo_send_chat(ggpo, text);
 }
 

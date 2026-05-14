@@ -21,6 +21,8 @@ Port to FBA by OopsWare
 
 #include "cps3.h"
 #include "sh2_intf.h"
+#include <cmath>
+#include <cstdlib>
 
 #define	BE_GFX		1
 #define BE_GFX_CRAM 0   // do not touch!
@@ -56,7 +58,323 @@ static UINT32 *RamScreen;
 
 UINT8 cps3_reset = 0;
 UINT8 cps3_palette_change = 0;
+
+// Palette DMA debug log — fill-and-freeze with dedup by dest address.
+// Captures the first PAL_LOG_SIZE unique DMA destinations seen after each
+// game reset. Repeated writes to the same dest (e.g. 1000(9984) during
+// character select spamming) only consume one slot, leaving room to capture
+// the less-frequent character palette writes at match start.
+struct PalDmaWrite { UINT32 dest; UINT32 len; };
+static const int PAL_LOG_SIZE = 32;
+PalDmaWrite g_pal_dma_log[PAL_LOG_SIZE] = {};
+int g_pal_dma_log_count = 0;
 UINT32 cps3_clear_opposites = 0;
+
+// Pre-shift RGB samples per character palette slot, for overlay swatches.
+struct CharPalSample { UINT8 r, g, b; };
+CharPalSample g_char_pal_samples[12][64] = {};
+
+// Full pre-shift originals per slot per player, used to reapply when mask toggles
+// or when cps3_palette_change rebuilds Cps3CurPal from raw RamPal.
+static const int CHAR_PAL_SLOT_SIZE = 64;
+static CharPalSample s_pal_orig_p1[12][CHAR_PAL_SLOT_SIZE] = {};
+static CharPalSample s_pal_orig_p2[12][CHAR_PAL_SLOT_SIZE] = {};
+static UINT32        s_pal_orig_len[12] = {};   // actual entries stored per slot
+static UINT32        s_pal_mask_prev   = 0xFFF; // detects runtime mask changes
+
+// Per-player hue shift in degrees (0 = no change).
+// Not used for character palettes (JSON costumes handle those), but kept for
+// experimenting with stage/background palette shifts in the future.
+float cps3_p1_hue_shift = 0.f;
+float cps3_p2_hue_shift = 0.f;
+
+// Known character palette DMA destinations captured via overlay log (Alex vs Ryu).
+// P1 uses these offsets; P2 uses the same offsets + 0x0400.
+// Gap addresses (0x0100, 0x0140, 0x0300, 0x0340 for P1) are effect/shared
+// palette slots that must NOT be shifted to avoid recoloring hit effects.
+static const UINT32 s_char_pal_offsets[] = {
+    0x0000, 0x0040, 0x0080, 0x00C0,  // slots  0- 3  (numpad 1-4)
+    0x0180, 0x01C0,                   // slots  4- 5  (numpad 5-6)
+    0x0200, 0x0240, 0x0280, 0x02C0,  // slots  6- 9  (numpad 7-8-9-0)
+    0x0380, 0x03C0,                   // slots 10-11  (numpad - and +)
+};
+static const int s_char_pal_offset_count = 12;
+
+// Bitmask: bit N enables hue-shifting for s_char_pal_offsets[N].
+// Toggle individual bits at runtime with numpad 1-9, 0, -, + to identify
+// which address contains effect palette data mixed with character palette data.
+// Only slots 0 (0x0000/0x0400) and 6 (0x0200/0x0600) confirmed as primary character
+// body palettes. All others are effects/shared and should not be shifted by default.
+// Slot map (P1 offset / P2 offset):
+//   0: 0x0000 / 0x0400   6: 0x0200 / 0x0600
+//   1: 0x0040 / 0x0440   7: 0x0240 / 0x0640
+//   2: 0x0080 / 0x0480   8: 0x0280 / 0x0680
+//   3: 0x00C0 / 0x04C0   9: 0x02C0 / 0x06C0
+//   4: 0x0180 / 0x0580  10: 0x0380 / 0x0780
+//   5: 0x01C0 / 0x05C0  11: 0x03C0 / 0x07C0
+UINT32 cps3_char_pal_mask = (1u << 0) | (1u << 6);  // slots 0 and 6 only
+
+// Returns the hue shift for a paldma_dest if its slot is enabled, else 0.
+static float cps3_char_pal_shift(UINT32 dest)
+{
+    for (int k = 0; k < s_char_pal_offset_count; k++) {
+        if (!((cps3_char_pal_mask >> k) & 1)) continue;  // slot disabled
+        if (dest == s_char_pal_offsets[k])              return cps3_p1_hue_shift;
+        if (dest == s_char_pal_offsets[k] + 0x0400)    return cps3_p2_hue_shift;
+    }
+    return 0.f;
+}
+
+void cps3_apply_hue_shift(UINT32 &r, UINT32 &g, UINT32 &b, float shift_deg)
+{
+	if (shift_deg == 0.f) return;
+	float rf = r / 255.f, gf = g / 255.f, bf = b / 255.f;
+	float cmax = rf > gf ? (rf > bf ? rf : bf) : (gf > bf ? gf : bf);
+	float cmin = rf < gf ? (rf < bf ? rf : bf) : (gf < bf ? gf : bf);
+	float delta = cmax - cmin;
+	if (delta < 0.04f) return;  // achromatic (black/white/gray) — preserve outlines
+
+	float h;
+	if      (cmax == rf) h = fmodf((gf - bf) / delta + 6.f, 6.f);
+	else if (cmax == gf) h = (bf - rf) / delta + 2.f;
+	else                 h = (rf - gf) / delta + 4.f;
+	h = fmodf(h * 60.f + shift_deg + 360.f, 360.f);
+
+	float s = delta / cmax;
+	float v = cmax;
+	float c = v * s;
+	float x = c * (1.f - fabsf(fmodf(h / 60.f, 2.f) - 1.f));
+	float m = v - c;
+	float r1, g1, b1;
+	switch ((int)(h / 60.f)) {
+		case 0:  r1=c; g1=x; b1=0; break;
+		case 1:  r1=x; g1=c; b1=0; break;
+		case 2:  r1=0; g1=c; b1=x; break;
+		case 3:  r1=0; g1=x; b1=c; break;
+		case 4:  r1=x; g1=0; b1=c; break;
+		default: r1=c; g1=0; b1=x; break;
+	}
+	r = (UINT32)((r1 + m) * 255.f + 0.5f);
+	g = (UINT32)((g1 + m) * 255.f + 0.5f);
+	b = (UINT32)((b1 + m) * 255.f + 0.5f);
+}
+
+// ---- Costume system --------------------------------------------------------
+// Palette override data loaded from config/palmods/sfiii3nrj/{char}/color{N}.json.
+// Character and color are read from RAM at the first character-slot DMA of each match.
+static CharPalSample s_costume_p1[12][CHAR_PAL_SLOT_SIZE] = {};
+static CharPalSample s_costume_p2[12][CHAR_PAL_SLOT_SIZE] = {};
+static bool          s_costume_loaded_p1[12] = {};
+static bool          s_costume_loaded_p2[12] = {};
+UINT16 g_costume_mask_p1 = 0;
+UINT16 g_costume_mask_p2 = 0;
+// Last-seen character/color IDs — reload costumes whenever any of these change.
+// Initialised to 0xFF (invalid) so the first character-slot DMA always triggers a load.
+static UINT8 s_last_p1_char        = 0xFF;
+static UINT8 s_last_p2_char        = 0xFF;
+static UINT8 s_last_p1_color       = 0xFF;
+static UINT8 s_last_p2_color       = 0xFF;
+static UINT8 s_last_cs_state       = 0xFF; // tracks 0x02015545; reset costumes on →4 (char select enters)
+
+// Exposed so the overlay can display who was detected.
+UINT8 g_p1_char_id   = 0;
+UINT8 g_p2_char_id   = 0;
+UINT8 g_p1_color_idx = 0;
+UINT8 g_p2_color_idx = 0;
+
+static const char* cps3_char_name(UINT8 id)
+{
+	switch (id) {
+		case  1: return "alex";
+		case  2: return "ryu";
+		case  3: return "yun";
+		case  4: return "dudley";
+		case  5: return "necro";
+		case  6: return "hugo";
+		case  7: return "ibuki";
+		case  8: return "elena";
+		case  9: return "oro";
+		case 10: return "yang";
+		case 11: return "ken";
+		case 12: return "sean";
+		case 13: return "urien";
+		case 14: return "gouki";
+		case 16: return "chun-li";
+		case 17: return "makoto";
+		case 18: return "q";
+		case 19: return "twelve";
+		case 20: return "remy";
+		default: return NULL;
+	}
+}
+
+// Read a byte from SH2 RAM (base 0x02000000).
+// CPS3/SH2 is big-endian; in LSB_FIRST builds bytes within each 32-bit word
+// are stored reversed, so byte address N is physically at N ^ 0x03.
+static inline UINT8 cps3_read_ram_byte(UINT32 addr)
+{
+	UINT32 off = addr - 0x02000000;
+#ifdef LSB_FIRST
+	return RamMain[off ^ 0x03];
+#else
+	return RamMain[off];
+#endif
+}
+
+static const char* cps3_json_skip_ws(const char* p)
+{
+	while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+	return p;
+}
+
+// Parses [[r,g,b],...] advancing *pp past the closing ], returns entries filled.
+static int cps3_json_parse_rgb_array(const char** pp, CharPalSample out[], int max_count)
+{
+	const char* p = cps3_json_skip_ws(*pp);
+	if (*p != '[') { *pp = p; return 0; }
+	p++;
+	int count = 0;
+	while (count < max_count) {
+		p = cps3_json_skip_ws(p);
+		if (*p == ']') { p++; break; }
+		if (*p == ',') { p++; continue; }
+		if (*p != '[') break;
+		p++;
+		char* end;
+		p = cps3_json_skip_ws(p);
+		long rv = strtol(p, &end, 10); p = (const char*)end;
+		p = cps3_json_skip_ws(p); if (*p == ',') p++;
+		p = cps3_json_skip_ws(p);
+		long gv = strtol(p, &end, 10); p = (const char*)end;
+		p = cps3_json_skip_ws(p); if (*p == ',') p++;
+		p = cps3_json_skip_ws(p);
+		long bv = strtol(p, &end, 10); p = (const char*)end;
+		p = cps3_json_skip_ws(p);
+		if (*p == ']') p++;
+		rv = rv < 0 ? 0 : rv > 255 ? 255 : rv;
+		gv = gv < 0 ? 0 : gv > 255 ? 255 : gv;
+		bv = bv < 0 ? 0 : bv > 255 ? 255 : bv;
+		out[count++] = { (UINT8)rv, (UINT8)gv, (UINT8)bv };
+	}
+	*pp = p;
+	return count;
+}
+
+static void cps3_load_costume(const char* path,
+                               CharPalSample out[12][CHAR_PAL_SLOT_SIZE],
+                               bool loaded[12], UINT16& mask)
+{
+	memset(loaded, 0, 12 * sizeof(bool));
+	mask = 0;
+	FILE* f = fopen(path, "r");
+	if (!f) return;
+	fseek(f, 0, SEEK_END);
+	long sz = ftell(f);
+	rewind(f);
+	if (sz <= 0 || sz > 1024 * 1024) { fclose(f); return; }
+	char* buf = new char[(size_t)sz + 1];
+	fread(buf, 1, (size_t)sz, f);
+	buf[sz] = '\0';
+	fclose(f);
+
+	const char* p = strstr(buf, "\"slots\"");
+	if (!p) { delete[] buf; return; }
+	p += 7;
+	p = cps3_json_skip_ws(p);
+	if (*p == ':') p++;
+	p = cps3_json_skip_ws(p);
+	if (*p != '{') { delete[] buf; return; }
+	p++;
+
+	while (*p) {
+		p = cps3_json_skip_ws(p);
+		if (*p == '}' || *p == '\0') break;
+		if (*p == ',') { p++; continue; }
+		if (*p != '"') { p++; continue; }
+		p++;
+		char* end;
+		int slot_idx = (int)strtol(p, &end, 10);
+		p = (const char*)end;
+		if (*p == '"') p++;
+		p = cps3_json_skip_ws(p);
+		if (*p == ':') p++;
+		p = cps3_json_skip_ws(p);
+		if (slot_idx >= 0 && slot_idx < 12) {
+			int n = cps3_json_parse_rgb_array(&p, out[slot_idx], CHAR_PAL_SLOT_SIZE);
+			if (n > 0) { loaded[slot_idx] = true; mask |= (1u << slot_idx); }
+		} else {
+			// Skip unknown slot — advance past its array.
+			int depth = 0;
+			while (*p) {
+				if (*p == '[') depth++;
+				else if (*p == ']') { if (--depth < 0) { p++; break; } }
+				p++;
+			}
+		}
+	}
+	delete[] buf;
+}
+
+static void cps3_load_costume_p1()
+{
+	g_p1_char_id   = cps3_read_ram_byte(0x02011387);
+	g_p1_color_idx = cps3_read_ram_byte(0x02015683);
+	memset(s_costume_loaded_p1, 0, sizeof(s_costume_loaded_p1));
+	g_costume_mask_p1 = 0;
+	const char* name = cps3_char_name(g_p1_char_id);
+	if (name) {
+		char path[256];
+		snprintf(path, sizeof(path), "config/palmods/sfiii3nrj/%s/color%d.json",
+		         name, (int)g_p1_color_idx);
+		cps3_load_costume(path, s_costume_p1, s_costume_loaded_p1, g_costume_mask_p1);
+	}
+}
+
+static void cps3_load_costume_p2()
+{
+	g_p2_char_id   = cps3_read_ram_byte(0x02011388);
+	g_p2_color_idx = cps3_read_ram_byte(0x02015684);
+	memset(s_costume_loaded_p2, 0, sizeof(s_costume_loaded_p2));
+	g_costume_mask_p2 = 0;
+	const char* name = cps3_char_name(g_p2_char_id);
+	if (name) {
+		char path[256];
+		snprintf(path, sizeof(path), "config/palmods/sfiii3nrj/%s/color%d.json",
+		         name, (int)g_p2_color_idx);
+		cps3_load_costume(path, s_costume_p2, s_costume_loaded_p2, g_costume_mask_p2);
+	}
+}
+// ---------------------------------------------------------------------------
+
+// Re-applies the current mask/shifts to Cps3CurPal from stored originals.
+// Called after cps3_palette_change rebuilds from RamPal, and on mask toggle.
+static void cps3_reapply_palette()
+{
+	for (int k = 0; k < s_char_pal_offset_count; k++) {
+		UINT32 len = s_pal_orig_len[k];
+		if (len == 0) continue;
+		bool   enabled    = (cps3_char_pal_mask >> k) & 1;
+		bool   costume_p1 = s_costume_loaded_p1[k];
+		bool   costume_p2 = s_costume_loaded_p2[k];
+		// Costume slots use exact colors; non-costume slots use hue shift (if enabled).
+		float  p1_shift   = (!costume_p1 && enabled) ? cps3_p1_hue_shift : 0.f;
+		float  p2_shift   = (!costume_p2 && enabled) ? cps3_p2_hue_shift : 0.f;
+		for (UINT32 i = 0; i < len; i++) {
+			{
+				const CharPalSample& o = costume_p1 ? s_costume_p1[k][i] : s_pal_orig_p1[k][i];
+				UINT32 r = o.r, g = o.g, b = o.b;
+				if (p1_shift != 0.f) cps3_apply_hue_shift(r, g, b, p1_shift);
+				Cps3CurPal[s_char_pal_offsets[k] + i] = BurnHighCol(r, g, b, 0);
+			}
+			{
+				const CharPalSample& o = costume_p2 ? s_costume_p2[k][i] : s_pal_orig_p2[k][i];
+				UINT32 r = o.r, g = o.g, b = o.b;
+				if (p2_shift != 0.f) cps3_apply_hue_shift(r, g, b, p2_shift);
+				Cps3CurPal[s_char_pal_offsets[k] + 0x0400 + i] = BurnHighCol(r, g, b, 0);
+			}
+		}
+	}
+}
 
 UINT32 cps3_key1, cps3_key2, cps3_isSpecial;
 UINT32 cps3_bios_test_hack, cps3_game_test_hack;
@@ -722,10 +1040,79 @@ void __fastcall cps3WriteWord(UINT32 addr, UINT16 data)
 	case 0x040c00ae:
 		//bprintf(PRINT_NORMAL, _T("palettedma [%04x]  from %08x to %08x fade %08x size %d\n"), data, (paldma_source << 1), paldma_dest, paldma_fade, paldma_length);
 		if (data & 0x0002) {
+			// Fill-and-freeze log: record first PAL_LOG_SIZE unique dest values.
+			// Dedup prevents the repeated 1000(9984) character-select spam from
+			// consuming all slots before the per-character match-start writes land.
+			if (g_pal_dma_log_count < PAL_LOG_SIZE) {
+				bool found = false;
+				for (int k = 0; k < g_pal_dma_log_count; k++) {
+					if (g_pal_dma_log[k].dest == paldma_dest) { found = true; break; }
+				}
+				if (!found)
+					g_pal_dma_log[g_pal_dma_log_count++] = { paldma_dest, paldma_length };
+			}
+			// Resolve hue shift once per DMA write, not per entry.
+			const float this_write_shift = cps3_char_pal_shift(paldma_dest);
+
+			// Find which of the 12 known character palette slots this write targets.
+			int  this_write_slot = -1;
+			bool this_write_is_p2 = false;
+			for (int k = 0; k < s_char_pal_offset_count; k++) {
+				if (paldma_dest == s_char_pal_offsets[k]) {
+					this_write_slot = k; this_write_is_p2 = false; break;
+				}
+				if (paldma_dest == s_char_pal_offsets[k] + 0x0400) {
+					this_write_slot = k; this_write_is_p2 = true; break;
+				}
+			}
+			// When character_select_state (0x02015545) transitions TO 4, a new character
+			// select round is starting. Invalidate tracking so both players' costumes
+			// are freshly loaded when the match begins, even if the same char+color
+			// is picked again. (Lua uses this same value to initialize match tracking.)
+			{
+				UINT8 cur_cs = cps3_read_ram_byte(0x02015545);
+				if (cur_cs == 4 && s_last_cs_state != 4) {
+					s_last_p1_char = s_last_p2_char = s_last_p1_color = s_last_p2_color = 0xFF;
+				}
+				s_last_cs_state = cur_cs;
+			}
+
+			if (this_write_slot >= 0) {
+				s_pal_orig_len[this_write_slot] = (paldma_length < (UINT32)CHAR_PAL_SLOT_SIZE)
+				                                  ? paldma_length : (UINT32)CHAR_PAL_SLOT_SIZE;
+				// Reload each player's costume independently when their own IDs change.
+				// Tracking is always updated (even for invalid/transitional IDs like 0)
+				// so the 0->valid transition is always detected. We only actually
+				// load when the ID maps to a known character — this preserves existing
+				// costume data across brief invalid reads during screen transitions.
+				UINT8 cur_p1_char  = cps3_read_ram_byte(0x02011387);
+				UINT8 cur_p1_color = cps3_read_ram_byte(0x02015683);
+				if (cur_p1_char != s_last_p1_char || cur_p1_color != s_last_p1_color) {
+					s_last_p1_char  = cur_p1_char;
+					s_last_p1_color = cur_p1_color;
+					if (cps3_char_name(cur_p1_char)) {
+						cps3_load_costume_p1();
+						cps3_reapply_palette();
+					}
+					// Invalid ID (0/unknown): tracking updated, costume data untouched.
+				}
+				UINT8 cur_p2_char  = cps3_read_ram_byte(0x02011388);
+				UINT8 cur_p2_color = cps3_read_ram_byte(0x02015684);
+				if (cur_p2_char != s_last_p2_char || cur_p2_color != s_last_p2_color) {
+					s_last_p2_char  = cur_p2_char;
+					s_last_p2_color = cur_p2_color;
+					if (cps3_char_name(cur_p2_char)) {
+						cps3_load_costume_p2();
+						cps3_reapply_palette();
+					}
+					// Invalid ID (0/unknown): tracking updated, costume data untouched.
+				}
+			}
+
 			for (UINT32 i=0; i<paldma_length; i++) {
 				UINT16 * src = (UINT16 *)RomUser;
 				UINT16 coldata = src[(paldma_source - 0x200000 + i)];
-				
+
 #ifdef LSB_FIRST
 				coldata = (coldata << 8) | (coldata >> 8);
 #endif
@@ -739,10 +1126,39 @@ void __fastcall cps3WriteWord(UINT32 addr, UINT16 data)
 					b = cps3_get_fade(b, (paldma_fade & 0x0000007f)>>0);
 					coldata = (coldata & 0x8000) | (r << 0) | (g << 5) | (b << 10);
 				}
-				
+
 				r = r << 3;
 				g = g << 3;
 				b = b << 3;
+
+				// Store ROM originals (always, before any costume override).
+				if (this_write_slot >= 0 && i < (UINT32)CHAR_PAL_SLOT_SIZE) {
+					CharPalSample samp = { (UINT8)r, (UINT8)g, (UINT8)b };
+					if (this_write_is_p2)
+						s_pal_orig_p2[this_write_slot][i] = samp;
+					else {
+						s_pal_orig_p1[this_write_slot][i] = samp;
+						g_char_pal_samples[this_write_slot][i] = samp;
+					}
+				}
+
+				// Apply costume override if loaded for this slot+player,
+				// otherwise apply hue shift for known character palette slots.
+				bool costume_applied = false;
+				if (this_write_slot >= 0 && i < (UINT32)CHAR_PAL_SLOT_SIZE) {
+					if (!this_write_is_p2 && s_costume_loaded_p1[this_write_slot]) {
+						const CharPalSample& c = s_costume_p1[this_write_slot][i];
+						r = c.r; g = c.g; b = c.b;
+						g_char_pal_samples[this_write_slot][i] = c; // show costume in swatches
+						costume_applied = true;
+					} else if (this_write_is_p2 && s_costume_loaded_p2[this_write_slot]) {
+						const CharPalSample& c = s_costume_p2[this_write_slot][i];
+						r = c.r; g = c.g; b = c.b;
+						costume_applied = true;
+					}
+				}
+				if (!costume_applied && this_write_shift != 0.f)
+					cps3_apply_hue_shift(r, g, b, this_write_shift);
 
 #ifdef LSB_FIRST
 				RamPal[(paldma_dest + i) ^ 1] = coldata;
@@ -1089,6 +1505,9 @@ static void Cps3PatchRegion()
 
 static INT32 Cps3Reset()
 {
+	s_last_p1_char = s_last_p2_char = s_last_p1_color = s_last_p2_color = 0xFF;
+	s_last_cs_state = 0xFF;
+
 	// re-map cram_bank
 	cram_bank = 0;
 	Sh2MapMemory((UINT8 *)RamCRam, 0x04100000, 0x041fffff, MAP_RAM);
@@ -1122,6 +1541,15 @@ static INT32 Cps3Reset()
 	spritelist_dma = 0;
 	cps3SndReset();
 	cps3_reset = 0;
+
+	// Clear palette DMA log so next session captures fresh writes from startup.
+	g_pal_dma_log_count = 0;
+	memset(g_pal_dma_log,       0, sizeof(g_pal_dma_log));
+	memset(g_char_pal_samples,  0, sizeof(g_char_pal_samples));
+	memset(s_pal_orig_p1,       0, sizeof(s_pal_orig_p1));
+	memset(s_pal_orig_p2,       0, sizeof(s_pal_orig_p2));
+	memset(s_pal_orig_len,      0, sizeof(s_pal_orig_len));
+	s_pal_mask_prev = cps3_char_pal_mask; // avoid spurious reapply right after reset
 
 	HiscoreReset();
 
@@ -2048,9 +2476,17 @@ INT32 cps3Frame()
 			r |= r >> 5;
 			g |= g >> 5;
 			b |= b >> 5;
-			Cps3CurPal[i] = BurnHighCol(r, g, b, 0);	
+			Cps3CurPal[i] = BurnHighCol(r, g, b, 0);
 		}
 		cps3_palette_change = 0;
+		// Rebuild wiped our hue shifts — put them back.
+		cps3_reapply_palette();
+	}
+
+	// Reapply immediately if the slot mask was toggled from the overlay.
+	if (cps3_char_pal_mask != s_pal_mask_prev) {
+		s_pal_mask_prev = cps3_char_pal_mask;
+		cps3_reapply_palette();
 	}
 	
 	if (WideScreenFrameDelay == GetCurrentFrame()) {
