@@ -1064,6 +1064,26 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_flag("--auto-delay", directOps.autoDelay, "Negotiate frame delay automatically from measured ping instead of using --delay. Both sides end up with the same (higher) delay.");
   directConnect->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
+  // Spectate-relay publishing (src/util-servers/spectate-relay). Only meaningful when
+  // --player 1 (playerSlot 0) -- that's always the publisher, see fbn_spectate.cpp.
+  directConnect->add_flag("--spectate", directOps.spectate, "Publish this match's confirmed input to the spectate relay (playerSlot 0 only).");
+  directConnect->add_option("--relay-host", directOps.spectateRelayHost, "Spectate relay host (requires --spectate).");
+  directConnect->add_option("--relay-udp-port", directOps.spectateRelayUdpPort, "Spectate relay UDP port. 33335 is default.");
+  directConnect->add_option("--relay-tcp-port", directOps.spectateRelayTcpPort, "Spectate relay TCP port. 33336 is default.");
+  directConnect->add_option("--match-id", directOps.spectateMatchId, "Match id to publish under (requires --spectate).");
+  directConnect->add_option("--uid", directOps.spectateUid, "This player's own account uid (requires --spectate).");
+
+
+  // Options to watch a match via the spectate relay -- not playing in it. See fbn_spectate.cpp.
+  SpectateConnectionOptions spectateOps;
+  auto spectate = app.add_subcommand("spectate", "Watch a match via the spectate relay.");
+  spectate->add_option("--relay-host", spectateOps.relayHost, "Spectate relay host")->required();
+  spectate->add_option("--relay-udp-port", spectateOps.relayUdpPort, "Spectate relay UDP port. 33335 is default.");
+  spectate->add_option("--relay-tcp-port", spectateOps.relayTcpPort, "Spectate relay TCP port. 33336 is default.");
+  spectate->add_option("--match-id", spectateOps.matchId, "Match id to watch")->required();
+  spectate->add_option("--uid", spectateOps.uid, "This viewer's own identifier")->required();
+  spectate->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
+
 
   std::string loadPath = "";
   auto load = app.add_subcommand("load", "Load a game state (.fs), or replay file (.fr)");
@@ -1183,6 +1203,13 @@ int ProcessCommandLine(LPSTR lpCmdLine)
     int res = HandleDirectConnection(directOps, logOps);
     if (res != 0) {
       return res;
+    }
+  }
+  else if (spectate->parsed())
+  {
+    spectateOps.romName = romName;
+    if (!InitSpectatorConnection(spectateOps)) {
+      return 1;
     }
   }
   else if (load->parsed())

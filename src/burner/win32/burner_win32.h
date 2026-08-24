@@ -103,6 +103,29 @@ struct DirectConnectionOptions {
   // GGPO_EVENTCODE_RUNNING and GGPO_EVENTCODE_DATAGRAM/DATAGRAM_CODE_DELAY_NEGOTIATE cases),
   // and the gate at the top of QuarkGetInput, all in src/burner/win32/fbn_ggpo.cpp.
   bool autoDelay = false;
+
+  // Spectate-relay publishing (see src/burner/win32/fbn_spectate.cpp). Only meaningful when
+  // playerNumber == 1 (playerSlot 0) -- that's always the publisher, per the websocket-server's
+  // spectate-request handler. spectateUid must be this player's own account uid (the same one
+  // the launcher already authenticates with), since that's what the signaling server hands
+  // spectators back as the publisher to watch.
+  bool spectate = false;
+  std::string spectateRelayHost = "";
+  UINT16 spectateRelayUdpPort = 33335;
+  UINT16 spectateRelayTcpPort = 33336;
+  std::string spectateMatchId = "";
+  std::string spectateUid = "";
+};
+
+// Options for watching a match via the spectate relay (src/burner/win32/fbn_spectate.cpp),
+// as opposed to DirectConnectionOptions above which is for actually playing in one.
+struct SpectateConnectionOptions {
+  std::string romName;
+  std::string relayHost;
+  UINT16 relayUdpPort = 33335;
+  UINT16 relayTcpPort = 33336;
+  std::string matchId;
+  std::string uid; // this viewer's own identifier, used for the relay's per-subscriber bookkeeping
 };
 
 // ---------------------------------------------------------------------------
@@ -470,6 +493,39 @@ int NetworkGetInput();
 
 // fbn_ggpo.cpp
 int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps);
+
+// Reused directly by fbn_spectate.cpp's publisher/spectator paths -- both are already
+// kNetSpectator-aware (deferred ROM init, state-apply) and GGPO-session-agnostic (they just
+// serialize/deserialize driver state via BurnAreaScan), so spectating doesn't need its own
+// copies of this logic. See the comment block in fbn_spectate.cpp for how they're used.
+bool __cdecl ggpo_begin_game_callback(const char* name);
+bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int* checksum, int frame);
+bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len);
+void __cdecl ggpo_free_buffer_callback(void* buffer);
+
+// fbn_spectate.cpp -- spectating via the backend relay (src/util-servers/spectate-relay), not
+// GGPO. See that file's top comment for the wire protocol and overall design.
+//
+// Publisher (host) side: only ever active on the playerSlot-0 client of a match, and only
+// when opted into via --spectate. SpectatePublishRecordFrame/-Tick are called from
+// fbn_ggpo.cpp/QuarkIncrementFrame every simulated frame; safe to call unconditionally, they
+// no-op when publishing isn't active.
+void SpectatePublishInit(const DirectConnectionOptions& ops);
+void SpectatePublishRecordFrame(int frame, const void* values);
+void SpectatePublishTick();
+void SpectatePublishShutdown();
+bool SpectatePublishActive();
+
+// Spectator (viewer) side. InitSpectatorConnection blocks until the ROM is loaded and an
+// initial state snapshot has been applied (or a connection failure), matching how the rest of
+// startup already blocks on ROM/driver init -- there's nothing useful to render before that
+// completes anyway. SpectateGetInput is called once per frame in place of NetworkGetInput()
+// (see the branch in fbn_network.cpp); returns false when the next frame hasn't arrived yet,
+// which the caller already treats as a routine skip-and-retry.
+bool InitSpectatorConnection(const SpectateConnectionOptions& ops);
+bool SpectateGetInput(void* values);
+bool SpectateActive();
+void SpectateDisconnect();
 
 // [OBSOLETE]
 void QuarkInit(TCHAR* connect);

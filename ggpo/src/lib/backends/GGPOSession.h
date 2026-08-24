@@ -30,6 +30,11 @@ struct GGPOSession {
   virtual bool GetNetworkStats(GGPONetworkStats* stats, uint8_t playerIndex) { return GGPO_OK; }
   virtual GGPOErrorCode Logv(const char* fmt, va_list list) { Utils::LogIt_v(fmt, list); return GGPO_OK; }
 
+  // The current confirmed/predicted simulation frame (adjusted during rollbacks). Used by the
+  // spectate-relay publisher path (src/burner/win32/fbn_spectate.cpp) to key its per-frame input
+  // ring buffer. -1 means unsupported by this backend.
+  virtual int GetCurrentFrame() { return -1; }
+
   virtual void SetFrameDelay(int delay, int runahead) { throw std::exception("not supported!"); }
   virtual GGPOErrorCode SetDisconnectTimeout(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }
   virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }

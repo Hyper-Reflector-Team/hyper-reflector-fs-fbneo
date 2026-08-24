@@ -800,6 +800,15 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   // call is used instead of touching that setting directly); restored in QuarkEnd().
   ForceHighResolutionTimingForNetplay();
 
+  // Publisher (host) side of spectating (src/burner/win32/fbn_spectate.cpp) -- independent of
+  // the GGPO peer handshake above (it's a separate connection to the relay, not to the other
+  // player), so it can start immediately rather than waiting on any GGPO event. Only ever runs
+  // on the playerSlot-0 client, per the websocket-server's spectate-request handler. No-ops
+  // internally if ops.spectate wasn't set.
+  if (ops.spectate && ops.playerNumber == 1) {
+    SpectatePublishInit(ops);
+  }
+
   return 0;
 
 
@@ -974,6 +983,7 @@ void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
+  SpectatePublishShutdown(); // no-op unless this instance was publishing
   RestoreHighResolutionTimingAfterNetplay();
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
@@ -1041,6 +1051,16 @@ bool QuarkGetInput(void* values, int isize, int playerIndex)
 
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
   bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
+
+  // Record this frame's confirmed input for the spectate-relay publisher (fbn_spectate.cpp),
+  // if active. Called on every ggpo_synchronize_input, including rollback resimulations (see
+  // ggpo_rollback_frame_callback below -> RunFrame(0,0,false) -> NetworkGetInput() ->
+  // QuarkGetInput), so a mispredicted frame's ring buffer entry gets overwritten with the
+  // corrected value before SpectatePublishTick ever considers it old enough to publish.
+  if (res && SpectatePublishActive()) {
+    SpectatePublishRecordFrame(ggpo_get_current_frame(ggpo), values);
+  }
+
   return res;
 }
 
@@ -1054,13 +1074,21 @@ bool QuarkIncrementFrame()
     AviStart();
   }
 
-  ggpo_advance_frame(ggpo);
+  if (ggpo) {
+    // Everything in this block assumes a live GGPO session (host or player). A relay spectator
+    // never starts one (see InitSpectatorConnection, fbn_spectate.cpp), so skip it entirely --
+    // ggpo_advance_frame/ggpo_get_stats are null-safe on their own, but ggpoutil_perfmon_update
+    // isn't verified to be, and there's nothing useful for any of this to do for a spectator.
+    ggpo_advance_frame(ggpo);
 
-  if (!bSkipPerfmonUpdates) {
-    GGPONetworkStats stats;
+    if (!bSkipPerfmonUpdates) {
+      GGPONetworkStats stats;
 
-    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
-    ggpoutil_perfmon_update(ggpo, stats);
+      ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
+      ggpoutil_perfmon_update(ggpo, stats);
+    }
+
+    SpectatePublishTick(); // no-op unless this instance is publishing
   }
 
   if (!bReplaySupport && !bReplayStarted) {

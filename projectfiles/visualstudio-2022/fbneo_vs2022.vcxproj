@@ -367,6 +367,7 @@
     <ClCompile Include="..\..\src\burner\win32\fbn_ggpo.cpp" />
     <ClCompile Include="..\..\src\burner\win32\fbn_ggpo_perfmon.cpp" />
     <ClCompile Include="..\..\src\burner\win32\fbn_network.cpp" />
+    <ClCompile Include="..\..\src\burner\win32\fbn_spectate.cpp" />
     <ClCompile Include="..\..\src\burner\win32\gameinfo.cpp" />
     <ClCompile Include="..\..\src\burner\win32\image_win32.cpp" />
     <ClCompile Include="..\..\src\burner\win32\inpc.cpp" />

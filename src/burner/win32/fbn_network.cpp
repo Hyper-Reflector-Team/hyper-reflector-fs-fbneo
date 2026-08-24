@@ -140,9 +140,12 @@ int NetworkGetInput()
 	// nControls is zero-initialized above, so any bytes beyond j+1 are already zero.
 	int k = 7;
 
-	// Send the control block to the Network DLL & retrieve all controls
+	// Send the control block to the Network DLL & retrieve all controls.
+	// A relay spectator (fbn_spectate.cpp) never starts a GGPO session -- it gets its
+	// confirmed input straight from the relay's live feed instead, into this same buffer.
 	if (kNetGame) {
-		if (!QuarkGetInput(nControls, k, MAXPLAYER)) {
+		bool gotInput = SpectateActive() ? SpectateGetInput(nControls) : QuarkGetInput(nControls, k, MAXPLAYER);
+		if (!gotInput) {
 			return 1;
 		}
 	}

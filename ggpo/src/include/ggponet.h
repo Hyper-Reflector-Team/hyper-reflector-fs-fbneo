@@ -572,6 +572,15 @@ extern "C" {
   GGPO_API bool __cdecl ggpo_get_stats(GGPOSession*, GGPONetworkStats* stats, uint8_t playerIndex);
 
   /*
+   * ggpo_get_current_frame --
+   *
+   * The current confirmed/predicted simulation frame (adjusted during rollbacks). -1 if the
+   * session's backend doesn't support this. Used by the spectate-relay publisher path to key
+   * its per-frame input ring buffer by the same frame numbering GGPO itself uses.
+   */
+  GGPO_API int __cdecl ggpo_get_current_frame(GGPOSession*);
+
+  /*
    * ggpo_set_disconnect_timeout --
    *
    * Sets the disconnect timeout.  The session will automatically disconnect
