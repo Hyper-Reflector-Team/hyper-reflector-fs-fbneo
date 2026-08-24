@@ -459,6 +459,24 @@ void SpectatePublishTick()
     }
   }
 
+  // The publisher UDP socket is otherwise send-only; this is the one thing the relay ever
+  // pushes back to it unsolicited (see broadcastSpectatorCount in main.go).
+  if (g_pubUdpSocket != INVALID_SOCKET) {
+    char recvBuf[512];
+    for (;;) {
+      int n = recv(g_pubUdpSocket, recvBuf, sizeof(recvBuf) - 1, 0);
+      if (n <= 0) break;
+      recvBuf[n] = 0;
+      std::string msg(recvBuf, n);
+
+      std::string type;
+      if (!JsonExtractString(msg, "type", type) || type != "spectator-count") continue;
+      long count = -1;
+      if (!JsonExtractLong(msg, "count", count) || count < 0) continue;
+      VidOverlaySetGameSpectators((int)count);
+    }
+  }
+
   SpectatePublishServiceSnapshotRequest();
 }
 
@@ -651,8 +669,15 @@ bool SpectateGetInput(void* values)
         ANSIToTCHAR(text.c_str(), textBuf, MAX_CHAT_SIZE);
         VidOverlayAddChatLine(nameBuf, textBuf);
       }
+      else if (type == "spectator-count") {
+        // Pushed by the relay whenever the watcher count for this match changes (see
+        // broadcastSpectatorCount in main.go); includes the local viewer in the count.
+        long count = -1;
+        if (!JsonExtractLong(msg, "count", count) || count < 0) continue;
+        VidOverlaySetGameSpectators((int)count);
+      }
       // Other types (publish/watch/unpublish/unwatch acks, if the relay ever sends any) are
-      // ignored -- this socket only ever receives "frame" and "chat" today.
+      // ignored -- this socket only ever receives "frame", "chat", and "spectator-count" today.
     }
   }
 

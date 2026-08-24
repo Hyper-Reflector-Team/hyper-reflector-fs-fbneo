@@ -1425,9 +1425,13 @@ void VidOverlaySetGameScores(int score1, int score2, int winner)
 
 void VidOverlaySetGameSpectators(int num)
 {
+  // Previously subtracted 1 for a "server spectator" pseudo-viewer from the old GGPOClient/
+  // streaming-server design (see the [OBSOLETE] ggpo_on_client_event_callback in fbn_ggpo.cpp,
+  // its only caller before fbn_spectate.cpp). The spectate-relay has no such pseudo-viewer --
+  // every count it reports is a real spectator -- so this is now an honest 1:1 display.
   wchar_t buf[32];
-  spectators.Set(_itow(MAX(0, num - 1), buf, 10));	// remove server spectator
-  show_spectators = num > 1;
+  spectators.Set(_itow(MAX(0, num), buf, 10));
+  show_spectators = num > 0;
 }
 
 void VidOverlaySetSystemMessage(const wchar_t* text)
