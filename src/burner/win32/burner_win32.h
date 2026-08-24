@@ -126,6 +126,7 @@ struct SpectateConnectionOptions {
   UINT16 relayTcpPort = 33336;
   std::string matchId;
   std::string uid; // this viewer's own identifier, used for the relay's per-subscriber bookkeeping
+  std::string userName; // display name for spectator-only chat; falls back to uid if empty
 };
 
 // ---------------------------------------------------------------------------
@@ -526,6 +527,13 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops);
 bool SpectateGetInput(void* values);
 bool SpectateActive();
 void SpectateDisconnect();
+
+// Spectator-only chat (relayed spectator-to-spectator, never reaches the players -- see
+// main.go's "chat" case, which only ever touches the subscribers map). Wired into run.cpp's
+// existing chat entry box (VK_RETURN handler) in place of QuarkSendChat when SpectateActive().
+// Incoming chat from other spectators is handled inside SpectateGetInput's existing per-frame
+// UDP drain, alongside "frame" messages -- no separate poll needed.
+void SpectateSendChat(const char* text);
 
 // [OBSOLETE]
 void QuarkInit(TCHAR* connect);

@@ -1086,7 +1086,13 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			break;
 		}
 		case MENU_STATE_UNDO:
-			scrnSSUndo();
+			// Matches the !kNetGame guard on MENU_STATE_LOAD_SLOT right below -- undoing a state
+			// load is itself a state load, so it needs the same protection during netplay
+			// (desyncs a real GGPO match, permanently desyncs a spectator since there's no
+			// rollback to recover from it).
+			if (!kNetGame) {
+				scrnSSUndo();
+			}
 			break;
 		case MENU_STATE_LOAD_SLOT:
 			if (bDrvOkay && !kNetGame) {

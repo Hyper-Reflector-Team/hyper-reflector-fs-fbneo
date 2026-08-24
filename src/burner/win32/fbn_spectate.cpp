@@ -492,6 +492,7 @@ namespace {
   bool g_spectateActive = false;
   std::string g_specMatchId;
   std::string g_specUid;
+  std::string g_specUserName;
 
   SOCKET g_specUdpSocket = INVALID_SOCKET;
   sockaddr_in g_specRelayUdpAddr;
@@ -507,6 +508,7 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
 
   g_specMatchId = ops.matchId;
   g_specUid = ops.uid;
+  g_specUserName = ops.userName.empty() ? ops.uid : ops.userName;
   g_specFrameBuffer.clear();
   g_specNextFrameToApply = -1;
 
@@ -624,17 +626,33 @@ bool SpectateGetInput(void* values)
       std::string msg(recvBuf, n);
 
       std::string type;
-      if (!JsonExtractString(msg, "type", type) || type != "frame") continue;
+      if (!JsonExtractString(msg, "type", type)) continue;
 
-      long frame = -1;
-      std::string dataB64;
-      if (!JsonExtractLong(msg, "frame", frame) || !JsonExtractString(msg, "data", dataB64)) continue;
-      if (frame < g_specNextFrameToApply) continue; // already applied / stale duplicate
+      if (type == "frame") {
+        long frame = -1;
+        std::string dataB64;
+        if (!JsonExtractLong(msg, "frame", frame) || !JsonExtractString(msg, "data", dataB64)) continue;
+        if (frame < g_specNextFrameToApply) continue; // already applied / stale duplicate
 
-      std::vector<unsigned char> decoded;
-      if (!Base64Decode(dataB64, decoded) || decoded.size() != SPECTATE_INPUT_BYTES) continue;
+        std::vector<unsigned char> decoded;
+        if (!Base64Decode(dataB64, decoded) || decoded.size() != SPECTATE_INPUT_BYTES) continue;
 
-      g_specFrameBuffer[(int)frame] = std::move(decoded);
+        g_specFrameBuffer[(int)frame] = std::move(decoded);
+      }
+      else if (type == "chat") {
+        // Spectator-only chat from another watcher of this match (see main.go's "chat" case --
+        // it never touches the publishers map, so this can never be a message from a player).
+        std::string userName, text;
+        if (!JsonExtractString(msg, "userName", userName) || !JsonExtractString(msg, "text", text)) continue;
+
+        TCHAR nameBuf[64];
+        ANSIToTCHAR(userName.c_str(), nameBuf, 64);
+        TCHAR textBuf[MAX_CHAT_SIZE];
+        ANSIToTCHAR(text.c_str(), textBuf, MAX_CHAT_SIZE);
+        VidOverlayAddChatLine(nameBuf, textBuf);
+      }
+      // Other types (publish/watch/unpublish/unwatch acks, if the relay ever sends any) are
+      // ignored -- this socket only ever receives "frame" and "chat" today.
     }
   }
 
@@ -647,6 +665,26 @@ bool SpectateGetInput(void* values)
   g_specFrameBuffer.erase(it);
   g_specNextFrameToApply++;
   return true;
+}
+
+void SpectateSendChat(const char* text)
+{
+  if (!g_spectateActive || !text) return;
+
+  // Local echo first -- the relay never echoes a chat message back to its own sender (see
+  // main.go's "chat" case), so without this the sender would never see their own message.
+  TCHAR nameBuf[64];
+  ANSIToTCHAR(g_specUserName.c_str(), nameBuf, 64);
+  TCHAR textBuf[MAX_CHAT_SIZE];
+  ANSIToTCHAR(text, textBuf, MAX_CHAT_SIZE);
+  VidOverlayAddChatLine(nameBuf, textBuf);
+
+  if (g_specUdpSocket == INVALID_SOCKET) return;
+  std::string msg = "{\"type\":\"chat\",\"matchId\":\"" + JsonEscapeSimple(g_specMatchId) +
+    "\",\"uid\":\"" + JsonEscapeSimple(g_specUid) +
+    "\",\"userName\":\"" + JsonEscapeSimple(g_specUserName) +
+    "\",\"text\":\"" + JsonEscapeSimple(text) + "\"}";
+  sendto(g_specUdpSocket, msg.data(), (int)msg.size(), 0, (sockaddr*)&g_specRelayUdpAddr, sizeof(g_specRelayUdpAddr));
 }
 
 bool SpectateActive()

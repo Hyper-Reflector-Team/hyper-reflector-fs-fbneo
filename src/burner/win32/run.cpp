@@ -80,6 +80,15 @@ std::vector<lua_hotkey_handler> hotkey_debounces = {
 
 static void CheckSystemMacros() // These are the Pause / FFWD macros added to the input dialog
 {
+  // Spectating (fbn_spectate.cpp) is a one-way network replay -- nothing local should be able
+  // to touch playback or game state independently of the relay feed. This matters most for
+  // Load State / Save State below: those aren't otherwise gated on kNetGame/kNetSpectator at
+  // all, and a manual state load while spectating would desync it from the live feed
+  // permanently (there's no rollback to recover from it, unlike a real GGPO match).
+  if (SpectateActive()) {
+    return;
+  }
+
   // Pause
   if (macroSystemPause && macroSystemPause != prevPause && timeGetTime() > prevPause_debounce + 90) {
     if (bHasFocus) {
@@ -858,7 +867,15 @@ int RunMessageLoop()
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);
-                    QuarkSendChat(text);
+                    // Spectators never start a GGPO session (QuarkSendChat needs one) and their
+                    // chat is a separate, spectator-only relay channel anyway -- see
+                    // SpectateSendChat's doc comment in burner_win32.h.
+                    if (SpectateActive()) {
+                      SpectateSendChat(text);
+                    }
+                    else {
+                      QuarkSendChat(text);
+                    }
                   }
 
                 }
