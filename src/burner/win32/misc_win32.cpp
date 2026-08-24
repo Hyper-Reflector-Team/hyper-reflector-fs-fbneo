@@ -315,3 +315,36 @@ void DisableHighResolutionTiming()
 		bHighResolutionTimerActive = 0;
 	}
 }
+
+// GGPO netplay needs precise frame pacing on both ends of the connection to avoid one
+// side drifting and forcing the other into constant rollback (see InitDirectConnection /
+// QuarkEnd in fbn_ggpo.cpp for the call sites, and the "any other issues" writeup in chat
+// history for why default Windows scheduler granularity was suspected as a cause). Force
+// high-res timing for the duration of a netplay session regardless of the user's
+// bEnableHighResTimer menu setting above (which only applies to normal, offline play).
+// Tracked separately from bHighResolutionTimerActive so this doesn't fight with / get torn
+// down by the user's own preference toggling mid-session; timeBeginPeriod/timeEndPeriod calls
+// are independently ref-counted per-process by winmm, so nested calls (ours + the user's own,
+// if their menu setting is also on) are safe and don't need to be coordinated, see Microsoft's
+// timeBeginPeriod docs: https://learn.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod
+static int bNetplayHighResTimerActive = 0;
+
+void ForceHighResolutionTimingForNetplay()
+{
+	TIMECAPS hTCaps;
+
+	if (bNetplayHighResTimerActive) return; // already forced
+
+	if (timeGetDevCaps(&hTCaps, sizeof(hTCaps)) == TIMERR_NOERROR) {
+		bNetplayHighResTimerActive = hTCaps.wPeriodMin;
+		timeBeginPeriod(hTCaps.wPeriodMin);
+	}
+}
+
+void RestoreHighResolutionTimingAfterNetplay()
+{
+	if (bNetplayHighResTimerActive) {
+		timeEndPeriod(bNetplayHighResTimerActive);
+		bNetplayHighResTimerActive = 0;
+	}
+}

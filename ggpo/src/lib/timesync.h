@@ -16,6 +16,19 @@
 #define MIN_FRAME_ADVANTAGE          3
 #define MAX_FRAME_ADVANTAGE          9
 
+// If a correction has been warranted but blocked by the idle-input gate for this many
+// consecutive checked frames (~3s at 60fps), apply it anyway. Otherwise a player who's
+// rarely fully idle (aggressive/active playstyle) while running ahead can block the
+// correction indefinitely, leaving their opponent to absorb rollback for the whole match.
+// "Consecutive checked frames" is really consecutive real frames here, not once-every-few-
+// seconds check cycles: Peer2PeerBackend::Poll2Players/PollNPlayers (ggpo/src/lib/backends/
+// p2p.cpp) only advances `_next_recommended_sleep` (and so only skips calling
+// RecommendFrameDelay -> recommend_frame_wait_duration) when a correction actually fires
+// (`if (interval > 0) { ... _next_recommended_sleep = current_frame + RECOMMENDATION_INTERVAL;
+// }`); while a correction is pending-but-blocked, that guard never advances, so this function
+// runs on every single confirmed frame, making 180 a real ~3s wall-clock bound, not a guess.
+#define IDLE_GATE_ESCALATION_FRAMES 180
+
 class TimeSync {
 public:
    TimeSync();
@@ -28,6 +41,7 @@ protected:
    int         _remote[FRAME_WINDOW_SIZE];
    GameInput   _last_inputs[MIN_UNIQUE_FRAMES];
    int         _next_prediction;
+   int         _idle_gate_blocked_frames = 0;
 };
 
 #endif

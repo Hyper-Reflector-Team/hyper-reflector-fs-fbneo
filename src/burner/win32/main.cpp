@@ -1061,6 +1061,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_option("-p,--player", directOps.playerNumber, "Player number (1, 2, etc.)")->required()->check(CLI::Validator(CLI::Range(1, 4)));
   directConnect->add_option("-n,--name", directOps.playerName, "Your name")->required();
   directConnect->add_option("-d,--delay", directOps.frameDelay, "Frame delay.  1 is default");
+  directConnect->add_flag("--auto-delay", directOps.autoDelay, "Negotiate frame delay automatically from measured ping instead of using --delay. Both sides end up with the same (higher) delay.");
   directConnect->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
 

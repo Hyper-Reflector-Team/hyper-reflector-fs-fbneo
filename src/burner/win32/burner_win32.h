@@ -96,6 +96,13 @@ struct DirectConnectionOptions {
   UINT16 playerNumber = 0;
   std::string playerName = "";
   UINT16 frameDelay = 1;
+  // When true, frameDelay above is only used as a fallback until both sides have
+  // exchanged ping-based candidates; the final delay (max of the two) is negotiated
+  // right after connecting, before any input frames are queued. Set from the --auto-delay
+  // CLI flag in main.cpp; consumed by InitDirectConnection, ggpo_on_event_callback (the
+  // GGPO_EVENTCODE_RUNNING and GGPO_EVENTCODE_DATAGRAM/DATAGRAM_CODE_DELAY_NEGOTIATE cases),
+  // and the gate at the top of QuarkGetInput, all in src/burner/win32/fbn_ggpo.cpp.
+  bool autoDelay = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -236,6 +243,8 @@ int WndInMid(HWND hMid, HWND hBase);
 char* DecorateGameName(unsigned int nBurnDrv);
 void EnableHighResolutionTiming();
 void DisableHighResolutionTiming();
+void ForceHighResolutionTimingForNetplay();
+void RestoreHighResolutionTimingAfterNetplay();
 
 // drv.cpp
 extern int bDrvOkay;								// 1 if the Driver has been initted okay, and it's okay to use the BurnDrv functions

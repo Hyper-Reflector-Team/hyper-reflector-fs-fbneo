@@ -55,12 +55,84 @@ static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
 //static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
-// Dynamic timesync delay: when GGPO detects the local client is running ahead, we temporarily
-// bump frame delay by 1 to let the remote catch up. No frame skips — just holds inputs one
-// frame longer. Restores to the player's original delay after TIMESYNC_DELAY_DURATION frames.
+// Set whenever a GGPO timesync frame-skip correction fires (see nGGPOTimesyncFrames in
+// GGPO_EVENTCODE_TIMESYNC below). Purely a UI latch: VidOverlaySetStats in
+// src/intf/video/win32/vid_overlay.cpp (around the `if (bTimesyncDelayBumped)` block) checks
+// this once per update to show a "timesync active" indicator and then clears it itself.
 bool bTimesyncDelayBumped = false;
-int nTimesyncDelayCountdown = 0;
-static const int TIMESYNC_DELAY_DURATION = 120; // ~2 seconds at 60fps
+
+// Auto-delay negotiation (see ggpo_on_event_callback's GGPO_EVENTCODE_RUNNING and
+// DATAGRAM_CODE_DELAY_NEGOTIATE handling, and the gate at the top of QuarkGetInput). Each side
+// computes a candidate delay from its own measured ping and exchanges it with the peer; both
+// settle on max(local, remote) so neither player ends up carrying more of the rollback burden
+// than the other. Kicks off as soon as the connection can send data (GGPO_EVENTCODE_RUNNING,
+// datagrams can't send before that: see UdpProtocol::SendData's `_current_state == Running`
+// check in ggpo/src/lib/network/udp_proto.cpp) and is guaranteed to finish (or time out)
+// strictly before any local input frame is queued: GGPO itself refuses local input while
+// _synchronizing is set (Peer2PeerBackend::AddLocalInput in ggpo/src/lib/backends/p2p.cpp,
+// returns GGPO_ERRORCODE_NOT_SYNCHRONIZED), and _synchronizing only clears right after RUNNING
+// fires (Peer2PeerBackend::CheckInitialSync, same file). ggpo_set_frame_delay itself isn't
+// safe once a frame is queued because InputQueue::AddInput bakes the delay into the frame
+// number at queue time (ggpo/src/lib/input_queue.cpp, `frame += _frame_delay;`), changing it
+// after the fact would make frame numbering discontinuous. ops.frameDelay stays in effect as
+// the fallback value until negotiation resolves.
+static bool bAutoDelay = false;
+static bool bAutoDelayApplied = false;
+static int nAutoDelayLocalCandidate = -1; // -1 = not yet computed
+static int nAutoDelayBlockedFrames = 0;   // consecutive QuarkGetInput calls held off pending negotiation
+
+static const int MIN_AUTO_DELAY_FRAMES = 0;
+static const int MAX_AUTO_DELAY_FRAMES = 8;
+// Safety net if the peer never replies (packet loss, or a peer build without this feature):
+// stop holding off local input after this many frames (~2s @ 60fps) and just use what we have.
+static const int AUTO_DELAY_TIMEOUT_FRAMES = 120;
+
+// Aim the local candidate at roughly covering one-way trip time, so the remote's real input
+// tends to arrive around when it's needed instead of relying entirely on rollback to cover it.
+static int ComputeAutoDelayFrames(int pingMs)
+{
+  if (pingMs <= 0) return MIN_AUTO_DELAY_FRAMES;
+  double frameMs = 100000.0 / (double)nBurnFPS;
+  double oneWayMs = pingMs / 2.0;
+  int frames = (int)((oneWayMs / frameMs) + 0.5);
+  if (frames < MIN_AUTO_DELAY_FRAMES) frames = MIN_AUTO_DELAY_FRAMES;
+  if (frames > MAX_AUTO_DELAY_FRAMES) frames = MAX_AUTO_DELAY_FRAMES;
+  return frames;
+}
+
+// Sends our locally-computed candidate and, if we've already received the peer's, finalizes
+// immediately. Safe to call from either the CONNECTED_TO_PEER handler or the datagram handler.
+static void SendAutoDelayCandidate()
+{
+  if (nAutoDelayLocalCandidate < 0) {
+    GGPONetworkStats stats;
+    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
+    nAutoDelayLocalCandidate = ComputeAutoDelayFrames(stats.network.ping);
+  }
+  uint8_t candidate = (uint8_t)nAutoDelayLocalCandidate;
+  QuarkSendData(DATAGRAM_CODE_DELAY_NEGOTIATE, &candidate, sizeof(candidate));
+}
+
+static void FinalizeAutoDelay(int remoteCandidate)
+{
+  if (bAutoDelayApplied) return; // already settled, ignore stray/duplicate packets
+
+  if (nAutoDelayLocalCandidate < 0) {
+    // Peer's candidate beat ours here (unlikely, but handle it): compute ours now.
+    GGPONetworkStats stats;
+    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
+    nAutoDelayLocalCandidate = ComputeAutoDelayFrames(stats.network.ping);
+  }
+
+  int finalDelay = (std::max)(nAutoDelayLocalCandidate, remoteCandidate);
+  finalDelay = (std::min)(finalDelay, MAX_AUTO_DELAY_FRAMES);
+
+  ggpo_set_frame_delay(ggpo, finalDelay, nVidRunahead);
+  iDelay = finalDelay;
+  bAutoDelayApplied = true;
+
+  Utils::LogIt(CATEGORY_CONNECTION, "auto-delay negotiated: local=%d remote=%d final=%d", nAutoDelayLocalCandidate, remoteCandidate, finalDelay);
+}
 
 const int ggpo_state_header_size = 6 * sizeof(int);
 
@@ -217,6 +289,16 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     VidSSetSystemMessage(_T(""));
 
     // NOTE: Version exchange happens during sync now.
+
+    // NOT the earlier GGPO_EVENTCODE_CONNECTED_TO_PEER, that fires on the first sync reply,
+    // several round trips before this one (see the `_connected`/QueueEvent(evt) block ahead of
+    // the round-trip countdown in UdpProtocol::OnSyncReply, ggpo/src/lib/network/udp_proto.cpp),
+    // while datagrams can't send until Running (see the auto-delay comment block up top for the
+    // full chain of reasoning + citations for why this is still safe despite the round trip to
+    // the peer not having completed yet by the time we get here).
+    if (bAutoDelay && !kNetSpectator) {
+      SendAutoDelayCandidate();
+    }
     break;
   }
 
@@ -236,7 +318,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       const int add = info->u.timesync.frames_ahead;
       if (add > 0) {
         nGGPOTimesyncFrames = (std::min)(add, 2);
-        bTimesyncDelayBumped = true; // signal overlay — overlay clears this after latching
+        bTimesyncDelayBumped = true; // signal overlay, overlay clears this after latching
       }
     }
     break;
@@ -254,6 +336,20 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       uint8_t delay = data[0];
       uint8_t runahead = data[1];
       VidOverlaySetRemoteStats(delay, runahead);
+    }
+    break;
+
+    case DATAGRAM_CODE_DELAY_NEGOTIATE:
+    {
+      if (bAutoDelay && !kNetSpectator) {
+        int remoteCandidate = (uint8_t)info->u.datagram.data[0];
+        if (nAutoDelayLocalCandidate < 0) {
+          // We haven't sent ours yet (peer's packet beat our CONNECTED_TO_PEER handling),
+          // send it now so the peer settles too, then finalize on our end.
+          SendAutoDelayCandidate();
+        }
+        FinalizeAutoDelay(remoteCandidate);
+      }
     }
     break;
 
@@ -660,7 +756,10 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iDelay = 0;
   nGGPOTimesyncFrames = 0;
   bTimesyncDelayBumped = false;
-  nTimesyncDelayCountdown = 0;
+  bAutoDelay = ops.autoDelay;
+  bAutoDelayApplied = false;
+  nAutoDelayLocalCandidate = -1;
+  nAutoDelayBlockedFrames = 0;
   nVidRunahead = 0; // reset so stale config value isn't sent to peer as our runahead
 
 #ifdef _DEBUG
@@ -692,6 +791,14 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
 
   ggpo_set_frame_delay(ggpo, ops.frameDelay, nVidRunahead);
   VidOverlaySetSystemMessage(_T("Connecting..."));
+
+  // Coarse OS timer resolution on either end skews frame pacing enough to look like
+  // one-sided rollback to the other player. Force precise timing for netplay regardless
+  // of the user's offline-play preference (bEnableHighResTimer / EnableHighResolutionTiming
+  // in src/burner/win32/misc_win32.cpp, applied once at app startup, see
+  // ForceHighResolutionTimingForNetplay in the same file for why a separate, session-scoped
+  // call is used instead of touching that setting directly); restored in QuarkEnd().
+  ForceHighResolutionTimingForNetplay();
 
   return 0;
 
@@ -863,27 +970,18 @@ void QuarkInit(TCHAR* tconnect)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-// Called once per frame from the main loop. Counts down the timesync delay bump and
-// restores the original frame delay when the correction window expires.
-void GGPOTimesyncTick()
-{
-  if (!bTimesyncDelayBumped || nTimesyncDelayCountdown <= 0) return;
-  nTimesyncDelayCountdown--;
-  if (nTimesyncDelayCountdown == 0) {
-    ggpo_set_frame_delay(ggpo, iDelay, nVidRunahead);
-    bTimesyncDelayBumped = false;
-  }
-}
-
-// -------------------------------------------------------------------------------------------------------------------
 void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
+  RestoreHighResolutionTimingAfterNetplay();
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
   bTimesyncDelayBumped = false;
-  nTimesyncDelayCountdown = 0;
+  bAutoDelay = false;
+  bAutoDelayApplied = false;
+  nAutoDelayLocalCandidate = -1;
+  nAutoDelayBlockedFrames = 0;
   bMediaExit = true;
 
 }
@@ -914,6 +1012,33 @@ void QuarkDisconnect()
 // -------------------------------------------------------------------------------------------------------------------
 bool QuarkGetInput(void* values, int isize, int playerIndex)
 {
+  // Hold off feeding local input until auto-delay negotiation resolves. GGPO itself refuses
+  // local input until _synchronizing clears, see the `if (_synchronizing) return
+  // GGPO_ERRORCODE_NOT_SYNCHRONIZED;` check at the top of Peer2PeerBackend::AddLocalInput, and
+  // Peer2PeerBackend::CheckInitialSync where _synchronizing is only cleared right *after*
+  // GGPO_EVENTCODE_RUNNING is dispatched (both ggpo/src/lib/backends/p2p.cpp), but our
+  // negotiation needs one more round trip after that to settle, and ggpo_set_frame_delay isn't
+  // safe once a frame has been queued (see the auto-delay comment block near the top of this
+  // file for why), so this closes that gap. Returning false here is the same "not ready yet"
+  // signal GGPO's own _synchronizing gate already produces during the pre-Running window, the
+  // caller already handles it as a routine skip-and-retry, not an error: NetworkGetInput()
+  // (src/burner/win32/fbn_network.cpp) returns early, and RunFrame (src/burner/win32/run.cpp,
+  // the `if (NetworkGetInput())` branches) just retries next tick without advancing the
+  // emulator or calling ggpo_advance_frame. Times out and proceeds with whatever candidate we
+  // have if the peer never replies, so a lost packet can't hang the match.
+  if (bAutoDelay && !bAutoDelayApplied) {
+    nAutoDelayBlockedFrames++;
+    if (nAutoDelayBlockedFrames < AUTO_DELAY_TIMEOUT_FRAMES) {
+      return false;
+    }
+    Utils::LogIt(CATEGORY_CONNECTION, "auto-delay negotiation timed out after %d frames, using local candidate", nAutoDelayBlockedFrames);
+    if (nAutoDelayLocalCandidate >= 0) {
+      ggpo_set_frame_delay(ggpo, nAutoDelayLocalCandidate, nVidRunahead);
+      iDelay = nAutoDelayLocalCandidate;
+    }
+    bAutoDelayApplied = true;
+  }
+
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
   bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
   return res;

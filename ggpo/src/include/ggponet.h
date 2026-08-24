@@ -173,6 +173,12 @@ extern "C" {
     , DATAGRAM_CODE_CHAT = 2
     , DATAGRAM_CODE_GGPO_SETTINGS = 3
     , DATAGRAM_CODE_DISCONNECT = 4        // Player is disconnecting.
+    , DATAGRAM_CODE_DELAY_NEGOTIATE = 5   // Auto-delay: exchanging each side's ping-based candidate frame delay.
+                                           // Sent/handled entirely on the burner side, see SendAutoDelayCandidate,
+                                           // FinalizeAutoDelay, and the GGPO_EVENTCODE_DATAGRAM case for this code
+                                           // in src/burner/win32/fbn_ggpo.cpp. Nothing in the ggpo lib itself
+                                           // interprets this code beyond routing it generically like any other
+                                           // datagram (see UdpProtocol::SendData/OnData, ggpo/src/lib/network/udp_proto.cpp).
   } EDatagramCode;
 
   /*

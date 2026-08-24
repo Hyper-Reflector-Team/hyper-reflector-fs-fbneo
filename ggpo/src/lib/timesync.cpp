@@ -55,6 +55,7 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   g_timesync_radvantage = radvantage;
   Utils::LogIt(CATEGORY_TIMESYNC, "timesync check: advantage=%.2f radvantage=%.2f diff=%.2f", advantage, radvantage, radvantage - advantage);
   if (advantage >= radvantage) {
+    _idle_gate_blocked_frames = 0; // not ahead, nothing pending
     return 0;
   }
 
@@ -68,6 +69,7 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   // Some things just aren't worth correcting for.  Make sure
   // the difference is relevant before proceeding.
   if (sleep_frames < MIN_FRAME_ADVANTAGE) {
+    _idle_gate_blocked_frames = 0;
     return 0;
   }
 
@@ -79,15 +81,29 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
     // Idle window before timesync is allowed to fire. Tune between 8 (~133ms) and 16 (~267ms).
     // Lower = fires sooner after input stops. Higher = more conservative, less correction.
     const int IDLE_WINDOW = 8;
+    bool isIdle = true;
     for (i = 1; i < IDLE_WINDOW; i++) {
-      // Compare bits only — equal() also checks frame number which always differs, so it always rejects.
+      // Compare bits only, equal() also checks frame number which always differs, so it always rejects.
       if (memcmp(_last_inputs[i].bits, _last_inputs[0].bits, _last_inputs[0].size) != 0) {
-        Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  rejecting due to input stuff at position %d...!!!", count, i);
+        isIdle = false;
+        break;
+      }
+    }
+
+    if (!isIdle) {
+      // A correction is warranted but this player isn't idle. Don't let that block the
+      // correction forever, an aggressive/active player who's rarely fully idle would
+      // otherwise leave their opponent absorbing rollback for the entire match.
+      _idle_gate_blocked_frames++;
+      if (_idle_gate_blocked_frames < IDLE_GATE_ESCALATION_FRAMES) {
+        Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  rejecting due to input stuff (blocked %d frames)...!!!", count, _idle_gate_blocked_frames);
         return 0;
       }
+      Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  idle gate blocked for %d frames, applying correction anyway", count, _idle_gate_blocked_frames);
     }
   }
 
   // Success!!! Recommend the number of frames to sleep and adjust
+  _idle_gate_blocked_frames = 0;
   return MIN(sleep_frames, MAX_FRAME_ADVANTAGE);
 }
