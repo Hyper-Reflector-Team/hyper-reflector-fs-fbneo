@@ -61,6 +61,13 @@ static int iSeed = 0;
 // this once per update to show a "timesync active" indicator and then clears it itself.
 bool bTimesyncDelayBumped = false;
 
+// True once GGPO_EVENTCODE_RUNNING has actually fired for the current session -- i.e. the match
+// is truly synchronized, as opposed to kNetGame just being set (true for the whole "Connecting
+// to Peer..."/"Synchronizing..." window too). See run.cpp's GetInput: real local input capture
+// (the branch that mutates GameInpClearOpposites/GameInpFixDiagonals's SOCD history) is gated
+// on this, not on kNetGame alone, so idle mashing during that window can't desync the match.
+bool bGGPOMatchRunning = false;
+
 // Auto-delay negotiation (see ggpo_on_event_callback's GGPO_EVENTCODE_RUNNING and
 // DATAGRAM_CODE_DELAY_NEGOTIATE handling, and the gate at the top of QuarkGetInput). Each side
 // computes a candidate delay from its own measured ping and exchanges it with the peer; both
@@ -288,6 +295,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     VidOverlaySetSystemMessage(_T(""));
     VidSSetSystemMessage(_T(""));
 
+    // The match is now actually synchronized. Let run.cpp's GetInput start capturing real
+    // local input (see bGGPOMatchRunning's declaration above), and wipe whatever SOCD/diagonal
+    // history built up from idle mashing during the "Connecting.../Synchronizing..." window so
+    // it can't bias the first real synchronized frame differently on each machine.
+    bGGPOMatchRunning = true;
+    GameInpResetSOCDHistory();
+
     // NOTE: Version exchange happens during sync now.
 
     // NOT the earlier GGPO_EVENTCODE_CONNECTED_TO_PEER, that fires on the first sync reply,
@@ -305,10 +319,30 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
     VidOverlaySetSystemMessage(_T("Disconnected from Peer"));
     VidSSetSystemMessage(_T("Disconnected from Peer"));
+    // The local simulation can't advance without the peer (rollback only covers
+    // MAX_PREDICTION_FRAMES worth of missing input, see ggpo/src/lib/sync.h) -- once it's stuck
+    // waiting, the sound card just keeps repeating whatever's left in its buffer, which is
+    // audible as a buzz/drone rather than silence. Stop it instead of leaving that playing.
+    AudSoundStop();
     if (bReplayRecording) {
       AviStop();
       bMediaExit = true;
     }
+    break;
+
+  case GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
+    // Same "stuck waiting for the peer" case as above, but before GGPO gives up and declares a
+    // full disconnect (see SetDisconnectTimeout/SetDisconnectNotifyStart) -- the peer may still
+    // come back, so this stops the buzzing without ending the match outright.
+    VidOverlaySetSystemMessage(_T("Connection interrupted..."));
+    VidSSetSystemMessage(_T("Connection interrupted..."));
+    AudSoundStop();
+    break;
+
+  case GGPO_EVENTCODE_CONNECTION_RESUMED:
+    VidOverlaySetSystemMessage(_T(""));
+    VidSSetSystemMessage(_T(""));
+    AudSoundPlay();
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
@@ -350,6 +384,15 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
         }
         FinalizeAutoDelay(remoteCandidate);
       }
+    }
+    break;
+
+    case DATAGRAM_CODE_SPECTATOR_COUNT:
+    {
+      // Forwarded by playerSlot 0 (see SpectatePublishTick in fbn_spectate.cpp) -- this player
+      // has no connection to the spectate relay at all, so this datagram is the only way it
+      // learns the current spectator count.
+      VidOverlaySetGameSpectators((int)info->u.datagram.data[0]);
     }
     break;
 
@@ -756,6 +799,7 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iDelay = 0;
   nGGPOTimesyncFrames = 0;
   bTimesyncDelayBumped = false;
+  bGGPOMatchRunning = false;
   bAutoDelay = ops.autoDelay;
   bAutoDelayApplied = false;
   nAutoDelayLocalCandidate = -1;
@@ -988,6 +1032,7 @@ void QuarkEnd()
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
   bTimesyncDelayBumped = false;
+  bGGPOMatchRunning = false;
   bAutoDelay = false;
   bAutoDelayApplied = false;
   nAutoDelayLocalCandidate = -1;

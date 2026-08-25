@@ -292,6 +292,9 @@ extern int kNetGame;
 extern int kNetSpectator;
 extern int kNetLua;
 extern char kNetQuarkId[128];
+// True once GGPO_EVENTCODE_RUNNING has actually fired (fbn_ggpo.cpp) -- unlike kNetGame, which
+// is set for the whole "Connecting.../Synchronizing..." window too. See run.cpp's GetInput.
+extern bool bGGPOMatchRunning;
 
 int RunIdleDelay(int frames);
 int RunIdle();

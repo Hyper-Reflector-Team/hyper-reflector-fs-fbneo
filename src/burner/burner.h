@@ -120,6 +120,10 @@ void GameInpUpdatePrev(bool bCopy);
 void GameInpUpdateNext(bool bCopy);
 void GameInpClearOpposites(bool bCopy);
 void GameInpFixDiagonals(bool bCopy);
+// Zeroes the process-lifetime SOCD/diagonal-cleaning history those two use -- call once a
+// netplay match is actually confirmed running (fbn_ggpo.cpp, GGPO_EVENTCODE_RUNNING) so
+// pre-match mashing (or a previous match) can't bias the first real synchronized frame.
+void GameInpResetSOCDHistory();
 
 // inp_interface.cpp
 extern INT32 nAutoFireRate;

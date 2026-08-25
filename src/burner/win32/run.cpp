@@ -154,7 +154,10 @@ static int GetInput(bool bCopy)
   // get input
   InputMake(bCopy);
 
-  if (bCopy) {
+  // During netplay, don't let real local input capture (and its SOCD/diagonal-cleaning history)
+  // run until GGPO confirms the match is actually synchronized -- see bGGPOMatchRunning's
+  // declaration in fbn_ggpo.cpp and GameInpResetSOCDHistory's comment in gami.cpp.
+  if (bCopy && (!kNetGame || bGGPOMatchRunning)) {
     GameInpClearOpposites(bCopy);
     GameInpUpdateNext(bCopy);
     GameInpFixDiagonals(bCopy);
@@ -242,7 +245,10 @@ static void UpdateOverlay()
 
   // NOTE: This whole thing could be wrapped into 'QuarkUpdateStats' or whatever.
   // --> I mean the check for kNetGame, etc.
-  if (kNetGame) {
+  // A relay spectator (fbn_spectate.cpp) never starts a GGPO session, so QuarkUpdateStats'
+  // ggpo_get_stats call would just fail against a null ggpo and leave its local GGPONetworkStats
+  // uninitialized -- showing garbage (usually 1000+, clamped to the "+999ms" display) as ping.
+  if (kNetGame && !SpectateActive()) {
     QuarkUpdateStats(fps);
   }
   else {

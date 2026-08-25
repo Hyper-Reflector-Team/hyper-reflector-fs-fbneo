@@ -179,6 +179,13 @@ extern "C" {
                                            // in src/burner/win32/fbn_ggpo.cpp. Nothing in the ggpo lib itself
                                            // interprets this code beyond routing it generically like any other
                                            // datagram (see UdpProtocol::SendData/OnData, ggpo/src/lib/network/udp_proto.cpp).
+    , DATAGRAM_CODE_SPECTATOR_COUNT = 6   // Only playerSlot 0 (the publisher) ever talks to the spectate
+                                           // relay (src/burner/win32/fbn_spectate.cpp) or even knows it exists --
+                                           // the opponent has no relay connection at all. Forwarding the
+                                           // spectator count over this existing P2P link is how the opponent
+                                           // finds out, instead of teaching a second client about the relay.
+                                           // Sent/handled entirely on the burner side (SpectatePublishTick and
+                                           // the GGPO_EVENTCODE_DATAGRAM case for this code in fbn_ggpo.cpp).
   } EDatagramCode;
 
   /*

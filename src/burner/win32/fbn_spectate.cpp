@@ -4,23 +4,49 @@
 // viewer side just applies input directly each tick like a live network replay -- there's no
 // rollback, and GGPOSession/Peer2PeerBackend/SpectatorBackend are never touched by this file.
 //
+// The live per-frame feed rides TCP, not UDP. Earlier versions of this file used UDP (matching
+// GGPO's own P2P input packets), but that was the wrong model: GGPO's UDP traffic tolerates loss
+// because every packet carries several recent frames and rollback can correct a late/wrong
+// prediction. A spectator feed has neither -- it's a straight, ordered stream of already-confirmed
+// data with nothing analogous to rollback on the receiving end, so a single dropped UDP packet
+// used to strand a spectator forever waiting on a frame number that would never be resent. TCP's
+// own reliable, ordered delivery makes that whole class of bug impossible by construction (see
+// Project Slippi's spectator protocol for prior art: it makes the same choice, over ENet's
+// reliable channel, specifically to avoid needing any catch-up/gap-recovery machinery).
+//
 // Wire protocol (must match src/util-servers/spectate-relay/main.go exactly):
 //
-//   UDP -- the live per-frame confirmed-input feed. Every packet is one JSON object:
+//   UDP -- presence and chat only. Both are fine to lose occasionally since they're
+//   self-correcting (heartbeats resend periodically; a missed spectator-count update is
+//   overwritten by the next change). Every packet is one JSON object:
 //     {"type":"publish","matchId":"...","uid":"..."}         host -> relay, periodic keepalive
 //     {"type":"unpublish","matchId":"..."}                   host -> relay, explicit stop
 //     {"type":"watch","matchId":"...","uid":"..."}           viewer -> relay, periodic keepalive
 //     {"type":"unwatch","matchId":"...","uid":"..."}         viewer -> relay, explicit stop
-//     {"type":"frame","matchId":"...","frame":N,"data":"<base64>"}  host -> relay -> viewers
+//     {"type":"chat","matchId":"...","uid":"...","userName":"...","text":"..."}
+//     {"type":"spectator-count","matchId":"...","count":N}   relay -> host/viewers
 //
-//   TCP -- the one-shot state-snapshot handoff for mid-match join. Every message on the wire
-//   is [4-byte big-endian header length][header JSON][optional raw payload immediately after]:
-//     Host, on connect: {"role":"publisher","matchId":"..."} then keeps the connection open.
+//   TCP -- the state-snapshot handoff for mid-match join, AND the ongoing live frame feed itself.
+//   A publisher holds ONE persistent connection per match; a spectator also keeps its connection
+//   open for the match's duration once connected, rather than closing it after the snapshot.
+//   Every message on the wire is [4-byte big-endian header length][header JSON][optional raw
+//   payload immediately after]:
+//     Host, on connect: {"role":"publisher","matchId":"..."} then keeps the connection open,
+//       both reading further headers and proactively pushing:
+//         {"cmd":"frame","frame":N,"data":"<base64>"}
+//       for every confirmed frame once it's old enough to be safe to reveal (see
+//       SpectatePublishTick) -- no separate payload, "data" carries the tiny (14-byte)
+//       confirmed-input blob inline.
 //     Relay pushes, per viewer request: {"cmd":"snapshot-request","requestId":"..."}
 //     Host responds: {"cmd":"snapshot-response","requestId":"...","frame":N,"payloadSize":M}
 //       immediately followed by M raw (not base64'd) bytes.
-//     Viewer, on connect: {"role":"spectator","matchId":"..."}, then reads exactly one reply:
-//       either the snapshot-response above, or {"cmd":"error","reason":"..."}.
+//     Viewer, on connect: {"role":"spectator","matchId":"..."}, then reads exactly one of:
+//       {"cmd":"snapshot-response","frame":N,"payloadSize":M} + M bytes, or
+//       {"cmd":"error","reason":"..."}.
+//     On success, the connection stays open: the relay streams every subsequent
+//     {"cmd":"frame",...} push from the publisher down it, in the exact order the publisher sent
+//     them (TCP guarantees this), until either side disconnects. The relay may also send
+//     {"cmd":"publisher-disconnected"} if the publisher goes away first.
 //
 // Why "safe to publish" needs a delay: at the point QuarkGetInput records a frame, GGPO's
 // returned input for it may still be predicted -- a rollback can still resimulate and correct
@@ -33,9 +59,15 @@
 #include "burner.h"
 #include <winsock.h>
 #include <cstdint>
-#include <map>
+#include <deque>
 #include <string>
 #include <vector>
+
+// For DATAGRAM_CODE_SPECTATOR_COUNT / QuarkSendData's use below (forwarding the spectator count
+// to the opponent, who has no connection to the spectate relay of its own -- see SpectatePublishTick).
+extern "C" {
+#include "ggponet.h"
+}
 
 // ---------------------------------------------------------------------------------------------
 // Per-frame confirmed input size: Peer2PeerBackend hardcodes exactly 2 players
@@ -47,6 +79,11 @@ static const int SPECTATE_INPUT_BYTES = 14;
 static const int SPECTATE_RING_SIZE = 64;
 static const int SPECTATE_PUBLISH_DELAY_FRAMES = 20; // must stay > MAX_PREDICTION_FRAMES (15)
 static const DWORD SPECTATE_REGISTER_INTERVAL_MS = 5000; // relay drops a registration after 15s
+static const DWORD SPECTATE_CONNECT_RETRY_BUDGET_MS = 20000; // total time to retry "host not publishing yet"
+static const DWORD SPECTATE_CONNECT_RETRY_INTERVAL_MS = 750;
+static const DWORD SPECTATE_LIVE_CONNECT_RETRY_BUDGET_MS = 5000; // shorter budget for step 2 below --
+  // the publisher already answered once during step 1, so a repeat failure here is far less likely
+  // and shouldn't make a spectator wait as long as the initial "host might not be up yet" case.
 
 // ---------------------------------------------------------------------------------------------
 // Minimal, purpose-built JSON helpers. NOT a general parser -- this only needs to handle the
@@ -91,7 +128,7 @@ static std::string JsonEscapeSimple(const std::string& s)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Base64, for the "data" field of {"type":"frame",...} packets.
+// Base64, for the "data" field of {"cmd":"frame",...} pushes.
 static const char kB64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static std::string Base64Encode(const unsigned char* data, size_t len)
@@ -274,7 +311,10 @@ static bool SendAll(SOCKET s, const char* buf, int len)
 }
 
 // [4-byte BE length][header JSON][optional raw payload] -- must match the Go relay's
-// writeFramed/readFramedHeader exactly (src/util-servers/spectate-relay/main.go).
+// writeFramed/readFramedHeader exactly (src/util-servers/spectate-relay/main.go). Only used for
+// the short-lived, synchronous handshake connections (the initial snapshot fetch(es)) -- the
+// long-lived persistent connections (publisher and spectator live-feed sockets) use their own
+// non-blocking incremental framing below instead, since they must never block a game thread.
 static bool WriteFramedHeader(SOCKET s, const std::string& headerJson, const unsigned char* payload, int payloadLen)
 {
   uint32_t beLen = htonl((uint32_t)headerJson.size());
@@ -296,6 +336,19 @@ static bool ReadFramedHeader(SOCKET s, std::string& outHeaderJson, int timeoutMs
   if (!RecvAll(s, buf.data(), (int)len, timeoutMs)) return false;
   outHeaderJson.assign(buf.data(), len);
   return true;
+}
+
+// Builds one complete framed message ([4-byte BE length][header JSON][optional payload]) into a
+// single buffer, for queuing onto a non-blocking connection's outgoing write queue.
+static std::vector<char> BuildFramedMessage(const std::string& headerJson, const unsigned char* payload, int payloadLen)
+{
+  std::vector<char> msg;
+  uint32_t beLen = htonl((uint32_t)headerJson.size());
+  msg.reserve(4 + headerJson.size() + (payloadLen > 0 ? (size_t)payloadLen : 0));
+  msg.insert(msg.end(), (char*)&beLen, (char*)&beLen + 4);
+  msg.insert(msg.end(), headerJson.begin(), headerJson.end());
+  if (payload && payloadLen > 0) msg.insert(msg.end(), (char*)payload, (char*)payload + payloadLen);
+  return msg;
 }
 
 // =================================================================================================
@@ -321,6 +374,24 @@ namespace {
   int g_pubHighestRecordedFrame = -1;
   int g_pubNextFrameToPublish = -1;
   DWORD g_pubLastRegisterTick = 0;
+
+  // Incremental, always-non-blocking TCP handling -- this runs every tick of a live match on the
+  // publisher's actual game thread, so it must never wait on the network even briefly: a stall
+  // here stalls both real players' GGPO session, not just a spectator. Reading (incoming
+  // snapshot-requests from the relay) and writing (outgoing snapshot-responses AND the live
+  // frame feed, both queued below) are independent directions on the same full-duplex socket.
+  enum PubReadState { PUB_READ_IDLE, PUB_READ_LEN, PUB_READ_HEADER };
+  PubReadState g_pubReadState = PUB_READ_IDLE;
+  unsigned char g_pubReadLenBuf[4];
+  int g_pubReadLenGot = 0;
+  uint32_t g_pubReadHeaderLen = 0;
+  std::vector<char> g_pubReadHeaderBuf;
+  int g_pubReadHeaderGot = 0;
+
+  // Outgoing queue: both snapshot-responses and (much more frequently) live frame pushes land
+  // here; a single drain step sends whatever fits without blocking, resuming next tick otherwise.
+  std::deque<std::vector<char>> g_pubTcpOutQueue;
+  size_t g_pubTcpOutSent = 0;
 }
 
 void SpectatePublishInit(const DirectConnectionOptions& ops)
@@ -334,6 +405,9 @@ void SpectatePublishInit(const DirectConnectionOptions& ops)
   for (int i = 0; i < SPECTATE_RING_SIZE; i++) g_pubRing[i].frame = -1;
   g_pubHighestRecordedFrame = -1;
   g_pubNextFrameToPublish = -1;
+  g_pubReadState = PUB_READ_IDLE;
+  g_pubTcpOutQueue.clear();
+  g_pubTcpOutSent = 0;
 
   g_pubUdpSocket = CreateNonBlockingUdpSocket();
   if (g_pubUdpSocket == INVALID_SOCKET) {
@@ -359,8 +433,8 @@ void SpectatePublishInit(const DirectConnectionOptions& ops)
       ioctlsocket(g_pubTcpSocket, FIONBIO, &nb);
     }
   }
-  // A failed TCP connection only means mid-match join won't be able to fetch a snapshot from
-  // this host; the live UDP feed below still works, so this isn't treated as a hard failure.
+  // A failed TCP connection means mid-match join AND the live feed both won't be servable from
+  // this host; the match itself still plays fine, so this isn't treated as a hard failure.
 
   g_pubLastRegisterTick = 0; // force an immediate publish registration on the first tick
   g_publishActive = true;
@@ -376,56 +450,119 @@ void SpectatePublishRecordFrame(int frame, const void* values)
   if (g_pubNextFrameToPublish < 0) g_pubNextFrameToPublish = frame;
 }
 
-// Services at most one pending snapshot request per call -- this only fires when a new
-// spectator joins mid-match, so a brief blocking read/respond on the otherwise non-blocking
-// publisher TCP connection is simpler and safer than a partial-read buffering state machine
-// for something this rare.
-static void SpectatePublishServiceSnapshotRequest()
+// Fully non-blocking and incremental across ticks -- reads at most one complete incoming header
+// per call (looping internally to drain a backlog within the tick if one's already buffered), and
+// only ever reacts to "snapshot-request" (the only thing the relay ever proactively sends here).
+static void SpectatePublishServiceIncoming()
 {
   if (g_pubTcpSocket == INVALID_SOCKET) return;
 
-  char peekBuf[1];
-  int n = recv(g_pubTcpSocket, peekBuf, 1, MSG_PEEK);
-  if (n == 0) {
-    // Relay closed the connection. Drop it -- the live UDP feed keeps working regardless;
-    // mid-match join just won't be servable from this host until it reconnects.
-    closesocket(g_pubTcpSocket);
-    g_pubTcpSocket = INVALID_SOCKET;
-    return;
-  }
-  if (n < 0) {
-    return; // WSAEWOULDBLOCK (nothing pending) or a transient error -- nothing to do this tick.
-  }
+  for (;;) {
+    if (g_pubReadState == PUB_READ_IDLE) {
+      g_pubReadLenGot = 0;
+      g_pubReadState = PUB_READ_LEN;
+    }
 
-  u_long blockingMode = 0;
-  ioctlsocket(g_pubTcpSocket, FIONBIO, &blockingMode);
+    if (g_pubReadState == PUB_READ_LEN) {
+      while (g_pubReadLenGot < 4) {
+        int n = recv(g_pubTcpSocket, (char*)g_pubReadLenBuf + g_pubReadLenGot, 4 - g_pubReadLenGot, 0);
+        if (n > 0) { g_pubReadLenGot += n; continue; }
+        if (n == 0) {
+          // Relay closed the connection. Drop it -- mid-match join and the live feed just won't
+          // be servable from this host until it reconnects (no reconnect logic exists here).
+          closesocket(g_pubTcpSocket);
+          g_pubTcpSocket = INVALID_SOCKET;
+          g_pubReadState = PUB_READ_IDLE;
+          return;
+        }
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+          closesocket(g_pubTcpSocket);
+          g_pubTcpSocket = INVALID_SOCKET;
+          g_pubReadState = PUB_READ_IDLE;
+        }
+        return; // nothing more available this tick -- resume next tick, or already dropped above
+      }
+      uint32_t len = ntohl(*(uint32_t*)g_pubReadLenBuf);
+      if (len == 0 || len > 4096) {
+        // Malformed -- the relay only ever sends tiny fixed-shape headers on this connection.
+        closesocket(g_pubTcpSocket);
+        g_pubTcpSocket = INVALID_SOCKET;
+        g_pubReadState = PUB_READ_IDLE;
+        return;
+      }
+      g_pubReadHeaderLen = len;
+      g_pubReadHeaderBuf.assign(len, 0);
+      g_pubReadHeaderGot = 0;
+      g_pubReadState = PUB_READ_HEADER;
+    }
 
-  std::string headerJson;
-  if (ReadFramedHeader(g_pubTcpSocket, headerJson, 2000)) {
-    std::string cmd, requestId;
-    JsonExtractString(headerJson, "cmd", cmd);
-    JsonExtractString(headerJson, "requestId", requestId);
+    if (g_pubReadState == PUB_READ_HEADER) {
+      while ((uint32_t)g_pubReadHeaderGot < g_pubReadHeaderLen) {
+        int n = recv(g_pubTcpSocket, g_pubReadHeaderBuf.data() + g_pubReadHeaderGot, (int)(g_pubReadHeaderLen - g_pubReadHeaderGot), 0);
+        if (n > 0) { g_pubReadHeaderGot += n; continue; }
+        if (n == 0) {
+          closesocket(g_pubTcpSocket);
+          g_pubTcpSocket = INVALID_SOCKET;
+          g_pubReadState = PUB_READ_IDLE;
+          return;
+        }
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+          closesocket(g_pubTcpSocket);
+          g_pubTcpSocket = INVALID_SOCKET;
+          g_pubReadState = PUB_READ_IDLE;
+        }
+        return;
+      }
 
-    if (cmd == "snapshot-request" && !requestId.empty()) {
-      unsigned char* buffer = nullptr;
-      int len = 0;
-      int checksum = 0;
-      int frame = g_pubHighestRecordedFrame >= 0 ? g_pubHighestRecordedFrame : 0;
+      std::string headerJson(g_pubReadHeaderBuf.data(), g_pubReadHeaderBuf.size());
+      g_pubReadState = PUB_READ_IDLE; // ready for the next message on the next loop iteration
 
-      // Always populates buffer/len unconditionally -- ggpo_save_game_state_callback's own
-      // body (fbn_ggpo.cpp) has no early-return path, so its bool return isn't meaningful here.
-      ggpo_save_game_state_callback(&buffer, &len, &checksum, frame);
+      std::string cmd, requestId;
+      JsonExtractString(headerJson, "cmd", cmd);
+      JsonExtractString(headerJson, "requestId", requestId);
 
-      std::string resp = "{\"cmd\":\"snapshot-response\",\"requestId\":\"" + JsonEscapeSimple(requestId) +
-        "\",\"frame\":" + std::to_string(frame) + ",\"payloadSize\":" + std::to_string(len) + "}";
-      WriteFramedHeader(g_pubTcpSocket, resp, buffer, len);
+      if (cmd == "snapshot-request" && !requestId.empty()) {
+        unsigned char* buffer = nullptr;
+        int len = 0;
+        int checksum = 0;
+        int frame = g_pubHighestRecordedFrame >= 0 ? g_pubHighestRecordedFrame : 0;
 
-      if (buffer) ggpo_free_buffer_callback(buffer);
+        // A live in-memory capture, not network I/O -- fast and bounded regardless of the
+        // relay's behavior (ggpo_save_game_state_callback's own body in fbn_ggpo.cpp is an
+        // unconditional BurnAreaScan with no early-return path).
+        ggpo_save_game_state_callback(&buffer, &len, &checksum, frame);
+
+        std::string resp = "{\"cmd\":\"snapshot-response\",\"requestId\":\"" + JsonEscapeSimple(requestId) +
+          "\",\"frame\":" + std::to_string(frame) + ",\"payloadSize\":" + std::to_string(len) + "}";
+        g_pubTcpOutQueue.push_back(BuildFramedMessage(resp, buffer, len));
+
+        if (buffer) ggpo_free_buffer_callback(buffer);
+      }
+      // Other cmds ignored for forward-compatibility -- loop back to try the next message.
     }
   }
+}
 
-  u_long nb = 1;
-  ioctlsocket(g_pubTcpSocket, FIONBIO, &nb);
+// Fully non-blocking: sends as much of the queued outgoing messages as the socket will currently
+// accept, resuming a partially-sent message (or the next queued one) on a later tick otherwise.
+static void SpectatePublishDrainWriteQueue()
+{
+  if (g_pubTcpSocket == INVALID_SOCKET) return;
+
+  while (!g_pubTcpOutQueue.empty()) {
+    std::vector<char>& front = g_pubTcpOutQueue.front();
+    while (g_pubTcpOutSent < front.size()) {
+      int n = send(g_pubTcpSocket, front.data() + g_pubTcpOutSent, (int)(front.size() - g_pubTcpOutSent), 0);
+      if (n > 0) { g_pubTcpOutSent += n; continue; }
+      if (n < 0 && WSAGetLastError() != WSAEWOULDBLOCK) {
+        closesocket(g_pubTcpSocket);
+        g_pubTcpSocket = INVALID_SOCKET;
+      }
+      return; // socket buffer full for now, or a real error was just handled above
+    }
+    g_pubTcpOutQueue.pop_front();
+    g_pubTcpOutSent = 0;
+  }
 }
 
 void SpectatePublishTick()
@@ -442,20 +579,18 @@ void SpectatePublishTick()
     g_pubLastRegisterTick = now;
   }
 
-  if (g_pubUdpSocket != INVALID_SOCKET && g_pubNextFrameToPublish >= 0) {
+  if (g_pubTcpSocket != INVALID_SOCKET && g_pubNextFrameToPublish >= 0) {
     while (g_pubHighestRecordedFrame - g_pubNextFrameToPublish >= SPECTATE_PUBLISH_DELAY_FRAMES) {
       int frame = g_pubNextFrameToPublish;
       PublishRingEntry& entry = g_pubRing[frame % SPECTATE_RING_SIZE];
       if (entry.frame == frame) {
         std::string b64 = Base64Encode(entry.bytes, SPECTATE_INPUT_BYTES);
-        std::string msg = "{\"type\":\"frame\",\"matchId\":\"" + JsonEscapeSimple(g_pubMatchId) +
-          "\",\"frame\":" + std::to_string(frame) + ",\"data\":\"" + b64 + "\"}";
-        sendto(g_pubUdpSocket, msg.data(), (int)msg.size(), 0, (sockaddr*)&g_pubRelayUdpAddr, sizeof(g_pubRelayUdpAddr));
+        std::string msg = "{\"cmd\":\"frame\",\"frame\":" + std::to_string(frame) + ",\"data\":\"" + b64 + "\"}";
+        g_pubTcpOutQueue.push_back(BuildFramedMessage(msg, nullptr, 0));
       }
-      // A missing ring entry shouldn't normally happen (the ring is far larger than the
-      // publish delay) -- but if it does, skipping it beats stalling the publish cursor
-      // forever; a viewer just briefly rebuffers.
-      g_pubNextFrameToPublish = frame + 1;
+      // A missing ring entry shouldn't normally happen (the ring is far larger than the publish
+      // delay) -- if it does, skipping it beats stalling the publish cursor forever.
+      g_pubNextFrameToPublish++;
     }
   }
 
@@ -474,10 +609,18 @@ void SpectatePublishTick()
       long count = -1;
       if (!JsonExtractLong(msg, "count", count) || count < 0) continue;
       VidOverlaySetGameSpectators((int)count);
+
+      // The opponent has no connection to the spectate relay at all (only playerSlot 0 ever
+      // talks to it) -- forward the count over the existing GGPO P2P link so both players see
+      // it, not just the one hosting. QuarkSendData/ggpo_send_data are null-safe no-ops if ggpo
+      // isn't up yet, so no extra guard is needed here.
+      uint8_t countByte = (uint8_t)(std::min)(count, 255L);
+      QuarkSendData(DATAGRAM_CODE_SPECTATOR_COUNT, &countByte, sizeof(countByte));
     }
   }
 
-  SpectatePublishServiceSnapshotRequest();
+  SpectatePublishServiceIncoming();
+  SpectatePublishDrainWriteQueue();
 }
 
 void SpectatePublishShutdown()
@@ -511,13 +654,89 @@ namespace {
   std::string g_specMatchId;
   std::string g_specUid;
   std::string g_specUserName;
+  std::string g_specRelayHost;
+  UINT16 g_specRelayTcpPort = 0;
 
-  SOCKET g_specUdpSocket = INVALID_SOCKET;
+  SOCKET g_specUdpSocket = INVALID_SOCKET; // presence/chat only now
   sockaddr_in g_specRelayUdpAddr;
   DWORD g_specLastWatchRegisterTick = 0;
 
-  std::map<int, std::vector<unsigned char>> g_specFrameBuffer;
-  int g_specNextFrameToApply = -1;
+  SOCKET g_specTcpSocket = INVALID_SOCKET; // the persistent live-feed connection
+  std::deque<std::vector<unsigned char>> g_specFrameQueue; // decoded, not-yet-consumed frames, FIFO
+  bool g_specFirstFrameApplied = false;
+
+  // Incremental, always-non-blocking TCP read state for the live feed -- mirrors the publisher's
+  // own incoming-header reader (SpectatePublishServiceIncoming).
+  enum SpecReadState { SPEC_READ_IDLE, SPEC_READ_LEN, SPEC_READ_HEADER };
+  SpecReadState g_specReadState = SPEC_READ_IDLE;
+  unsigned char g_specReadLenBuf[4];
+  int g_specReadLenGot = 0;
+  uint32_t g_specReadHeaderLen = 0;
+  std::vector<char> g_specReadHeaderBuf;
+  int g_specReadHeaderGot = 0;
+
+  // Diagnostics only, for the "still waiting" warning in SpectateGetInput below.
+  DWORD g_specConnectTick = 0;
+  DWORD g_specLastStallWarnTick = 0;
+  long g_specMessagesReceived = 0;
+  long g_specFramesReceived = 0;
+  int g_specLastFrameNumberSeen = -1;
+}
+
+// One attempt at fetching a fresh state snapshot for matchId from the relay's TCP port. Doesn't
+// touch any g_spec* state itself. On success, the connection is closed unless outSocket is
+// non-null, in which case ownership of the still-open, non-blocking-ready socket transfers to the
+// caller (used to keep the live-feed connection open once a snapshot fetch also doubles as the
+// spectator's initial live-feed registration -- see InitSpectatorConnection).
+static bool RequestSnapshotOnce(const std::string& host, UINT16 tcpPort, const std::string& matchId,
+  int timeoutMs, long& outFrame, std::vector<unsigned char>& outPayload, std::string& outFailReason,
+  SOCKET* outSocket = nullptr)
+{
+  SOCKET tcp = TcpConnectWithTimeout(host, tcpPort, timeoutMs);
+  if (tcp == INVALID_SOCKET) {
+    outFailReason = "could not connect to relay";
+    return false;
+  }
+
+  std::string hello = "{\"role\":\"spectator\",\"matchId\":\"" + JsonEscapeSimple(matchId) + "\"}";
+  std::string respHeaderJson;
+  if (!WriteFramedHeader(tcp, hello, nullptr, 0) || !ReadFramedHeader(tcp, respHeaderJson, timeoutMs)) {
+    outFailReason = "relay did not respond";
+    closesocket(tcp);
+    return false;
+  }
+
+  std::string cmd;
+  JsonExtractString(respHeaderJson, "cmd", cmd);
+  if (cmd != "snapshot-response") {
+    JsonExtractString(respHeaderJson, "reason", outFailReason);
+    closesocket(tcp);
+    return false;
+  }
+
+  long payloadSize = -1;
+  JsonExtractLong(respHeaderJson, "frame", outFrame);
+  JsonExtractLong(respHeaderJson, "payloadSize", payloadSize);
+  if (payloadSize < 0 || payloadSize > 64 * 1024 * 1024) {
+    outFailReason = "bad payloadSize";
+    closesocket(tcp);
+    return false;
+  }
+
+  outPayload.assign((size_t)payloadSize, 0);
+  if (payloadSize > 0 && !RecvAll(tcp, (char*)outPayload.data(), (int)payloadSize, timeoutMs)) {
+    outFailReason = "snapshot payload read failed";
+    closesocket(tcp);
+    return false;
+  }
+
+  if (outSocket) {
+    *outSocket = tcp;
+  }
+  else {
+    closesocket(tcp);
+  }
+  return true;
 }
 
 bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
@@ -527,8 +746,14 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   g_specMatchId = ops.matchId;
   g_specUid = ops.uid;
   g_specUserName = ops.userName.empty() ? ops.uid : ops.userName;
-  g_specFrameBuffer.clear();
-  g_specNextFrameToApply = -1;
+  g_specFrameQueue.clear();
+  g_specFirstFrameApplied = false;
+  g_specConnectTick = GetTickCount();
+  g_specLastStallWarnTick = 0;
+  g_specMessagesReceived = 0;
+  g_specFramesReceived = 0;
+  g_specLastFrameNumberSeen = -1;
+  g_specReadState = SPEC_READ_IDLE;
 
   // Same globals InitDirectConnection sets before a match begins. ggpo_begin_game_callback and
   // ggpo_load_game_state_callback (both reused below, see burner_win32.h) are already
@@ -556,60 +781,40 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     kNetSpectator = 0;
     return false;
   }
-  {
-    std::string watchMsg = "{\"type\":\"watch\",\"matchId\":\"" + JsonEscapeSimple(g_specMatchId) +
-      "\",\"uid\":\"" + JsonEscapeSimple(g_specUid) + "\"}";
+  g_specRelayHost = ops.relayHost;
+  g_specRelayTcpPort = ops.relayTcpPort;
+  std::string watchMsg = "{\"type\":\"watch\",\"matchId\":\"" + JsonEscapeSimple(g_specMatchId) +
+    "\",\"uid\":\"" + JsonEscapeSimple(g_specUid) + "\"}";
+
+  // The host is very often still mid-launch (ROM load, GGPO handshake/sync, auto-delay
+  // negotiation) when a viewer connects right after it -- the relay legitimately has no
+  // publisher registered for this matchId yet. Retry the whole handshake for a while instead of
+  // failing on the first attempt, so the caller doesn't have to guess a "host is ready" delay.
+  VidOverlaySetSystemMessage(_T("Connecting to host..."));
+
+  bool ok = false;
+  long frame = -1;
+  std::vector<unsigned char> payload;
+  std::string lastFailReason;
+  DWORD connectStartTick = GetTickCount();
+
+  // Step 1: get the ROM/driver loaded. This connection is throwaway -- its only purpose is
+  // triggering ggpo_begin_game_callback's deferred DrvInit/MediaInit via the load just below.
+  for (;;) {
     sendto(g_specUdpSocket, watchMsg.data(), (int)watchMsg.size(), 0, (sockaddr*)&g_specRelayUdpAddr, sizeof(g_specRelayUdpAddr));
     g_specLastWatchRegisterTick = GetTickCount();
-  }
 
-  SOCKET tcp = TcpConnectWithTimeout(ops.relayHost, ops.relayTcpPort, 5000);
-  if (tcp == INVALID_SOCKET) {
-    bprintf(0, _T("*** spectate: could not connect to relay for snapshot.\n"));
-    closesocket(g_specUdpSocket);
-    g_specUdpSocket = INVALID_SOCKET;
-    kNetGame = 0;
-    kNetSpectator = 0;
-    return false;
-  }
-
-  std::string hello = "{\"role\":\"spectator\",\"matchId\":\"" + JsonEscapeSimple(g_specMatchId) + "\"}";
-  std::string respHeaderJson;
-  bool ok = WriteFramedHeader(tcp, hello, nullptr, 0) && ReadFramedHeader(tcp, respHeaderJson, 5000);
-
-  if (ok) {
-    std::string cmd;
-    JsonExtractString(respHeaderJson, "cmd", cmd);
-    if (cmd == "snapshot-response") {
-      long frame = -1;
-      long payloadSize = -1;
-      JsonExtractLong(respHeaderJson, "frame", frame);
-      JsonExtractLong(respHeaderJson, "payloadSize", payloadSize);
-      if (payloadSize < 0 || payloadSize > 64 * 1024 * 1024) {
-        ok = false;
-      }
-      else {
-        std::vector<unsigned char> payload((size_t)payloadSize);
-        if (payloadSize > 0 && !RecvAll(tcp, (char*)payload.data(), (int)payloadSize, 5000)) {
-          ok = false;
-        }
-        else {
-          ggpo_load_game_state_callback(payload.data(), (int)payload.size());
-          g_specNextFrameToApply = (int)frame + 1;
-        }
-      }
+    if (RequestSnapshotOnce(ops.relayHost, ops.relayTcpPort, g_specMatchId, 5000, frame, payload, lastFailReason)) {
+      ok = true;
+      break;
     }
-    else {
-      std::string reason;
-      JsonExtractString(respHeaderJson, "reason", reason);
-      bprintf(0, _T("*** spectate: relay declined snapshot request (%hs).\n"), reason.c_str());
-      ok = false;
-    }
-  }
 
-  closesocket(tcp);
+    if (GetTickCount() - connectStartTick >= SPECTATE_CONNECT_RETRY_BUDGET_MS) break;
+    Sleep(SPECTATE_CONNECT_RETRY_INTERVAL_MS);
+  }
 
   if (!ok) {
+    bprintf(0, _T("*** spectate: giving up after %lums (%hs).\n"), GetTickCount() - connectStartTick, lastFailReason.c_str());
     closesocket(g_specUdpSocket);
     g_specUdpSocket = INVALID_SOCKET;
     kNetGame = 0;
@@ -617,8 +822,138 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     return false;
   }
 
+  ggpo_load_game_state_callback(payload.data(), (int)payload.size());
+
+  // Step 2: the driver's loaded now, so take one more, fresh snapshot -- and this time keep its
+  // connection open, since it becomes the live frame feed going forward. Because this connection
+  // is opened fresh right here, there is no backlog to worry about: the relay only starts fanning
+  // frame pushes to it from the moment registration completes on this SAME connection (see
+  // handleSpectatorConn in main.go), so the very first frame ever delivered on it is already
+  // "live" -- no replay-through-the-backlog effect, unlike step 1's connection.
+  bool liveOk = false;
+  DWORD liveStartTick = GetTickCount();
+  for (;;) {
+    long liveFrame = -1;
+    std::vector<unsigned char> livePayload;
+    std::string liveFailReason;
+    SOCKET liveSocket = INVALID_SOCKET;
+    if (RequestSnapshotOnce(ops.relayHost, ops.relayTcpPort, g_specMatchId, 3000, liveFrame, livePayload, liveFailReason, &liveSocket)) {
+      ggpo_load_game_state_callback(livePayload.data(), (int)livePayload.size());
+      u_long nb = 1;
+      ioctlsocket(liveSocket, FIONBIO, &nb);
+      g_specTcpSocket = liveSocket;
+      liveOk = true;
+      bprintf(0, _T("*** spectate: connected, streaming live from frame %ld.\n"), liveFrame);
+      break;
+    }
+    if (GetTickCount() - liveStartTick >= SPECTATE_LIVE_CONNECT_RETRY_BUDGET_MS) break;
+    Sleep(SPECTATE_CONNECT_RETRY_INTERVAL_MS);
+  }
+
+  if (!liveOk) {
+    bprintf(0, _T("*** spectate: could not open the live feed connection after loading.\n"));
+    closesocket(g_specUdpSocket);
+    g_specUdpSocket = INVALID_SOCKET;
+    kNetGame = 0;
+    kNetSpectator = 0;
+    return false;
+  }
+
+  VidOverlaySetSystemMessage(_T("Waiting for stream..."));
   g_spectateActive = true;
   return true;
+}
+
+// Fully non-blocking and incremental across ticks -- drains as many complete {"cmd":"frame",...}
+// (or other) messages as are already buffered this tick, resuming a partial read next tick
+// otherwise. Since this rides TCP, every message that was ever sent WILL eventually arrive, in
+// order -- there is no gap/loss case to handle here, unlike the old UDP design.
+static void SpectateServiceIncomingTcp()
+{
+  if (g_specTcpSocket == INVALID_SOCKET) return;
+
+  for (;;) {
+    if (g_specReadState == SPEC_READ_IDLE) {
+      g_specReadLenGot = 0;
+      g_specReadState = SPEC_READ_LEN;
+    }
+
+    if (g_specReadState == SPEC_READ_LEN) {
+      while (g_specReadLenGot < 4) {
+        int n = recv(g_specTcpSocket, (char*)g_specReadLenBuf + g_specReadLenGot, 4 - g_specReadLenGot, 0);
+        if (n > 0) { g_specReadLenGot += n; continue; }
+        if (n == 0) {
+          bprintf(0, _T("*** spectate: live feed connection closed by relay.\n"));
+          closesocket(g_specTcpSocket);
+          g_specTcpSocket = INVALID_SOCKET;
+          g_specReadState = SPEC_READ_IDLE;
+          return;
+        }
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+          closesocket(g_specTcpSocket);
+          g_specTcpSocket = INVALID_SOCKET;
+          g_specReadState = SPEC_READ_IDLE;
+        }
+        return; // nothing more available this tick -- resume next tick, or already dropped above
+      }
+      uint32_t len = ntohl(*(uint32_t*)g_specReadLenBuf);
+      if (len == 0 || len > 4096) {
+        closesocket(g_specTcpSocket);
+        g_specTcpSocket = INVALID_SOCKET;
+        g_specReadState = SPEC_READ_IDLE;
+        return;
+      }
+      g_specReadHeaderLen = len;
+      g_specReadHeaderBuf.assign(len, 0);
+      g_specReadHeaderGot = 0;
+      g_specReadState = SPEC_READ_HEADER;
+    }
+
+    if (g_specReadState == SPEC_READ_HEADER) {
+      while ((uint32_t)g_specReadHeaderGot < g_specReadHeaderLen) {
+        int n = recv(g_specTcpSocket, g_specReadHeaderBuf.data() + g_specReadHeaderGot, (int)(g_specReadHeaderLen - g_specReadHeaderGot), 0);
+        if (n > 0) { g_specReadHeaderGot += n; continue; }
+        if (n == 0) {
+          closesocket(g_specTcpSocket);
+          g_specTcpSocket = INVALID_SOCKET;
+          g_specReadState = SPEC_READ_IDLE;
+          return;
+        }
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+          closesocket(g_specTcpSocket);
+          g_specTcpSocket = INVALID_SOCKET;
+          g_specReadState = SPEC_READ_IDLE;
+        }
+        return;
+      }
+
+      std::string headerJson(g_specReadHeaderBuf.data(), g_specReadHeaderBuf.size());
+      g_specReadState = SPEC_READ_IDLE; // ready for the next message on the next loop iteration
+
+      std::string cmd;
+      JsonExtractString(headerJson, "cmd", cmd);
+      g_specMessagesReceived++;
+
+      if (cmd == "frame") {
+        long frame = -1;
+        std::string dataB64;
+        JsonExtractLong(headerJson, "frame", frame);
+        std::vector<unsigned char> decoded;
+        if (JsonExtractString(headerJson, "data", dataB64) && Base64Decode(dataB64, decoded) && decoded.size() == SPECTATE_INPUT_BYTES) {
+          g_specFramesReceived++;
+          g_specLastFrameNumberSeen = (int)frame;
+          g_specFrameQueue.push_back(std::move(decoded));
+        }
+      }
+      else if (cmd == "publisher-disconnected") {
+        bprintf(0, _T("*** spectate: publisher disconnected, ending stream.\n"));
+        closesocket(g_specTcpSocket);
+        g_specTcpSocket = INVALID_SOCKET;
+        return;
+      }
+      // Other cmds ignored for forward-compatibility -- loop back to try the next message.
+    }
+  }
 }
 
 bool SpectateGetInput(void* values)
@@ -635,6 +970,7 @@ bool SpectateGetInput(void* values)
     g_specLastWatchRegisterTick = now;
   }
 
+  // Presence and chat only now -- the live frame feed itself arrives over g_specTcpSocket below.
   if (g_specUdpSocket != INVALID_SOCKET) {
     char recvBuf[2048];
     for (;;) {
@@ -646,18 +982,7 @@ bool SpectateGetInput(void* values)
       std::string type;
       if (!JsonExtractString(msg, "type", type)) continue;
 
-      if (type == "frame") {
-        long frame = -1;
-        std::string dataB64;
-        if (!JsonExtractLong(msg, "frame", frame) || !JsonExtractString(msg, "data", dataB64)) continue;
-        if (frame < g_specNextFrameToApply) continue; // already applied / stale duplicate
-
-        std::vector<unsigned char> decoded;
-        if (!Base64Decode(dataB64, decoded) || decoded.size() != SPECTATE_INPUT_BYTES) continue;
-
-        g_specFrameBuffer[(int)frame] = std::move(decoded);
-      }
-      else if (type == "chat") {
+      if (type == "chat") {
         // Spectator-only chat from another watcher of this match (see main.go's "chat" case --
         // it never touches the publishers map, so this can never be a message from a player).
         std::string userName, text;
@@ -676,19 +1001,38 @@ bool SpectateGetInput(void* values)
         if (!JsonExtractLong(msg, "count", count) || count < 0) continue;
         VidOverlaySetGameSpectators((int)count);
       }
-      // Other types (publish/watch/unpublish/unwatch acks, if the relay ever sends any) are
-      // ignored -- this socket only ever receives "frame", "chat", and "spectator-count" today.
+      // "publish"/"watch"/etc acks, if the relay ever sends any, are ignored.
     }
   }
 
-  if (g_specNextFrameToApply < 0) return false;
+  SpectateServiceIncomingTcp();
 
-  auto it = g_specFrameBuffer.find(g_specNextFrameToApply);
-  if (it == g_specFrameBuffer.end()) return false; // not arrived yet -- caller retries next tick
+  // Still on the pre-first-frame black screen a few seconds after connecting. bprintf is a no-op
+  // outside a FBNEO_DEBUG build (see AppDebugPrintf, main.cpp), so the debug console can't be
+  // relied on to surface this -- put the same info in the on-screen overlay instead, which is
+  // always live (this is the same call "Waiting for stream..." itself uses).
+  if (!g_specFirstFrameApplied && now - g_specConnectTick > 3000 && now - g_specLastStallWarnTick > 1000) {
+    g_specLastStallWarnTick = now;
+    bool alive = g_specTcpSocket != INVALID_SOCKET;
+    bprintf(0, _T("*** spectate: still waiting %lums after connect -- %ld TCP messages received (%ld were 'frame'), last frame seen #%d, %d frame(s) queued, connection %hs.\n"),
+      now - g_specConnectTick, g_specMessagesReceived, g_specFramesReceived, g_specLastFrameNumberSeen, (int)g_specFrameQueue.size(), alive ? "alive" : "DEAD");
 
-  memcpy(values, it->second.data(), SPECTATE_INPUT_BYTES);
-  g_specFrameBuffer.erase(it);
-  g_specNextFrameToApply++;
+    TCHAR msg[200];
+    _sntprintf(msg, 200, _T("Waiting for stream... (%ld msgs, %ld frames, last #%d, queued %d, %hs)"),
+      g_specMessagesReceived, g_specFramesReceived, g_specLastFrameNumberSeen, (int)g_specFrameQueue.size(), alive ? "alive" : "dead");
+    VidOverlaySetSystemMessage(msg);
+  }
+
+  if (g_specFrameQueue.empty()) return false; // not arrived yet -- caller retries next tick
+
+  if (!g_specFirstFrameApplied) {
+    g_specFirstFrameApplied = true;
+    bprintf(0, _T("*** spectate: live stream started.\n"));
+    VidOverlaySetSystemMessage(_T(""));
+  }
+
+  memcpy(values, g_specFrameQueue.front().data(), SPECTATE_INPUT_BYTES);
+  g_specFrameQueue.pop_front();
   return true;
 }
 
@@ -728,9 +1072,12 @@ void SpectateDisconnect()
     closesocket(g_specUdpSocket);
     g_specUdpSocket = INVALID_SOCKET;
   }
+  if (g_specTcpSocket != INVALID_SOCKET) {
+    closesocket(g_specTcpSocket);
+    g_specTcpSocket = INVALID_SOCKET;
+  }
 
-  g_specFrameBuffer.clear();
-  g_specNextFrameToApply = -1;
+  g_specFrameQueue.clear();
   g_spectateActive = false;
   kNetGame = 0;
   kNetSpectator = 0;
