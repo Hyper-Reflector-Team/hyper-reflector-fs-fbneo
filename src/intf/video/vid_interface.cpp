@@ -127,6 +127,7 @@ INT32 bVidUnrankedScores = 0;				// 1 = show scores in unranked                 
 INT32 bVidSaveOverlayFiles = 0;			// 1 = save overlay data to obs files                     // REFACTOR: bool - use 'is*' naming convention
 INT32 bVidSaveChatHistory = 0;			// 1 = save chat history to file                          // REFACTOR: bool - use 'is*' naming convention
 INT32 isChatMuted = 0;							// 1 = mute ingame chat                                   // REFACTOR: bool
+INT32 isSpectatorChatMuted = 0;			// 1 = mute spectator-only chat, independent of isChatMuted
 INT32 nVidRunahead = 0;							// 0|1|2 = number of run ahead frames
 
 wchar_t HorScreen[32] = L"";

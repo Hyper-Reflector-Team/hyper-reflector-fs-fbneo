@@ -1706,7 +1706,11 @@ void VidOverlayAddChatLine(const wchar_t* name, const wchar_t* text)
 
   // Let other player know that your chat is muted.  Only do this branch for non-system messages.
   // NOTE: This is a great demonstration of how double-dipping on the 'name' parameter just makes things more difficult to deal with.
-  if (isChatMuted && wcscmp(name, _T("System"))) {
+  // A process is always either playing (kNetSpectator == 0) or spectating, never both, so which
+  // mute setting applies is decided purely by mode -- isSpectatorChatMuted and isChatMuted are
+  // independently toggled and persisted (see menu.cpp/scrn.cpp, cona.cpp) so a preference set in
+  // one mode doesn't affect the other next time this process runs in it.
+  if ((kNetSpectator ? isSpectatorChatMuted : isChatMuted) && wcscmp(name, _T("System"))) {
     if (!bMutedWarnSent) {
       QuarkSendData(DATAGRAM_CODE_MUTED, nullptr, 0);
       bMutedWarnSent = true;

@@ -1009,6 +1009,7 @@ BEGIN
 						MENUITEM "Save overlay data to files",				MENU_SAVE_OVERLAY_FILES
 						MENUITEM "Save chat history",									MENU_SAVE_CHAT_HISTORY
 						MENUITEM "Mute ingame chat",									MENU_MUTE_CHAT
+						MENUITEM "Mute spectator chat",							MENU_MUTE_SPECTATOR_CHAT
 				END
 				POPUP "Runahead"
 					BEGIN

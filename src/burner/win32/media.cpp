@@ -17,6 +17,13 @@ int MediaInit()
 
 	if (!bAudOkay) {
 		AudSoundInit();					// Init Sound (not critical if it fails)
+		// Apply the persisted volume (see cona.cpp) -- SoundInit() itself never reads nAudVolume,
+		// only AudSoundSetVolume() does (see aud_interface.cpp / VolumeDialog in numdial.cpp), so
+		// without this a config-loaded volume would sit correctly in memory but never actually
+		// reach the audio device until the user happened to open the Volume dialog.
+		if (bAudOkay) {
+			AudSoundSetVolume();
+		}
 	}
 
 	nBurnSoundRate = 0;					// Assume no sound

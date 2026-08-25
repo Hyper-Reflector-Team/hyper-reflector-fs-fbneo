@@ -171,6 +171,7 @@ int ConfigAppLoad()
 		VAR(bVidSaveOverlayFiles);
 		VAR(bVidSaveChatHistory);
 		VAR(isChatMuted);
+		VAR(isSpectatorChatMuted);
 
 		// Runahead
 		VAR(nVidRunahead);
@@ -178,6 +179,7 @@ int ConfigAppLoad()
 		// Sound
 		VAR(nAudSelect);
 		VAR(nAudExclusive);
+		VAR(nAudVolume);
 		VAR(nInterpolation);
 		VAR(nFMInterpolation);
 		VAR(nAudSampleRate[0]);
@@ -538,6 +540,8 @@ int ConfigAppSave()
 	VAR(bVidSaveChatHistory);
 	_ftprintf(h, _T("\n// Mute chat\n"));
 	VAR(isChatMuted);
+	_ftprintf(h, _T("\n// Mute spectator-only chat (independent of the ingame chat mute above)\n"));
+	VAR(isSpectatorChatMuted);
 	_ftprintf(h, _T("\n// Run ahead frames (0 = disabled, 1, 2)\n"));
 	VAR(nVidRunahead);
 
@@ -547,6 +551,8 @@ int ConfigAppSave()
 	VAR(nAudSelect);
 	_ftprintf(h, _T("\n// Use exclusive mode for audio driver (otherwise share device with system)\n"));
 	VAR(nAudExclusive);
+	_ftprintf(h, _T("\n// Sound volume (%% * 100, 10000 = 100%%)\n"));
+	VAR(nAudVolume);
 	_ftprintf(h, _T("\n// The order of PCM/ADPCM interpolation\n"));
 	VAR(nInterpolation);
 	_ftprintf(h, _T("\n// The order of FM interpolation\n"));
