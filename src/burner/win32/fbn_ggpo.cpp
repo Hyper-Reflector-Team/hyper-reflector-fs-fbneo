@@ -398,8 +398,12 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     {
       // Forwarded by playerSlot 0 (see SpectatePublishTick in fbn_spectate.cpp) -- this player
       // has no connection to the spectate relay at all, so this datagram is the only way it
-      // learns the current spectator count.
-      VidOverlaySetGameSpectators((int)info->u.datagram.data[0]);
+      // learns the current spectator count. Both overlay implementations updated together
+      // (VidOverlay* in vid_overlay.cpp, VidS* in vid_directx_support.cpp) since a normal
+      // player's own window renders through VidS*, not VidOverlay*.
+      int count = (int)info->u.datagram.data[0];
+      VidOverlaySetGameSpectators(count);
+      VidSSetGameSpectators(count);
     }
     break;
 
@@ -474,7 +478,13 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
           DetectorLoad(name, false, iSeed);
           // if playing a direct game, we never get match information, so put anonymous
           if (bDirect) {
-            //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+            // VidSSetGameInfo is dead code (unconditional early return, see its definition in
+            // vid_directx_support.cpp) -- VidOverlaySetGameInfo is the actually-rendered overlay,
+            // and it's also the only thing that sets game_enabled, the master gate around the
+            // whole names+spectator-count block in vid_overlay.cpp's render function. Without
+            // this call, a direct connection's own window could never show the spectator count
+            // no matter what VidOverlaySetGameSpectators was told.
+            VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
             VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
           }
           return 0;
@@ -495,7 +505,8 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
-          //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          // See the matching comment above -- VidSSetGameInfo does nothing.
+          VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
           VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
         }
         return 0;
@@ -524,8 +535,13 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so play anonymous
       if (bDirect) {
-        // VidOverlaySetGameInfo(_T("player 1#0,0"), _T("player 2#0,0"), false, iRanked, _playerIndex);
-        // VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        // See the matching comment above (savestate-load branch) -- VidSSetGameInfo does
+        // nothing; VidOverlaySetGameInfo is the one that actually matters (it's also what sets
+        // game_enabled, gating the overlay's names+spectator-count block). This is the path a
+        // fresh match with no pre-existing savestate actually takes, so without this call here,
+        // a normal direct-connection match could never show the spectator count at all.
+        VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
       }
       return 1;
     }
@@ -700,8 +716,17 @@ bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
       // g_spectateP1Name/g_spectateP2Name are set by InitSpectatorConnection (fbn_spectate.cpp)
       // before this callback runs -- the spectate relay itself never carries match metadata, so
       // the launcher passes these in directly rather than they being discoverable here.
-      const TCHAR* p1Name = g_spectateP1Name[0] ? g_spectateP1Name : _T("Player 1");
-      const TCHAR* p2Name = g_spectateP2Name[0] ? g_spectateP2Name : _T("Player 2");
+      //
+      // VidOverlaySetGameInfo/VidSSetGameInfo parse "Name#rank,score,country" out of each name
+      // string (see VidOverlaySetGameInfo in vid_overlay.cpp) -- a bare name with no "#" leaves
+      // the parsed rank position at 0, which truncates the displayed name to nothing (matches
+      // the existing "Player1#0,0" placeholder pattern used elsewhere in this same function for
+      // direct/non-matchmade connections). Append the same placeholder suffix here.
+      TCHAR p1Buf[160], p2Buf[160];
+      _sntprintf(p1Buf, 160, _T("%s#0,0"), g_spectateP1Name[0] ? g_spectateP1Name : _T("Player 1"));
+      _sntprintf(p2Buf, 160, _T("%s#0,0"), g_spectateP2Name[0] ? g_spectateP2Name : _T("Player 2"));
+      const TCHAR* p1Name = p1Buf;
+      const TCHAR* p2Name = p2Buf;
       VidOverlaySetGameInfo(p1Name, p2Name, kNetSpectator, iRanked, 0);
       VidOverlaySetGameScores(score1, score2);
       VidSSetGameInfo(p1Name, p2Name, kNetSpectator, iRanked, 0);
