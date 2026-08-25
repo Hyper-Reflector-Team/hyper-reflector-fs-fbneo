@@ -68,6 +68,13 @@ bool bTimesyncDelayBumped = false;
 // on this, not on kNetGame alone, so idle mashing during that window can't desync the match.
 bool bGGPOMatchRunning = false;
 
+// set by InitSpectatorConnection (fbn_spectate.cpp) before it calls ggpo_load_game_state_callback,
+// so that function's kNetSpectator branch (below) can show the actual players' names in the
+// overlay instead of a blank/generic label. The spectate relay itself never carries match
+// metadata (only opaque confirmed-input bytes), so this has to be passed in from the launcher.
+TCHAR g_spectateP1Name[128] = { 0 };
+TCHAR g_spectateP2Name[128] = { 0 };
+
 // Auto-delay negotiation (see ggpo_on_event_callback's GGPO_EVENTCODE_RUNNING and
 // DATAGRAM_CODE_DELAY_NEGOTIATE handling, and the gate at the top of QuarkGetInput). Each side
 // computes a candidate delay from its own measured ping and exchanges it with the peer; both
@@ -690,9 +697,14 @@ bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
     if (kNetSpectator) {
       iRanked = ranked;
       DetectorSetState(state, score1, score2, start1, start2);
-      VidOverlaySetGameInfo(0, 0, kNetSpectator, iRanked, 0);
+      // g_spectateP1Name/g_spectateP2Name are set by InitSpectatorConnection (fbn_spectate.cpp)
+      // before this callback runs -- the spectate relay itself never carries match metadata, so
+      // the launcher passes these in directly rather than they being discoverable here.
+      const TCHAR* p1Name = g_spectateP1Name[0] ? g_spectateP1Name : _T("Player 1");
+      const TCHAR* p2Name = g_spectateP2Name[0] ? g_spectateP2Name : _T("Player 2");
+      VidOverlaySetGameInfo(p1Name, p2Name, kNetSpectator, iRanked, 0);
       VidOverlaySetGameScores(score1, score2);
-      VidSSetGameInfo(0, 0, kNetSpectator, iRanked, 0);
+      VidSSetGameInfo(p1Name, p2Name, kNetSpectator, iRanked, 0);
       VidSSetGameScores(score1, score2);
     }
 
@@ -1039,6 +1051,9 @@ void QuarkEnd()
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
   SpectatePublishShutdown(); // no-op unless this instance was publishing
+  SpectateDisconnect(); // no-op unless this instance was spectating -- sends "unwatch" so the
+                         // relay drops this connection immediately instead of waiting out its
+                         // ~15s UDP registration timeout before the spectator count updates
   RestoreHighResolutionTimingAfterNetplay();
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
@@ -1069,10 +1084,17 @@ void QuarkRunIdle(int ms)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-// Disconnect ourselves from the system...
+// Disconnect ourselves from the system... This is what actually runs when the window is closed
+// via its [X] button (WM_CLOSE -> OnClose's PostQuitMessage -> WM_QUIT in RunMessageLoop calls
+// this, not QuarkEnd -- that's reserved for the explicit MENU_QUIT/MENU_EXIT commands). Without
+// these two calls here, closing a host's or spectator's window this way left the relay unaware
+// until its own registration timeouts caught up (~15s for a spectator's UDP "watch", longer for a
+// publisher), instead of notifying it immediately.
 void QuarkDisconnect()
 {
   ggpo_disconnect(ggpo);
+  SpectatePublishShutdown(); // no-op unless this instance was publishing
+  SpectateDisconnect(); // no-op unless this instance was spectating
 }
 
 // -------------------------------------------------------------------------------------------------------------------

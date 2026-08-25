@@ -768,16 +768,24 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     return false;
   }
 
-  // The ROM/driver load doesn't depend on any snapshot content -- only on the ROM name already
-  // passed above -- so trigger it right now instead of waiting on a network round trip first.
-  // This also means only ONE snapshot fetch is needed below: previously this required two (one
-  // throwaway fetch purely to have a buffer to invoke the old fused
-  // ggpo_load_game_state_callback with, then a second "fresh" one for the actual starting
-  // frame), which cost an extra relay round trip and a redundant full state restore. With the
-  // load triggered independently, the single fetch below both loads the driver's state AND
-  // becomes the live feed connection.
-  EnsureSpectatorDriverLoaded();
+  // InitDirectConnection forces this for the host/opponent (see misc_win32.cpp) so coarse
+  // default Windows timer granularity can't bias their frame pacing against each other; a
+  // spectator never called it, an asymmetry worth closing even though it's normally moot in
+  // practice (timeBeginPeriod affects the whole system while any process holds it, and the
+  // host/opponent already do for the match's duration).
+  ForceHighResolutionTimingForNetplay();
 
+  // Deliberately NOT calling EnsureSpectatorDriverLoaded() here. An earlier version of this
+  // function did, to start the ROM/driver load before the network round trip below -- but that
+  // meant several spectator processes launched close together all hit the same heavy CPU-bound
+  // ROM decompression/decryption work in near lock-step, instead of it being naturally spread
+  // out in time the way it always was before: each one's jittery, variable-length network
+  // connection attempt used to desynchronize when that work happened, purely as a side effect of
+  // ordering. Leaving the load to fire from inside ggpo_load_game_state_callback below (its own
+  // bDelayLoad check, unchanged) restores that natural staggering. This does still only cost ONE
+  // relay round trip overall, same as the early-load version: the single fetch below both
+  // supplies the snapshot ggpo_load_game_state_callback restores AND becomes the live feed
+  // connection, so nothing is lost by leaving the load where it was.
   g_specUdpSocket = CreateNonBlockingUdpSocket();
   if (g_specUdpSocket == INVALID_SOCKET || !MakeSockAddr(ops.relayHost, ops.relayUdpPort, &g_specRelayUdpAddr)) {
     bprintf(0, _T("*** spectate: failed to set up relay UDP connection.\n"));
@@ -805,13 +813,13 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   SOCKET liveSocket = INVALID_SOCKET;
   DWORD connectStartTick = GetTickCount();
 
-  // One fetch does double duty: its snapshot data is what gets restored below, and (via
-  // outSocket) its connection is kept open afterward to become the live feed itself. Because
-  // this connection is only opened once the driver's already loaded and we're ready to use it
-  // immediately, there's no backlog to worry about: the relay only starts fanning frame pushes
-  // to it from the moment registration completes on this SAME connection (see
-  // handleSpectatorConn in main.go), so the very first frame ever delivered on it is already
-  // "live".
+  // One fetch does double duty: its snapshot data is what ggpo_load_game_state_callback below
+  // restores (also triggering the deferred ROM/driver load, via its own bDelayLoad check), and
+  // (via outSocket) its connection is kept open afterward to become the live feed itself. There's
+  // no backlog to worry about even though the driver load happens after this connection is
+  // opened: the relay only starts fanning frame pushes to a spectator connection from the moment
+  // its registration completes on this SAME connection (see handleSpectatorConn in main.go), so
+  // whatever arrives first is already "live" regardless of how long the local load afterward takes.
   for (;;) {
     sendto(g_specUdpSocket, watchMsg.data(), (int)watchMsg.size(), 0, (sockaddr*)&g_specRelayUdpAddr, sizeof(g_specRelayUdpAddr));
     g_specLastWatchRegisterTick = GetTickCount();
@@ -833,6 +841,11 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     kNetSpectator = 0;
     return false;
   }
+
+  // Read by ggpo_load_game_state_callback's kNetSpectator branch (fbn_ggpo.cpp), called just
+  // below -- must be set before that call, not after.
+  ANSIToTCHAR(ops.player1Name.c_str(), g_spectateP1Name, 128);
+  ANSIToTCHAR(ops.player2Name.c_str(), g_spectateP2Name, 128);
 
   ggpo_load_game_state_callback(payload.data(), (int)payload.size());
   u_long nb = 1;
@@ -1057,6 +1070,8 @@ void SpectateDisconnect()
     closesocket(g_specTcpSocket);
     g_specTcpSocket = INVALID_SOCKET;
   }
+
+  RestoreHighResolutionTimingAfterNetplay();
 
   g_specFrameQueue.clear();
   g_spectateActive = false;

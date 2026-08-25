@@ -127,6 +127,12 @@ struct SpectateConnectionOptions {
   std::string matchId;
   std::string uid; // this viewer's own identifier, used for the relay's per-subscriber bookkeeping
   std::string userName; // display name for spectator-only chat; falls back to uid if empty
+  // Who's actually playing, for the overlay's game-info text at the top of the screen. The
+  // spectate relay never carries match metadata (only opaque confirmed-input bytes), so the
+  // launcher passes these in directly rather than they being discoverable from the connection
+  // itself. Empty is a valid "unknown" -- InitSpectatorConnection falls back to a generic label.
+  std::string player1Name;
+  std::string player2Name;
 };
 
 // ---------------------------------------------------------------------------
@@ -506,11 +512,19 @@ bool __cdecl ggpo_begin_game_callback(const char* name);
 bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int* checksum, int frame);
 bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len);
 void __cdecl ggpo_free_buffer_callback(void* buffer);
-// Split out of ggpo_load_game_state_callback so a spectator connection can trigger the ROM/driver
-// load immediately after ggpo_begin_game_callback, without needing a snapshot buffer in hand first
-// (the load doesn't depend on match state, only on the ROM name already passed to that call). A
-// no-op once the driver's already loaded. See InitSpectatorConnection in fbn_spectate.cpp.
+// The DrvInit/MediaInit/RunInit sequence a spectator's deferred ROM load needs (see bDelayLoad in
+// fbn_ggpo.cpp), split out of ggpo_load_game_state_callback so it's independently callable. A
+// no-op once the driver's already loaded. Currently only ggpo_load_game_state_callback itself
+// calls this (deliberately -- see InitSpectatorConnection in fbn_spectate.cpp for why calling it
+// any earlier caused concurrently-launched spectators to contend for CPU); kept exposed here in
+// case a future caller has a legitimate reason to trigger the load independently of a snapshot.
 void EnsureSpectatorDriverLoaded();
+
+// Set by InitSpectatorConnection (fbn_spectate.cpp) before calling ggpo_load_game_state_callback,
+// so that function's kNetSpectator branch can show the actual players in the overlay instead of a
+// generic label -- the spectate relay never carries match metadata, only opaque input bytes.
+extern TCHAR g_spectateP1Name[128];
+extern TCHAR g_spectateP2Name[128];
 
 // fbn_spectate.cpp -- spectating via the backend relay (src/util-servers/spectate-relay), not
 // GGPO. See that file's top comment for the wire protocol and overall design.

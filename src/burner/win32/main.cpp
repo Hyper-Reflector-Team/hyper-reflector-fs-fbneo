@@ -1083,6 +1083,8 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   spectate->add_option("--match-id", spectateOps.matchId, "Match id to watch")->required();
   spectate->add_option("--uid", spectateOps.uid, "This viewer's own identifier")->required();
   spectate->add_option("-n,--name", spectateOps.userName, "Display name for spectator-only chat. Defaults to --uid if omitted.");
+  spectate->add_option("--p1-name", spectateOps.player1Name, "Display name of playerSlot 0 (the publisher), for the overlay's game-info text.");
+  spectate->add_option("--p2-name", spectateOps.player2Name, "Display name of playerSlot 1, for the overlay's game-info text.");
   spectate->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
 
