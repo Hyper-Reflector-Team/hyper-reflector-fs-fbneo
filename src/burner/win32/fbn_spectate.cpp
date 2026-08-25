@@ -81,9 +81,6 @@ static const int SPECTATE_PUBLISH_DELAY_FRAMES = 20; // must stay > MAX_PREDICTI
 static const DWORD SPECTATE_REGISTER_INTERVAL_MS = 5000; // relay drops a registration after 15s
 static const DWORD SPECTATE_CONNECT_RETRY_BUDGET_MS = 20000; // total time to retry "host not publishing yet"
 static const DWORD SPECTATE_CONNECT_RETRY_INTERVAL_MS = 750;
-static const DWORD SPECTATE_LIVE_CONNECT_RETRY_BUDGET_MS = 5000; // shorter budget for step 2 below --
-  // the publisher already answered once during step 1, so a repeat failure here is far less likely
-  // and shouldn't make a spectator wait as long as the initial "host might not be up yet" case.
 
 // ---------------------------------------------------------------------------------------------
 // Minimal, purpose-built JSON helpers. NOT a general parser -- this only needs to handle the
@@ -755,11 +752,10 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   g_specLastFrameNumberSeen = -1;
   g_specReadState = SPEC_READ_IDLE;
 
-  // Same globals InitDirectConnection sets before a match begins. ggpo_begin_game_callback and
-  // ggpo_load_game_state_callback (both reused below, see burner_win32.h) are already
-  // kNetSpectator-aware: the former defers DrvInit/MediaInit to the latter (via bDelayLoad),
-  // which is exactly the "wait for a snapshot before initializing the driver" sequence
-  // mid-match join needs, and neither one touches GGPOSession at all.
+  // Same globals InitDirectConnection sets before a match begins. ggpo_begin_game_callback,
+  // EnsureSpectatorDriverLoaded, and ggpo_load_game_state_callback (all reused below, see
+  // burner_win32.h) are already kNetSpectator-aware and GGPO-session-agnostic -- they just
+  // serialize/deserialize driver state via BurnAreaScan, never touching GGPOSession at all.
   kNetVersion = NET_VERSION;
   kNetGame = 1;
   kNetSpectator = 1;
@@ -771,6 +767,16 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     kNetSpectator = 0;
     return false;
   }
+
+  // The ROM/driver load doesn't depend on any snapshot content -- only on the ROM name already
+  // passed above -- so trigger it right now instead of waiting on a network round trip first.
+  // This also means only ONE snapshot fetch is needed below: previously this required two (one
+  // throwaway fetch purely to have a buffer to invoke the old fused
+  // ggpo_load_game_state_callback with, then a second "fresh" one for the actual starting
+  // frame), which cost an extra relay round trip and a redundant full state restore. With the
+  // load triggered independently, the single fetch below both loads the driver's state AND
+  // becomes the live feed connection.
+  EnsureSpectatorDriverLoaded();
 
   g_specUdpSocket = CreateNonBlockingUdpSocket();
   if (g_specUdpSocket == INVALID_SOCKET || !MakeSockAddr(ops.relayHost, ops.relayUdpPort, &g_specRelayUdpAddr)) {
@@ -796,15 +802,21 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   long frame = -1;
   std::vector<unsigned char> payload;
   std::string lastFailReason;
+  SOCKET liveSocket = INVALID_SOCKET;
   DWORD connectStartTick = GetTickCount();
 
-  // Step 1: get the ROM/driver loaded. This connection is throwaway -- its only purpose is
-  // triggering ggpo_begin_game_callback's deferred DrvInit/MediaInit via the load just below.
+  // One fetch does double duty: its snapshot data is what gets restored below, and (via
+  // outSocket) its connection is kept open afterward to become the live feed itself. Because
+  // this connection is only opened once the driver's already loaded and we're ready to use it
+  // immediately, there's no backlog to worry about: the relay only starts fanning frame pushes
+  // to it from the moment registration completes on this SAME connection (see
+  // handleSpectatorConn in main.go), so the very first frame ever delivered on it is already
+  // "live".
   for (;;) {
     sendto(g_specUdpSocket, watchMsg.data(), (int)watchMsg.size(), 0, (sockaddr*)&g_specRelayUdpAddr, sizeof(g_specRelayUdpAddr));
     g_specLastWatchRegisterTick = GetTickCount();
 
-    if (RequestSnapshotOnce(ops.relayHost, ops.relayTcpPort, g_specMatchId, 5000, frame, payload, lastFailReason)) {
+    if (RequestSnapshotOnce(ops.relayHost, ops.relayTcpPort, g_specMatchId, 5000, frame, payload, lastFailReason, &liveSocket)) {
       ok = true;
       break;
     }
@@ -823,41 +835,10 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   }
 
   ggpo_load_game_state_callback(payload.data(), (int)payload.size());
-
-  // Step 2: the driver's loaded now, so take one more, fresh snapshot -- and this time keep its
-  // connection open, since it becomes the live frame feed going forward. Because this connection
-  // is opened fresh right here, there is no backlog to worry about: the relay only starts fanning
-  // frame pushes to it from the moment registration completes on this SAME connection (see
-  // handleSpectatorConn in main.go), so the very first frame ever delivered on it is already
-  // "live" -- no replay-through-the-backlog effect, unlike step 1's connection.
-  bool liveOk = false;
-  DWORD liveStartTick = GetTickCount();
-  for (;;) {
-    long liveFrame = -1;
-    std::vector<unsigned char> livePayload;
-    std::string liveFailReason;
-    SOCKET liveSocket = INVALID_SOCKET;
-    if (RequestSnapshotOnce(ops.relayHost, ops.relayTcpPort, g_specMatchId, 3000, liveFrame, livePayload, liveFailReason, &liveSocket)) {
-      ggpo_load_game_state_callback(livePayload.data(), (int)livePayload.size());
-      u_long nb = 1;
-      ioctlsocket(liveSocket, FIONBIO, &nb);
-      g_specTcpSocket = liveSocket;
-      liveOk = true;
-      bprintf(0, _T("*** spectate: connected, streaming live from frame %ld.\n"), liveFrame);
-      break;
-    }
-    if (GetTickCount() - liveStartTick >= SPECTATE_LIVE_CONNECT_RETRY_BUDGET_MS) break;
-    Sleep(SPECTATE_CONNECT_RETRY_INTERVAL_MS);
-  }
-
-  if (!liveOk) {
-    bprintf(0, _T("*** spectate: could not open the live feed connection after loading.\n"));
-    closesocket(g_specUdpSocket);
-    g_specUdpSocket = INVALID_SOCKET;
-    kNetGame = 0;
-    kNetSpectator = 0;
-    return false;
-  }
+  u_long nb = 1;
+  ioctlsocket(liveSocket, FIONBIO, &nb);
+  g_specTcpSocket = liveSocket;
+  bprintf(0, _T("*** spectate: connected, streaming live from frame %ld.\n"), frame);
 
   VidOverlaySetSystemMessage(_T("Waiting for stream..."));
   g_spectateActive = true;

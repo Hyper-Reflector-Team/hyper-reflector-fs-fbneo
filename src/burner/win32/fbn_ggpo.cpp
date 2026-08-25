@@ -647,15 +647,26 @@ bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int
   return false;
 }
 
+// Extracted from ggpo_load_game_state_callback below so it can be triggered independently of any
+// snapshot buffer. A spectator connection (fbn_spectate.cpp's InitSpectatorConnection) calls this
+// right after ggpo_begin_game_callback, since the ROM/driver load doesn't depend on match state at
+// all -- only on the ROM name already passed to that call -- so there's no reason to wait on a
+// network round trip first just to have *some* buffer to invoke the old fused function with. A
+// no-op if the driver's already loaded (bDelayLoad false), so calling it from both here and
+// InitSpectatorConnection is safe regardless of which one runs first.
+void EnsureSpectatorDriverLoaded()
+{
+  if (!bDelayLoad) return;
+  DrvInit(nBurnDrvActive, true);
+  MediaInit();
+  RunInit();
+  bDelayLoad = false;
+}
+
 bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
 {
   // Used for initial loading.  Connecting + starting up spectator stuff and so on....
-  if (bDelayLoad) {
-    DrvInit(nBurnDrvActive, true);
-    MediaInit();
-    RunInit();
-    bDelayLoad = false;
-  }
+  EnsureSpectatorDriverLoaded();
 
   // The buffer is all of the game data that we are interested in.
   // It includes state?, scores, ranked, etc.

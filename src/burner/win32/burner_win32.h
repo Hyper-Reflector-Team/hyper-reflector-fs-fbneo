@@ -506,6 +506,11 @@ bool __cdecl ggpo_begin_game_callback(const char* name);
 bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int* checksum, int frame);
 bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len);
 void __cdecl ggpo_free_buffer_callback(void* buffer);
+// Split out of ggpo_load_game_state_callback so a spectator connection can trigger the ROM/driver
+// load immediately after ggpo_begin_game_callback, without needing a snapshot buffer in hand first
+// (the load doesn't depend on match state, only on the ROM name already passed to that call). A
+// no-op once the driver's already loaded. See InitSpectatorConnection in fbn_spectate.cpp.
+void EnsureSpectatorDriverLoaded();
 
 // fbn_spectate.cpp -- spectating via the backend relay (src/util-servers/spectate-relay), not
 // GGPO. See that file's top comment for the wire protocol and overall design.
