@@ -1705,6 +1705,20 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			POST_INITIALISE_MESSAGE;
 			break;
 
+		case MENU_VOLUME:
+			if (UseDialogs()) {
+				// AudBlankSound() before opening (matches every other modal numdial.cpp dialog,
+				// e.g. MENU_GAMMA_OTHER/MENU_SETCPUCLOCK below) -- unlike those, this dialog itself
+				// applies nAudVolume live as the slider moves (see VolumeProc), so the point isn't
+				// to keep audio silent throughout, just to avoid a stale buffer glitching once the
+				// modal dialog's own nested message loop starts pumping messages.
+				InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
+				AudBlankSound();
+				VolumeDialog();
+				GameInpCheckMouse();
+			}
+			break;
+
 		case MENU_DSOUND_NOSOUND:
 			if (!bDrvOkay) {
 				nAudSampleRate[0] = 0;

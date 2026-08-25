@@ -1157,6 +1157,9 @@ bool SpectateGetInput(void* values)
       if (type == "chat") {
         // Spectator-only chat from another watcher of this match (see main.go's "chat" case --
         // it never touches the publishers map, so this can never be a message from a player).
+        // Called unconditionally, same as the player-chat receive path in fbn_ggpo.cpp --
+        // VidOverlayAddChatLine already suppresses display on its own when isChatMuted is set
+        // (vid_overlay.cpp), so no separate check is needed here.
         std::string userName, text;
         if (!JsonExtractString(msg, "userName", userName) || !JsonExtractString(msg, "text", text)) continue;
 
@@ -1254,12 +1257,22 @@ void SpectateSendChat(const char* text)
   if (!g_spectateActive || !text) return;
 
   // Local echo first -- the relay never echoes a chat message back to its own sender (see
-  // main.go's "chat" case), so without this the sender would never see their own message.
-  TCHAR nameBuf[64];
-  ANSIToTCHAR(g_specUserName.c_str(), nameBuf, 64);
-  TCHAR textBuf[MAX_CHAT_SIZE];
-  ANSIToTCHAR(text, textBuf, MAX_CHAT_SIZE);
-  VidOverlayAddChatLine(nameBuf, textBuf);
+  // main.go's "chat" case), so without this the sender would never see their own message. Gated
+  // on !isChatMuted exactly like QuarkSendChat's identical local-echo branch (fbn_ggpo.cpp) --
+  // same shared mute toggle (menu.cpp's MENU_MUTE_CHAT / the in-match hotkey), same reasoning:
+  // VidOverlayAddChatLine already suppresses display internally when muted (vid_overlay.cpp), but
+  // calling it unconditionally here would also fire its "let the other side know you're muted"
+  // datagram notify for what would just be our own echo, not an incoming message -- skip the call
+  // entirely instead. The message is still sent below regardless of mute state, same as
+  // QuarkSendChat still calls ggpo_send_chat unconditionally: muting only affects what shows on
+  // this screen, not whether other spectators who aren't muted can still see it.
+  if (!isChatMuted) {
+    TCHAR nameBuf[64];
+    ANSIToTCHAR(g_specUserName.c_str(), nameBuf, 64);
+    TCHAR textBuf[MAX_CHAT_SIZE];
+    ANSIToTCHAR(text, textBuf, MAX_CHAT_SIZE);
+    VidOverlayAddChatLine(nameBuf, textBuf);
+  }
 
   if (g_specUdpSocket == INVALID_SOCKET) return;
   std::string msg = "{\"type\":\"chat\",\"matchId\":\"" + JsonEscapeSimple(g_specMatchId) +

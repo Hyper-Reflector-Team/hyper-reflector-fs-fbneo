@@ -472,6 +472,7 @@ int StatedSave(int nSlot);
 // numdial.cpp
 int NumDialCreate(int bDial);
 void GammaDialog();
+void VolumeDialog();
 void ScanlineDialog();
 void PhosphorDialog();
 void ScreenAngleDialog();
