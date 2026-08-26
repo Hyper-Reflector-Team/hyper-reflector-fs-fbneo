@@ -48,7 +48,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   if (len >= MAX_NAME_SIZE - 1) {
     throw std::runtime_error("Game name is too long!");
   }
-  strcpy(_GameName, gameName_);
+  strcpy_s(_GameName, gameName_);
 
   _callbacks = *cb;
   _synchronizing = true;
