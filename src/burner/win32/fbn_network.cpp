@@ -262,11 +262,12 @@ int PackGameInputs()
       nControls[wIndex++] = *bii.pVal;
     }
 
-    // k is the size in bytes of all inputs for one player
-    int k = wIndex + 1;
+    // k is a fixed 7 bytes per player, matching GAMEINPUT_MAX_BYTES.
+    int k = 7;
 
-    res = k;
-    memOffset = k;
+    // res ends up as the total across all players, so callers can divide it back down.
+    memOffset += k;
+    res = memOffset;
   }
 
 

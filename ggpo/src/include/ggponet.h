@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 #define GGPO_MAX_PLAYERS                  4
-#define GGPO_MAX_PREDICTION_FRAMES        8
+#define GGPO_MAX_PREDICTION_FRAMES        15 // was 8
 
  // TODO: Share with main program / put this with defs elsewhere....
   const static size_t MAX_GGPO_DATA_SIZE = 128;	 // 128 characters is probably enough.
@@ -176,6 +176,7 @@ extern "C" {
     , DATAGRAM_CODE_CHAT = 2
     , DATAGRAM_CODE_GGPO_SETTINGS = 3
     , DATAGRAM_CODE_DISCONNECT = 4        // Player is disconnecting.
+    , DATAGRAM_CODE_DELAY_NEGOTIATE = 5   // Used for auto-delay, handled in fbn_ggpo.cpp.
   } EDatagramCode;
 
   /*

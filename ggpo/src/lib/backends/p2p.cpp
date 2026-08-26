@@ -11,10 +11,9 @@
 
 static const int RECOMMENDATION_INTERVAL = 240;
 
-// TEMP: We are hard coding the system to never time out for now.
 static const int NEVER_TIMEOUT = -1;
-static const int DEFAULT_DISCONNECT_TIMEOUT = NEVER_TIMEOUT;
-static const int DEFAULT_DISCONNECT_NOTIFY_START = NEVER_TIMEOUT;
+static const int DEFAULT_DISCONNECT_TIMEOUT = 5000;
+static const int DEFAULT_DISCONNECT_NOTIFY_START = 1000;
 
 static const int DEFAULT_CONNECT_TIMEOUT = NEVER_TIMEOUT;
 
@@ -578,7 +577,7 @@ void Peer2PeerBackend::HandleDisconnect(GGPOEndpoint* endpoint)
 // ----------------------------------------------------------------------------------------------------------
 void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, const GGPOEndpoint* endpoint)
 {
-  GGPOEvent info;
+  GGPOEvent info = {};
   auto playerIndex = endpoint->PlayerIndex();
 
   switch (evt.type) {
@@ -637,7 +636,12 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, const GGPOEndpoint* end
 
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
     info.player_index = (uint8_t)playerIndex;
-    memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.datagram.data, evt.u.datagram.dataSize);
+    info.u.datagram.code = evt.u.datagram.code;
+    info.u.datagram.dataSize = (uint8_t)(std::min)((size_t)evt.u.datagram.dataSize, (size_t)MAX_GGPO_DATA_SIZE);
+    if (info.u.datagram.dataSize > 0) {
+      memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.datagram.data, info.u.datagram.dataSize);
+    }
+    _callbacks.on_event(&info);
 
     break;
 

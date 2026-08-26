@@ -45,6 +45,9 @@ static int nOldWindowX, nOldWindowY;
 static int nLeftButtonX, nLeftButtonY;
 static int nWindowStyles, nWindowExStyles;
 
+// Keeps the game running while the window is being dragged or resized.
+static const UINT_PTR NETPLAY_DRAG_PUMP_TIMER_ID = 1;
+
 static int OnCreate(HWND, LPCREATESTRUCT);
 static void OnActivateApp(HWND, BOOL, DWORD);
 static void OnPaint(HWND);
@@ -55,6 +58,7 @@ static int OnSysCommand(HWND, UINT, int, int);
 static void OnSize(HWND, UINT, int, int);
 static void OnEnterSizeMove(HWND);
 static void OnExitSizeMove(HWND);
+static void OnTimer(HWND, UINT);
 static void OnEnterIdle(HWND, UINT, HWND);
 static void OnEnterMenuLoop(HWND, BOOL);
 static void OnExitMenuLoop(HWND, BOOL);
@@ -321,6 +325,7 @@ static LRESULT CALLBACK ScrnProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPar
 		HANDLE_MSG(hWnd, WM_SIZE, OnSize);
 		HANDLE_MSG(hWnd, WM_ENTERSIZEMOVE, OnEnterSizeMove);
 		HANDLE_MSG(hWnd, WM_EXITSIZEMOVE, OnExitSizeMove);
+		HANDLE_MSG(hWnd, WM_TIMER, OnTimer);
 		HANDLE_MSG(hWnd, WM_ENTERIDLE, OnEnterIdle);
 
 		HANDLE_MSG(hWnd, WM_MOUSEMOVE, OnMouseMove);
@@ -1087,7 +1092,10 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			break;
 		}
 		case MENU_STATE_UNDO:
-			scrnSSUndo();
+			// Block during netplay, same as loading a state.
+			if (!kNetGame) {
+				scrnSSUndo();
+			}
 			break;
 		case MENU_STATE_LOAD_SLOT:
 			if (bDrvOkay && !kNetGame) {
@@ -1698,6 +1706,16 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 		case MENU_AUD_PLUGIN_3:
 			AudSelect(2);
 			POST_INITIALISE_MESSAGE;
+			break;
+
+		case MENU_VOLUME:
+			if (UseDialogs()) {
+				// Clear the sound buffer first, same as the other dialogs.
+				InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
+				AudBlankSound();
+				VolumeDialog();
+				GameInpCheckMouse();
+			}
 			break;
 
 		case MENU_DSOUND_NOSOUND:
@@ -3125,11 +3143,18 @@ static void OnEnterSizeMove(HWND)
 	GetClientRect(hScrnWnd, &rect);
 	nPrevWidth = rect.right;
 	nPrevHeight = rect.bottom;
+
+	// Windows blocks our normal loop during a drag, but WM_TIMER still fires, so use that instead.
+	if (kNetGame) {
+		SetTimer(hScrnWnd, NETPLAY_DRAG_PUMP_TIMER_ID, USER_TIMER_MINIMUM, NULL);
+	}
 }
 
 static void OnExitSizeMove(HWND)
 {
 	RECT rect;
+
+	KillTimer(hScrnWnd, NETPLAY_DRAG_PUMP_TIMER_ID); // does nothing if it was never started
 
 	GetClientRect(hScrnWnd, &rect);
 	if (rect.right != nPrevWidth || rect.bottom != nPrevHeight) {
@@ -3139,6 +3164,14 @@ static void OnExitSizeMove(HWND)
 	GetWindowRect(hScrnWnd, &rect);
 	nWindowPosX = rect.left;
 	nWindowPosY = rect.top;
+}
+
+// Keeps the game running while the window is being dragged or resized.
+static void OnTimer(HWND, UINT id)
+{
+	if (id == NETPLAY_DRAG_PUMP_TIMER_ID) {
+		RunIdle();
+	}
 }
 
 static void OnEnterIdle(HWND /*hwnd*/, UINT /*source*/, HWND /*hwndSource*/)

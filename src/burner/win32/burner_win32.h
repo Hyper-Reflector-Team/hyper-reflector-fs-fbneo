@@ -97,6 +97,8 @@ struct DirectConnectionOptions {
   uint16_t playerNumber = 0;
   std::string playerName = "";
   uint16_t frameDelay = 1;
+  // If true, frameDelay is just a fallback until auto-delay finishes.
+  bool autoDelay = false;
 
   std::string replayAddr = "";
   uint64_t replayId = 0;
@@ -240,6 +242,8 @@ int WndInMid(HWND hMid, HWND hBase);
 char* DecorateGameName(unsigned int nBurnDrv);
 void EnableHighResolutionTiming();
 void DisableHighResolutionTiming();
+void ForceHighResolutionTimingForNetplay();
+void RestoreHighResolutionTimingAfterNetplay();
 
 // drv.cpp
 extern int bDrvOkay;								// 1 if the Driver has been initted okay, and it's okay to use the BurnDrv functions
@@ -263,6 +267,8 @@ extern int kNetGame;
 extern int kNetSpectator;
 extern int kNetLua;
 extern char kNetQuarkId[128];
+// True once the match is really running, not just connecting.
+extern bool bGGPOMatchRunning;
 
 int RunIdleDelay(int frames);
 int RunIdle();
@@ -435,6 +441,7 @@ int StatedSave(int nSlot);
 // numdial.cpp
 int NumDialCreate(int bDial);
 void GammaDialog();
+void VolumeDialog();
 void ScanlineDialog();
 void PhosphorDialog();
 void ScreenAngleDialog();

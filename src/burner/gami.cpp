@@ -2210,3 +2210,11 @@ void GameInpFixDiagonals(bool bCopy)
 		}
 	}
 }
+
+// Clears old input history so it can't bias the first real frame of a new match.
+void GameInpResetSOCDHistory()
+{
+	memset(InpDirectionsPrev, 0, sizeof(InpDirectionsPrev));
+	memset(InpDirectionsNext, 0, sizeof(InpDirectionsNext));
+	memset(bInpIsLocked, 0, sizeof(bInpIsLocked));
+}

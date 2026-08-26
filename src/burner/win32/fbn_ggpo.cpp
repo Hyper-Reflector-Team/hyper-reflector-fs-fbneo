@@ -9,6 +9,7 @@ extern "C" {
 }
 
 #include "../../ggpo/src/lib/log.h"
+#include <algorithm>
 
 
 const size_t MAX_HOST = 128;
@@ -26,6 +27,7 @@ namespace Utils {
 extern int nAcbVersion;
 extern int nAcbLoadState;
 extern int bMediaExit;
+extern int nGGPOTimesyncFrames;
 
 uint8_t _playerIndex = PLAYER_NOT_SET;
 uint8_t _otherPlayerIndex = PLAYER_NOT_SET;
@@ -54,6 +56,67 @@ static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
 //static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
+// Shows the "timesync active" overlay text once, then clears itself.
+bool bTimesyncDelayBumped = false;
+
+// True once the match is really running, not just connecting.
+bool bGGPOMatchRunning = false;
+
+// Auto-delay: each side measures ping and picks a delay, then both use the bigger one.
+static bool bAutoDelay = false;
+static bool bAutoDelayApplied = false;
+static int nAutoDelayLocalCandidate = -1; // -1 = not yet computed
+static int nAutoDelayBlockedFrames = 0;   // frames spent waiting so far
+
+static const int MIN_AUTO_DELAY_FRAMES = 0;
+static const int MAX_AUTO_DELAY_FRAMES = 8;
+// Stop waiting for a reply after this many frames (~2s) and just proceed.
+static const int AUTO_DELAY_TIMEOUT_FRAMES = 120;
+
+// Picks a delay long enough to roughly cover the one-way ping time.
+static int ComputeAutoDelayFrames(int pingMs)
+{
+  if (pingMs <= 0) return MIN_AUTO_DELAY_FRAMES;
+  double frameMs = 100000.0 / (double)nBurnFPS;
+  double oneWayMs = pingMs / 2.0;
+  int frames = (int)((oneWayMs / frameMs) + 0.5);
+  if (frames < MIN_AUTO_DELAY_FRAMES) frames = MIN_AUTO_DELAY_FRAMES;
+  if (frames > MAX_AUTO_DELAY_FRAMES) frames = MAX_AUTO_DELAY_FRAMES;
+  return frames;
+}
+
+// Sends our own delay candidate to the other player.
+static void SendAutoDelayCandidate()
+{
+  if (nAutoDelayLocalCandidate < 0) {
+    GGPONetworkStats stats;
+    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
+    nAutoDelayLocalCandidate = ComputeAutoDelayFrames(stats.network.ping);
+  }
+  uint8_t candidate = (uint8_t)nAutoDelayLocalCandidate;
+  QuarkSendData(DATAGRAM_CODE_DELAY_NEGOTIATE, &candidate, sizeof(candidate));
+}
+
+static void FinalizeAutoDelay(int remoteCandidate)
+{
+  if (bAutoDelayApplied) return; // already settled, ignore any extra packets
+
+  if (nAutoDelayLocalCandidate < 0) {
+    // Their candidate arrived before ours, so compute ours now.
+    GGPONetworkStats stats;
+    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
+    nAutoDelayLocalCandidate = ComputeAutoDelayFrames(stats.network.ping);
+  }
+
+  int finalDelay = (std::max)(nAutoDelayLocalCandidate, remoteCandidate);
+  finalDelay = (std::min)(finalDelay, MAX_AUTO_DELAY_FRAMES);
+
+  ggpo_set_frame_delay(ggpo, finalDelay, nVidRunahead);
+  iDelay = finalDelay;
+  bAutoDelayApplied = true;
+
+  Utils::LogIt(CATEGORY_CONNECTION, "auto-delay negotiated: local=%d remote=%d final=%d", nAutoDelayLocalCandidate, remoteCandidate, finalDelay);
+}
 
 const int ggpo_state_header_size = 6 * sizeof(int);
 
@@ -217,7 +280,16 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     VidOverlaySetSystemMessage(_T(""));
     VidSSetSystemMessage(_T(""));
 
+    // The match is really running now, so let real input start and clear old input history.
+    bGGPOMatchRunning = true;
+    GameInpResetSOCDHistory();
+
     // NOTE: Version exchange happens during sync now.
+
+    // Safe to send our delay candidate now.
+    if (bAutoDelay && !kNetSpectator) {
+      SendAutoDelayCandidate();
+    }
     break;
   }
 
@@ -225,6 +297,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     if (!info->isReplayEndpoint) {
       VidOverlaySetSystemMessage(_T("Disconnected from Peer"));
       VidSSetSystemMessage(_T("Disconnected from Peer"));
+      // Stop sound, otherwise it loops the last bit of audio forever.
+      AudSoundStop();
       if (bReplayRecording) {
         AviStop();
         bMediaExit = true;
@@ -232,7 +306,28 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     }
     break;
 
+  case GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
+    // The other player might still come back, so just pause the sound.
+    VidOverlaySetSystemMessage(_T("Connection interrupted..."));
+    VidSSetSystemMessage(_T("Connection interrupted..."));
+    AudSoundStop();
+    break;
+
+  case GGPO_EVENTCODE_CONNECTION_RESUMED:
+    VidOverlaySetSystemMessage(_T(""));
+    VidSSetSystemMessage(_T(""));
+    AudSoundPlay();
+    break;
+
   case GGPO_EVENTCODE_TIMESYNC:
+    // Skip up to 2 idle frames to let the other player catch up.
+    if (!kNetSpectator) {
+      const int add = info->u.timesync.frames_ahead;
+      if (add > 0) {
+        nGGPOTimesyncFrames = (std::min)(add, 2);
+        bTimesyncDelayBumped = true;
+      }
+    }
     break;
 
 
@@ -251,7 +346,21 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     }
     break;
 
+    case DATAGRAM_CODE_DELAY_NEGOTIATE:
+    {
+      if (bAutoDelay && !kNetSpectator) {
+        int remoteCandidate = (uint8_t)info->u.datagram.data[0];
+        if (nAutoDelayLocalCandidate < 0) {
+          // Send our own candidate now too.
+          SendAutoDelayCandidate();
+        }
+        FinalizeAutoDelay(remoteCandidate);
+      }
+    }
+    break;
+
     case DATAGRAM_CODE_CHAT:
+    case 'T': // old builds used 'T' for chat
     {
       TCHAR szUser[MAX_CHAT_SIZE];
       TCHAR szText[MAX_CHAT_SIZE];
@@ -262,12 +371,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       // NOTE: I can't include 'ggposession.h' at this time because it will break the compilation.  I will go back and
       // find a proper way to include it later......
       char* playerName = ggpo_get_playerName(ggpo, info->player_index);
-      ANSIToTCHAR(playerName, szUser, MAX_NAME_SIZE);
+      ANSIToTCHAR(playerName ? playerName : "Unknown", szUser, MAX_NAME_SIZE);
 
-      ANSIToTCHAR(msg, szText, info->u.datagram.dataSize);
+      const uint8_t safeSize = (uint8_t)(std::min)((uint32_t)info->u.datagram.dataSize, (uint32_t)(MAX_CHAT_SIZE - 1));
+      ANSIToTCHAR(msg, szText, safeSize);
 
       // Chat messages must be zero terminated...
-      szText[info->u.datagram.dataSize] = 0;
+      szText[safeSize] = 0;
 
       // NOTE: Kind of silly that we have to come up with another string when we already have the 'C' command code.
       // TCHAR* useName = first == 'C' ? _T("Command") : szUser;
@@ -311,32 +421,43 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     // ranked savestate
     if (iRanked) {
       _stprintf(tfilename, _T("savestates\\%s_fbneo_ranked.fs"), tname);
-      if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+      HANDLE hFind = FindFirstFile(tfilename, &fd);
+      if (hFind != INVALID_HANDLE_VALUE) {
+        FindClose(hFind);
         // Load our save-state file (freeplay, event mode, etc.)
-        BurnStateLoad(tfilename, 1, &DrvInitCallback);
-        DetectorLoad(name, false, iSeed);
-        // if playing a direct game, we never get match information, so put anonymous
-        if (bDirect) {
-          //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-          VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+        if (loadRes == 0) {
+          DetectorLoad(name, false, iSeed);
+          // if playing a direct game, we never get match information, so put anonymous
+          if (bDirect) {
+            // Needed so the spectator count can show.
+            VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+            VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          }
+          return 0;
         }
-        return 0;
+        // Save file was broken or wrong version, fall back to a normal game start.
       }
     }
 
     // regular savestate
     // NOTE: That this can happen for ranked games as well....
     _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
-    if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+    HANDLE hFind = FindFirstFile(tfilename, &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+      FindClose(hFind);
       // Load our save-state file (freeplay, event mode, etc.)
-      BurnStateLoad(tfilename, 1, &DrvInitCallback);
-      DetectorLoad(name, false, iSeed);
-      // if playing a direct game, we never get match information, so put anonymous
-      if (bDirect) {
-        //VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
-        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+      const INT32 loadRes = BurnStateLoad(tfilename, 1, &DrvInitCallback);
+      if (loadRes == 0) {
+        DetectorLoad(name, false, iSeed);
+        // if playing a direct game, we never get match information, so put anonymous
+        if (bDirect) {
+          VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+          VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        }
+        return 0;
       }
-      return 0;
+      // Load failed, fall back to a normal game start.
     }
   }
 
@@ -360,8 +481,9 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so play anonymous
       if (bDirect) {
-        // VidOverlaySetGameInfo(_T("player 1#0,0"), _T("player 2#0,0"), false, iRanked, _playerIndex);
-        // VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        // Needed so a fresh match with no save file can show the spectator count.
+        VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
+        VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
       }
       return 1;
     }
@@ -642,6 +764,14 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   iRanked = 0;
   _playerIndex = PLAYER_NOT_SET;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
+  bTimesyncDelayBumped = false;
+  bGGPOMatchRunning = false;
+  bAutoDelay = ops.autoDelay;
+  bAutoDelayApplied = false;
+  nAutoDelayLocalCandidate = -1;
+  nAutoDelayBlockedFrames = 0;
+  nVidRunahead = 0; // clear old value before connecting
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -685,6 +815,9 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   ggpo_set_frame_delay(ggpo, ops.frameDelay, nVidRunahead);
   VidOverlaySetSystemMessage(_T("Connecting..."));
 
+  // Force precise timing for the match, restored in QuarkEnd().
+  ForceHighResolutionTimingForNetplay();
+
   return 0;
 
 
@@ -714,6 +847,7 @@ void QuarkInit(TCHAR* tconnect)
   iRanked = 0;
   _playerIndex = 0;
   iDelay = 0;
+  nGGPOTimesyncFrames = 0;
 
 #ifdef _DEBUG
   kNetLua = 1;
@@ -837,7 +971,9 @@ void QuarkInit(TCHAR* tconnect)
         WIN32_FIND_DATA fd;
         TCHAR tfilename[MAX_PATH];
         _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tgame);
-        if (FindFirstFile(tfilename, &fd) != INVALID_HANDLE_VALUE) {
+        HANDLE hFind = FindFirstFile(tfilename, &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+          FindClose(hFind);
           BurnStateLoad(tfilename, 1, &DrvInitCallback);
         }
         DetectorLoad(gameName, true, iSeed);
@@ -856,7 +992,15 @@ void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
+  RestoreHighResolutionTimingAfterNetplay();
   kNetGame = 0;
+  nGGPOTimesyncFrames = 0;
+  bTimesyncDelayBumped = false;
+  bGGPOMatchRunning = false;
+  bAutoDelay = false;
+  bAutoDelayApplied = false;
+  nAutoDelayLocalCandidate = -1;
+  nAutoDelayBlockedFrames = 0;
   bMediaExit = true;
 
 }
@@ -887,6 +1031,20 @@ void QuarkDisconnect()
 // -------------------------------------------------------------------------------------------------------------------
 bool QuarkSyncInput(void* values, int isize, int playerIndex)
 {
+  // Wait for auto-delay to finish before sending real input, then give up after a while.
+  if (bAutoDelay && !bAutoDelayApplied) {
+    nAutoDelayBlockedFrames++;
+    if (nAutoDelayBlockedFrames < AUTO_DELAY_TIMEOUT_FRAMES) {
+      return false;
+    }
+    Utils::LogIt(CATEGORY_CONNECTION, "auto-delay negotiation timed out after %d frames, using local candidate", nAutoDelayBlockedFrames);
+    if (nAutoDelayLocalCandidate >= 0) {
+      ggpo_set_frame_delay(ggpo, nAutoDelayLocalCandidate, nVidRunahead);
+      iDelay = nAutoDelayLocalCandidate;
+    }
+    bAutoDelayApplied = true;
+  }
+
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
   bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
   return res;
@@ -902,13 +1060,16 @@ bool QuarkIncrementFrame()
     AviStart();
   }
 
-  ggpo_advance_frame(ggpo);
+  if (ggpo) {
+    // A spectator has no real GGPO session.
+    ggpo_advance_frame(ggpo);
 
-  if (!bSkipPerfmonUpdates) {
-    GGPONetworkStats stats;
+    if (!bSkipPerfmonUpdates) {
+      GGPONetworkStats stats;
 
-    ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
-    ggpoutil_perfmon_update(ggpo, stats);
+      ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
+      ggpoutil_perfmon_update(ggpo, stats);
+    }
   }
 
   if (!bReplaySupport && !bReplayStarted) {
@@ -921,6 +1082,12 @@ bool QuarkIncrementFrame()
 // --------------------------------------------------------------------------------------------------------
 void QuarkSendChat(char* text)
 {
+  if (_playerIndex != PLAYER_NOT_SET && ggpo && !isChatMuted) {
+    auto playerName = ggpo_get_playerName(ggpo, _playerIndex);
+    wchar_t nameBuffer[16 * 2];
+    wcscpy(nameBuffer, ANSIToTCHAR(playerName ? playerName : "Unknown", NULL, NULL));
+    VidOverlayAddChatLine(nameBuffer, ANSIToTCHAR(text, NULL, NULL));
+  }
   ggpo_send_chat(ggpo, text);
 }
 

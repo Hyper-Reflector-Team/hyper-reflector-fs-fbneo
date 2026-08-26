@@ -21,9 +21,8 @@ static const int MAX_EP = 4;
 // TEMP:  Using assumed player and input sizes for now.
 static const uint16 PLAYER_COUNT = 2;
 
-// NOTE: This is the input size that 3s uses.  We should not have a hard-coded way of doing this,
-// or we should actually probably just change the way we do the asserts....
-static const uint16 INPUT_SIZE = 5;
+// Must match GAMEINPUT_MAX_BYTES, or input size checks fail.
+static const uint16 INPUT_SIZE = 7;
 
 class ReplayEndpoint;
 
