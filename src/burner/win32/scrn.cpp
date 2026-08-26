@@ -45,6 +45,11 @@ static int nOldWindowX, nOldWindowY;
 static int nLeftButtonX, nLeftButtonY;
 static int nWindowStyles, nWindowExStyles;
 
+// Timer id used to keep the game running while the window is being moved or resized -- see
+// OnEnterSizeMove/OnExitSizeMove/OnTimer below. Safe to reuse this small number since no other
+// timer in this codebase uses this same window.
+static const UINT_PTR NETPLAY_DRAG_PUMP_TIMER_ID = 1;
+
 static int OnCreate(HWND, LPCREATESTRUCT);
 static void OnActivateApp(HWND, BOOL, DWORD);
 static void OnPaint(HWND);
@@ -55,6 +60,7 @@ static int OnSysCommand(HWND, UINT, int, int);
 static void OnSize(HWND, UINT, int, int);
 static void OnEnterSizeMove(HWND);
 static void OnExitSizeMove(HWND);
+static void OnTimer(HWND, UINT);
 static void OnEnterIdle(HWND, UINT, HWND);
 static void OnEnterMenuLoop(HWND, BOOL);
 static void OnExitMenuLoop(HWND, BOOL);
@@ -321,6 +327,7 @@ static LRESULT CALLBACK ScrnProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPar
 		HANDLE_MSG(hWnd, WM_SIZE, OnSize);
 		HANDLE_MSG(hWnd, WM_ENTERSIZEMOVE, OnEnterSizeMove);
 		HANDLE_MSG(hWnd, WM_EXITSIZEMOVE, OnExitSizeMove);
+		HANDLE_MSG(hWnd, WM_TIMER, OnTimer);
 		HANDLE_MSG(hWnd, WM_ENTERIDLE, OnEnterIdle);
 
 		HANDLE_MSG(hWnd, WM_MOUSEMOVE, OnMouseMove);
@@ -1086,10 +1093,8 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			break;
 		}
 		case MENU_STATE_UNDO:
-			// Matches the !kNetGame guard on MENU_STATE_LOAD_SLOT right below -- undoing a state
-			// load is itself a state load, so it needs the same protection during netplay
-			// (desyncs a real GGPO match, permanently desyncs a spectator since there's no
-			// rollback to recover from it).
+			// Undoing a state load is itself a state load, so block it during netplay too --
+			// same as loading a state normally, it would desync the match.
 			if (!kNetGame) {
 				scrnSSUndo();
 			}
@@ -1707,11 +1712,8 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 
 		case MENU_VOLUME:
 			if (UseDialogs()) {
-				// AudBlankSound() before opening (matches every other modal numdial.cpp dialog,
-				// e.g. MENU_GAMMA_OTHER/MENU_SETCPUCLOCK below) -- unlike those, this dialog itself
-				// applies nAudVolume live as the slider moves (see VolumeProc), so the point isn't
-				// to keep audio silent throughout, just to avoid a stale buffer glitching once the
-				// modal dialog's own nested message loop starts pumping messages.
+				// Clear the sound buffer before opening, same as the other dialogs like this --
+				// avoids a glitch when the dialog's own message loop takes over.
 				InputSetCooperativeLevel(false, bAlwaysProcessKeyboardInput);
 				AudBlankSound();
 				VolumeDialog();
@@ -3148,11 +3150,21 @@ static void OnEnterSizeMove(HWND)
 	GetClientRect(hScrnWnd, &rect);
 	nPrevWidth = rect.right;
 	nPrevHeight = rect.bottom;
+
+	// Windows takes over the whole thread while the window is being dragged or resized, so our
+	// normal game loop can't run at all until it's done. But Windows does still deliver WM_TIMER
+	// messages during that time, so a timer is the only way to keep the game running -- see
+	// OnTimer below. Only needed during netplay/spectating.
+	if (kNetGame) {
+		SetTimer(hScrnWnd, NETPLAY_DRAG_PUMP_TIMER_ID, USER_TIMER_MINIMUM, NULL);
+	}
 }
 
 static void OnExitSizeMove(HWND)
 {
 	RECT rect;
+
+	KillTimer(hScrnWnd, NETPLAY_DRAG_PUMP_TIMER_ID); // does nothing if it was never started
 
 	GetClientRect(hScrnWnd, &rect);
 	if (rect.right != nPrevWidth || rect.bottom != nPrevHeight) {
@@ -3162,6 +3174,14 @@ static void OnExitSizeMove(HWND)
 	GetWindowRect(hScrnWnd, &rect);
 	nWindowPosX = rect.left;
 	nWindowPosY = rect.top;
+}
+
+// Keeps the game running while the window is being moved or resized -- see OnEnterSizeMove above.
+static void OnTimer(HWND, UINT id)
+{
+	if (id == NETPLAY_DRAG_PUMP_TIMER_ID) {
+		RunIdle();
+	}
 }
 
 static void OnEnterIdle(HWND /*hwnd*/, UINT /*source*/, HWND /*hwndSource*/)

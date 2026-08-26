@@ -96,19 +96,12 @@ struct DirectConnectionOptions {
   UINT16 playerNumber = 0;
   std::string playerName = "";
   UINT16 frameDelay = 1;
-  // When true, frameDelay above is only used as a fallback until both sides have
-  // exchanged ping-based candidates; the final delay (max of the two) is negotiated
-  // right after connecting, before any input frames are queued. Set from the --auto-delay
-  // CLI flag in main.cpp; consumed by InitDirectConnection, ggpo_on_event_callback (the
-  // GGPO_EVENTCODE_RUNNING and GGPO_EVENTCODE_DATAGRAM/DATAGRAM_CODE_DELAY_NEGOTIATE cases),
-  // and the gate at the top of QuarkGetInput, all in src/burner/win32/fbn_ggpo.cpp.
+  // If true, frameDelay above is just a fallback -- the real delay gets worked out
+  // automatically with the other player right after connecting.
   bool autoDelay = false;
 
-  // Spectate-relay publishing (see src/burner/win32/fbn_spectate.cpp). Only meaningful when
-  // playerNumber == 1 (playerSlot 0) -- that's always the publisher, per the websocket-server's
-  // spectate-request handler. spectateUid must be this player's own account uid (the same one
-  // the launcher already authenticates with), since that's what the signaling server hands
-  // spectators back as the publisher to watch.
+  // Publishing this match to spectators. Only used when playerNumber == 1, since that player
+  // is always the one who publishes.
   bool spectate = false;
   std::string spectateRelayHost = "";
   UINT16 spectateRelayUdpPort = 33335;
@@ -117,20 +110,17 @@ struct DirectConnectionOptions {
   std::string spectateUid = "";
 };
 
-// Options for watching a match via the spectate relay (src/burner/win32/fbn_spectate.cpp),
-// as opposed to DirectConnectionOptions above which is for actually playing in one.
+// Options for watching a match as a spectator, instead of playing in one.
 struct SpectateConnectionOptions {
   std::string romName;
   std::string relayHost;
   UINT16 relayUdpPort = 33335;
   UINT16 relayTcpPort = 33336;
   std::string matchId;
-  std::string uid; // this viewer's own identifier, used for the relay's per-subscriber bookkeeping
-  std::string userName; // display name for spectator-only chat; falls back to uid if empty
-  // Who's actually playing, for the overlay's game-info text at the top of the screen. The
-  // spectate relay never carries match metadata (only opaque confirmed-input bytes), so the
-  // launcher passes these in directly rather than they being discoverable from the connection
-  // itself. Empty is a valid "unknown" -- InitSpectatorConnection falls back to a generic label.
+  std::string uid; // this viewer's own id
+  std::string userName; // shown in spectator chat; falls back to uid if empty
+  // The two players' names, for the overlay. Passed in directly since the spectate feed itself
+  // doesn't carry names -- empty just falls back to a generic label.
   std::string player1Name;
   std::string player2Name;
 };
@@ -298,8 +288,7 @@ extern int kNetGame;
 extern int kNetSpectator;
 extern int kNetLua;
 extern char kNetQuarkId[128];
-// True once GGPO_EVENTCODE_RUNNING has actually fired (fbn_ggpo.cpp) -- unlike kNetGame, which
-// is set for the whole "Connecting.../Synchronizing..." window too. See run.cpp's GetInput.
+// True once the match is really running, not just connecting.
 extern bool bGGPOMatchRunning;
 
 int RunIdleDelay(int frames);
@@ -505,57 +494,37 @@ int NetworkGetInput();
 // fbn_ggpo.cpp
 int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps);
 
-// Reused directly by fbn_spectate.cpp's publisher/spectator paths -- both are already
-// kNetSpectator-aware (deferred ROM init, state-apply) and GGPO-session-agnostic (they just
-// serialize/deserialize driver state via BurnAreaScan), so spectating doesn't need its own
-// copies of this logic. See the comment block in fbn_spectate.cpp for how they're used.
+// Reused as-is by the spectate code in fbn_spectate.cpp -- they already know how to handle a
+// spectator, so spectating doesn't need its own separate copy of this logic.
 bool __cdecl ggpo_begin_game_callback(const char* name);
 bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int* checksum, int frame);
 bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len);
 void __cdecl ggpo_free_buffer_callback(void* buffer);
-// The DrvInit/MediaInit/RunInit sequence a spectator's deferred ROM load needs (see bDelayLoad in
-// fbn_ggpo.cpp), split out of ggpo_load_game_state_callback so it's independently callable. A
-// no-op once the driver's already loaded. Currently only ggpo_load_game_state_callback itself
-// calls this (deliberately -- see InitSpectatorConnection in fbn_spectate.cpp for why calling it
-// any earlier caused concurrently-launched spectators to contend for CPU); kept exposed here in
-// case a future caller has a legitimate reason to trigger the load independently of a snapshot.
+// Loads the ROM for a spectator. Does nothing if it's already loaded.
 void EnsureSpectatorDriverLoaded();
 
-// Set by InitSpectatorConnection (fbn_spectate.cpp) before calling ggpo_load_game_state_callback,
-// so that function's kNetSpectator branch can show the actual players in the overlay instead of a
-// generic label -- the spectate relay never carries match metadata, only opaque input bytes.
+// The two players' names, set before loading a spectator's snapshot so the overlay can show
+// them -- the spectate feed itself doesn't carry names.
 extern TCHAR g_spectateP1Name[128];
 extern TCHAR g_spectateP2Name[128];
 
-// fbn_spectate.cpp -- spectating via the backend relay (src/util-servers/spectate-relay), not
-// GGPO. See that file's top comment for the wire protocol and overall design.
+// fbn_spectate.cpp -- watching a live match through the backend relay, not GGPO.
 //
-// Publisher (host) side: only ever active on the playerSlot-0 client of a match, and only
-// when opted into via --spectate. SpectatePublishRecordFrame/-Tick are called from
-// fbn_ggpo.cpp/QuarkIncrementFrame every simulated frame; safe to call unconditionally, they
-// no-op when publishing isn't active.
+// Publisher (host) side: only runs on player 1's client, and only if spectating was turned on.
+// Safe to call these even when not publishing -- they just do nothing.
 void SpectatePublishInit(const DirectConnectionOptions& ops);
 void SpectatePublishRecordFrame(int frame, const void* values);
 void SpectatePublishTick();
 void SpectatePublishShutdown();
 bool SpectatePublishActive();
 
-// Spectator (viewer) side. InitSpectatorConnection blocks until the ROM is loaded and an
-// initial state snapshot has been applied (or a connection failure), matching how the rest of
-// startup already blocks on ROM/driver init -- there's nothing useful to render before that
-// completes anyway. SpectateGetInput is called once per frame in place of NetworkGetInput()
-// (see the branch in fbn_network.cpp); returns false when the next frame hasn't arrived yet,
-// which the caller already treats as a routine skip-and-retry.
+// Spectator (viewer) side.
 bool InitSpectatorConnection(const SpectateConnectionOptions& ops);
 bool SpectateGetInput(void* values);
 bool SpectateActive();
 void SpectateDisconnect();
 
-// Spectator-only chat (relayed spectator-to-spectator, never reaches the players -- see
-// main.go's "chat" case, which only ever touches the subscribers map). Wired into run.cpp's
-// existing chat entry box (VK_RETURN handler) in place of QuarkSendChat when SpectateActive().
-// Incoming chat from other spectators is handled inside SpectateGetInput's existing per-frame
-// UDP drain, alongside "frame" messages -- no separate poll needed.
+// Spectator-only chat -- goes to other viewers, never to the players.
 void SpectateSendChat(const char* text);
 
 // [OBSOLETE]

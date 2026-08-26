@@ -1425,10 +1425,7 @@ void VidOverlaySetGameScores(int score1, int score2, int winner)
 
 void VidOverlaySetGameSpectators(int num)
 {
-  // Previously subtracted 1 for a "server spectator" pseudo-viewer from the old GGPOClient/
-  // streaming-server design (see the [OBSOLETE] ggpo_on_client_event_callback in fbn_ggpo.cpp,
-  // its only caller before fbn_spectate.cpp). The spectate-relay has no such pseudo-viewer --
-  // every count it reports is a real spectator -- so this is now an honest 1:1 display.
+  // Every count the relay reports is a real spectator, so this is a straight 1:1 display now.
   wchar_t buf[32];
   spectators.Set(_itow(MAX(0, num), buf, 10));
   show_spectators = num > 0;
@@ -1488,7 +1485,7 @@ void VidOverlaySetRemoteStats(uint8_t delay, uint8_t runahead) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 void VidOverlaySetStats(double fps, int ping, int delay)
 {
-  // Send immediately on ping — don't wait for first rollback or remote shows stale/garbage runahead
+  // Send this right away, don't wait -- otherwise the other side shows a stale value.
   if (ping > 0 && prev_runahead != nVidRunahead) {
     prev_runahead = nVidRunahead;
     SendToPeer(delay, nVidRunahead);
@@ -1615,9 +1612,8 @@ void VidOverlaySetStats(double fps, int ping, int delay)
     }
     stats_line4.Set(buf_line4);
 
-    // Arrow key navigation for palette slot toggling.
-    // Up/Down selects a slot (0-11), Left/Right toggles it on/off.
-    // Edge-detect so each keypress fires once.
+    // Arrow keys pick a palette slot (Up/Down) and turn it on or off (Left/Right). Only reacts
+    // once per keypress, not while held down.
     {
       static UINT32 prev_keys = 0;
       UINT32 cur_keys = 0;
@@ -1706,10 +1702,8 @@ void VidOverlayAddChatLine(const wchar_t* name, const wchar_t* text)
 
   // Let other player know that your chat is muted.  Only do this branch for non-system messages.
   // NOTE: This is a great demonstration of how double-dipping on the 'name' parameter just makes things more difficult to deal with.
-  // A process is always either playing (kNetSpectator == 0) or spectating, never both, so which
-  // mute setting applies is decided purely by mode -- isSpectatorChatMuted and isChatMuted are
-  // independently toggled and persisted (see menu.cpp/scrn.cpp, cona.cpp) so a preference set in
-  // one mode doesn't affect the other next time this process runs in it.
+  // Playing and spectating are never both true at once, so use whichever mute setting matches
+  // what this process is actually doing. Each is its own separate, saved setting.
   if ((kNetSpectator ? isSpectatorChatMuted : isChatMuted) && wcscmp(name, _T("System"))) {
     if (!bMutedWarnSent) {
       QuarkSendData(DATAGRAM_CODE_MUTED, nullptr, 0);

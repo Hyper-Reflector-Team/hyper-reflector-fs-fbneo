@@ -540,7 +540,7 @@ int ConfigAppSave()
 	VAR(bVidSaveChatHistory);
 	_ftprintf(h, _T("\n// Mute chat\n"));
 	VAR(isChatMuted);
-	_ftprintf(h, _T("\n// Mute spectator-only chat (independent of the ingame chat mute above)\n"));
+	_ftprintf(h, _T("\n// Mute spectator chat (separate from the ingame chat mute above)\n"));
 	VAR(isSpectatorChatMuted);
 	_ftprintf(h, _T("\n// Run ahead frames (0 = disabled, 1, 2)\n"));
 	VAR(nVidRunahead);

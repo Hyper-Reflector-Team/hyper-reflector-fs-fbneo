@@ -1,66 +1,47 @@
-// Spectating via the backend relay (src/util-servers/spectate-relay/main.go in the
-// hyper-reflector-backend repo), NOT GGPO. A relayed feed only ever carries already-confirmed
-// input (the relay is a dumb forwarder, no prediction happens anywhere in this path), so the
-// viewer side just applies input directly each tick like a live network replay -- there's no
-// rollback, and GGPOSession/Peer2PeerBackend/SpectatorBackend are never touched by this file.
+// Spectating: lets other people watch a live match. This does NOT use GGPO. The relay just
+// forwards input that's already been decided, so a viewer plays it back like a recording, with
+// no rollback. See src/util-servers/spectate-relay/main.go in the backend repo for the other half.
 //
-// The live per-frame feed rides TCP, not UDP. Earlier versions of this file used UDP (matching
-// GGPO's own P2P input packets), but that was the wrong model: GGPO's UDP traffic tolerates loss
-// because every packet carries several recent frames and rollback can correct a late/wrong
-// prediction. A spectator feed has neither -- it's a straight, ordered stream of already-confirmed
-// data with nothing analogous to rollback on the receiving end, so a single dropped UDP packet
-// used to strand a spectator forever waiting on a frame number that would never be resent. TCP's
-// own reliable, ordered delivery makes that whole class of bug impossible by construction (see
-// Project Slippi's spectator protocol for prior art: it makes the same choice, over ENet's
-// reliable channel, specifically to avoid needing any catch-up/gap-recovery machinery).
+// The live feed uses TCP, not UDP. GGPO's own UDP traffic can survive lost packets because it can
+// roll back and redo a frame. A viewer can't roll back, so a lost UDP packet used to leave a
+// viewer stuck forever waiting on data that would never come again. TCP doesn't drop or reorder
+// packets, so that problem can't happen.
 //
 // Wire protocol (must match src/util-servers/spectate-relay/main.go exactly):
 //
-//   UDP -- presence and chat only. Both are fine to lose occasionally since they're
-//   self-correcting (heartbeats resend periodically; a missed spectator-count update is
-//   overwritten by the next change). Every packet is one JSON object:
-//     {"type":"publish","matchId":"...","uid":"..."}         host -> relay, periodic keepalive
-//     {"type":"unpublish","matchId":"..."}                   host -> relay, explicit stop
-//     {"type":"watch","matchId":"...","uid":"..."}           viewer -> relay, periodic keepalive
-//     {"type":"unwatch","matchId":"...","uid":"..."}         viewer -> relay, explicit stop
+//   UDP -- just presence and chat. Fine to lose occasionally since these messages repeat or
+//   get overwritten by the next update anyway. Every packet is one JSON object:
+//     {"type":"publish","matchId":"...","uid":"..."}         host tells relay it's live
+//     {"type":"unpublish","matchId":"..."}                   host tells relay it stopped
+//     {"type":"watch","matchId":"...","uid":"..."}           viewer tells relay it's watching
+//     {"type":"unwatch","matchId":"...","uid":"..."}         viewer tells relay it stopped
 //     {"type":"chat","matchId":"...","uid":"...","userName":"...","text":"..."}
-//     {"type":"spectator-count","matchId":"...","count":N}   relay -> host/viewers
+//     {"type":"spectator-count","matchId":"...","count":N}   relay tells everyone the count
 //
-//   TCP -- the state-snapshot handoff for mid-match join, AND the ongoing live frame feed itself.
-//   A publisher holds ONE persistent connection per match; a spectator also keeps its connection
-//   open for the match's duration once connected, rather than closing it after the snapshot.
-//   Every message on the wire is [4-byte big-endian header length][header JSON][optional raw
-//   payload immediately after]:
-//     Host, on connect: {"role":"publisher","matchId":"..."} then keeps the connection open,
-//       both reading further headers and proactively pushing:
+//   TCP -- sends a starting snapshot to a new viewer, then streams live input after that. Every
+//   message on the wire is [4-byte length][header JSON][optional raw data right after]:
+//     Host connects with {"role":"publisher","matchId":"..."}, then sends:
 //         {"cmd":"frame","frame":N,"data":"<base64>"}
-//       for every confirmed frame once it's old enough to be safe to reveal (see
-//       SpectatePublishTick) -- no separate payload, "data" carries the tiny (14-byte)
-//       confirmed-input blob inline.
-//     Relay pushes, per viewer request: {"cmd":"snapshot-request","requestId":"..."}
-//     Host responds: {"cmd":"snapshot-response","requestId":"...","frame":N,"liveFrame":L,
-//       "payloadSize":M} immediately followed by M raw (not base64'd) bytes: the state-snapshot
-//       blob (tagged frame N) followed by (L-N) backfilled 14-byte confirmed-input entries for
-//       frames N+1..L -- see SpectatePublishServiceIncoming for why the snapshot itself can't just
-//       be captured fresh at N==L, and ApplySnapshotAndBackfill for how the viewer consumes both.
-//     Viewer, on connect: {"role":"spectator","matchId":"..."}, then reads exactly one of:
-//       {"cmd":"snapshot-response","frame":N,"liveFrame":L,"payloadSize":M} + M bytes, or
-//       {"cmd":"error","reason":"..."}.
-//     On success, the connection stays open: the relay streams every subsequent
-//     {"cmd":"frame",...} push from the publisher down it, in the exact order the publisher sent
-//     them (TCP guarantees this), until either side disconnects. The relay may also send
-//     {"cmd":"publisher-disconnected"} if the publisher goes away first. The viewer validates each
-//     arriving frame number against what the backfill promised (g_specExpectedNextFrame) and forces
-//     a resync (fresh snapshot-request) on any mismatch -- see SpectateServiceIncomingTcp.
+//       for every frame once it's old enough to be safe to show (see SpectatePublishTick).
+//     Relay asks the host for a snapshot: {"cmd":"snapshot-request","requestId":"..."}
+//     Host replies: {"cmd":"snapshot-response","requestId":"...","frame":N,"liveFrame":L,
+//       "payloadSize":M}, then M raw bytes: the game-state snapshot plus the input for every
+//       frame from N+1 to L, so the viewer starts already caught up (see
+//       SpectatePublishServiceIncoming and ApplySnapshotAndBackfill).
+//     Viewer connects with {"role":"spectator","matchId":"..."}, then reads either:
+//       {"cmd":"snapshot-response",...} + the M bytes above, or {"cmd":"error","reason":"..."}.
+//     After that the connection stays open: the relay just forwards every "frame" message from
+//     the host, in order, until someone disconnects. The relay also sends
+//     {"cmd":"publisher-disconnected"} if the host leaves first. The viewer checks each incoming
+//     frame number matches what it expects and reconnects if it doesn't -- see
+//     SpectateServiceIncomingTcp.
 //
-// Why "safe to publish" needs a delay: at the point QuarkGetInput records a frame, GGPO's
-// returned input for it may still be predicted -- a rollback can still resimulate and correct
-// it. Publishing immediately risks sending a value a viewer can never un-see (no rollback on
-// their end). SpectatePublishRecordFrame just overwrites the ring buffer slot for a frame every
-// time it's (re)simulated, so it always holds the latest value; SpectatePublishTick only
-// actually transmits a frame once it's comfortably older than MAX_PREDICTION_FRAMES (15, see
-// ggpo/src/lib/sync.h) frames behind the current one. Viewers are latency-tolerant, so the
-// resulting fixed delay (SPECTATE_PUBLISH_DELAY_FRAMES, ~330ms at 60fps) is a non-issue.
+// Why frames wait before being published: right when a frame's input is recorded, GGPO might
+// still change it later (a rollback can correct it). Sending it immediately risks showing a
+// viewer something that turns out wrong, with no way to fix it after the fact. So we wait until a
+// frame is old enough that GGPO can no longer change it (MAX_PREDICTION_FRAMES, see
+// ggpo/src/lib/sync.h) before sending it. Viewers don't mind a small delay, so this is fine --
+// about a third of a second at 60fps (SPECTATE_PUBLISH_DELAY_FRAMES).
 #include "burner.h"
 #include <winsock.h>
 #include <cstdint>
@@ -68,24 +49,19 @@
 #include <string>
 #include <vector>
 
-// For DATAGRAM_CODE_SPECTATOR_COUNT / QuarkSendData's use below (forwarding the spectator count
-// to the opponent, who has no connection to the spectate relay of its own -- see SpectatePublishTick).
+// Needed for QuarkSendData below, which sends the spectator count to the opponent -- they have no
+// connection to the relay of their own, so they can't get the count any other way.
 extern "C" {
 #include "ggponet.h"
 }
 
 // ---------------------------------------------------------------------------------------------
-// Per-frame confirmed input size: Peer2PeerBackend hardcodes exactly 2 players
-// (ggpo/src/lib/backends/p2p.h, PLAYER_COUNT) at 7 bytes each (ggpo/src/lib/game_input.h,
-// GAMEINPUT_MAX_BYTES) -- that's the whole combined buffer Sync::SynchronizeInputs fills
-// (ggpo/src/lib/sync.cpp) and QuarkGetInput hands back. Spectating is scoped to 1v1 matches for
-// exactly the same reason Peer2PeerBackend is.
+// Size of one frame's input for both players combined: 2 players x 7 bytes each (see
+// ggpo/src/lib/game_input.h). Spectating only works for 1v1 matches, same as GGPO itself.
 static const int SPECTATE_INPUT_BYTES = 14;
-// Must comfortably cover the worst-case gap between a served safe snapshot's tagged frame and the
-// live publish cursor at the moment it's served -- see the backfill logic in
-// SpectatePublishServiceIncoming's "snapshot-request" handling. That gap is bounded by roughly
-// SPECTATE_SNAPSHOT_CAPTURE_INTERVAL_MS (how stale the safe snapshot can be) plus
-// SPECTATE_PUBLISH_DELAY_FRAMES, around 80 frames at 60fps -- 256 leaves a wide margin.
+// How many recent frames of input we keep around, so a viewer's snapshot can be backfilled to
+// catch up to the live edge (see the "snapshot-request" handling below). 256 frames is a big
+// safety margin over what's actually needed.
 static const int SPECTATE_RING_SIZE = 256;
 static const int SPECTATE_PUBLISH_DELAY_FRAMES = 20; // must stay > MAX_PREDICTION_FRAMES (15)
 static const DWORD SPECTATE_REGISTER_INTERVAL_MS = 5000; // relay drops a registration after 15s
@@ -93,9 +69,8 @@ static const DWORD SPECTATE_CONNECT_RETRY_BUDGET_MS = 20000; // total time to re
 static const DWORD SPECTATE_CONNECT_RETRY_INTERVAL_MS = 750;
 
 // ---------------------------------------------------------------------------------------------
-// Minimal, purpose-built JSON helpers. NOT a general parser -- this only needs to handle the
-// flat, fixed-shape messages in the wire protocol above, which this file and the relay both
-// control. Nested objects/arrays and escaped quotes inside values are out of scope on purpose.
+// Simple, hand-written JSON reading. Not a full JSON parser -- it only needs to handle the
+// simple, fixed-shape messages used above, since we control both ends of this protocol.
 static bool JsonExtractString(const std::string& json, const char* key, std::string& out)
 {
   std::string pattern = std::string("\"") + key + "\":\"";
@@ -121,8 +96,7 @@ static bool JsonExtractLong(const std::string& json, const char* key, long& out)
   return true;
 }
 
-// matchId/uid are simple identifiers in practice (they come from Firebase uids / server-issued
-// match ids); this just guards against an accidental quote or backslash breaking the envelope.
+// Escapes quotes and backslashes so a matchId/uid can't accidentally break the JSON.
 static std::string JsonEscapeSimple(const std::string& s)
 {
   std::string out;
@@ -135,7 +109,7 @@ static std::string JsonEscapeSimple(const std::string& s)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Base64, for the "data" field of {"cmd":"frame",...} pushes.
+// Base64 encode/decode, used for the "data" field of "frame" messages.
 static const char kB64Chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static std::string Base64Encode(const unsigned char* data, size_t len)
@@ -209,11 +183,8 @@ static bool Base64Decode(const std::string& in, std::vector<unsigned char>& out)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Socket helpers. Deliberately using the classic (non-winsock2) API throughout, matching
-// main.cpp's own #include <winsock.h> + WSAStartup -- that's the winsock generation already
-// proven to compile alongside burner.h's own windows.h chain in this codebase. The ggpo lib
-// uses <winsock2.h> internally, but that's a separate translation unit and never mixed with
-// burner.h there, so it's not a precedent for this file.
+// Socket helpers. Uses the older winsock.h API, matching how main.cpp already sets up networking
+// elsewhere in this codebase.
 static bool ResolveIPv4(const std::string& host, unsigned long* outAddr)
 {
   unsigned long addr = inet_addr(host.c_str());
@@ -287,7 +258,7 @@ static SOCKET TcpConnectWithTimeout(const std::string& host, UINT16 port, int ti
     }
   }
 
-  // Back to blocking for the synchronous framed read/write helpers below.
+  // Switch back to blocking mode for the simple read/write helpers below.
   u_long blockingMode = 0;
   ioctlsocket(s, FIONBIO, &blockingMode);
   return s;
@@ -317,11 +288,10 @@ static bool SendAll(SOCKET s, const char* buf, int len)
   return true;
 }
 
-// [4-byte BE length][header JSON][optional raw payload] -- must match the Go relay's
-// writeFramed/readFramedHeader exactly (src/util-servers/spectate-relay/main.go). Only used for
-// the short-lived, synchronous handshake connections (the initial snapshot fetch(es)) -- the
-// long-lived persistent connections (publisher and spectator live-feed sockets) use their own
-// non-blocking incremental framing below instead, since they must never block a game thread.
+// Reads/writes one message as [4-byte length][header JSON][optional raw data]. Must match the
+// relay's own framing exactly (main.go). Only used for the short, one-time snapshot fetch -- the
+// long-lived connections use their own non-blocking version below instead, since those can never
+// be allowed to block the game thread while waiting on the network.
 static bool WriteFramedHeader(SOCKET s, const std::string& headerJson, const unsigned char* payload, int payloadLen)
 {
   uint32_t beLen = htonl((uint32_t)headerJson.size());
@@ -345,8 +315,8 @@ static bool ReadFramedHeader(SOCKET s, std::string& outHeaderJson, int timeoutMs
   return true;
 }
 
-// Builds one complete framed message ([4-byte BE length][header JSON][optional payload]) into a
-// single buffer, for queuing onto a non-blocking connection's outgoing write queue.
+// Builds one complete message ([4-byte length][header JSON][optional data]) into a single
+// buffer, ready to be queued up for sending.
 static std::vector<char> BuildFramedMessage(const std::string& headerJson, const unsigned char* payload, int payloadLen)
 {
   std::vector<char> msg;
@@ -359,8 +329,7 @@ static std::vector<char> BuildFramedMessage(const std::string& headerJson, const
 }
 
 // =================================================================================================
-// Publisher (host) side -- only active on the playerSlot-0 client, only when --spectate was
-// passed. See InitDirectConnection in fbn_ggpo.cpp for where SpectatePublishInit is called.
+// Publisher (host) side -- only runs on player 1's client, and only when --spectate was passed.
 // =================================================================================================
 
 namespace {
@@ -382,11 +351,10 @@ namespace {
   int g_pubNextFrameToPublish = -1;
   DWORD g_pubLastRegisterTick = 0;
 
-  // Incremental, always-non-blocking TCP handling -- this runs every tick of a live match on the
-  // publisher's actual game thread, so it must never wait on the network even briefly: a stall
-  // here stalls both real players' GGPO session, not just a spectator. Reading (incoming
-  // snapshot-requests from the relay) and writing (outgoing snapshot-responses AND the live
-  // frame feed, both queued below) are independent directions on the same full-duplex socket.
+  // This TCP handling never blocks. It runs every tick of a live match on the real game thread,
+  // so waiting on the network even briefly here would stall the whole match, not just a viewer.
+  // Reading (snapshot requests from the relay) and writing (the live frame feed, queued below)
+  // happen independently on the same connection.
   enum PubReadState { PUB_READ_IDLE, PUB_READ_LEN, PUB_READ_HEADER };
   PubReadState g_pubReadState = PUB_READ_IDLE;
   unsigned char g_pubReadLenBuf[4];
@@ -395,22 +363,17 @@ namespace {
   std::vector<char> g_pubReadHeaderBuf;
   int g_pubReadHeaderGot = 0;
 
-  // Outgoing queue: both snapshot-responses and (much more frequently) live frame pushes land
-  // here; a single drain step sends whatever fits without blocking, resuming next tick otherwise.
+  // Outgoing messages (snapshot responses, and much more often, live frames) wait here; we send
+  // as much as we can each tick without blocking, and pick up where we left off next tick.
   std::deque<std::vector<char>> g_pubTcpOutQueue;
   size_t g_pubTcpOutSent = 0;
 
-  // Snapshot safety. ggpo_save_game_state_callback's BurnAreaScan captures whatever the
-  // publisher's live emulator memory holds AT THE INSTANT it's called -- which, exactly like any
-  // single frame's confirmed input (see this file's top comment), may still be a GGPO prediction
-  // that a later rollback silently corrects. Capturing "right now" the moment a snapshot-request
-  // arrives risks handing a spectator a snapshot that gets invalidated by a rollback on the
-  // PUBLISHER's own emulator moments later, with no way to tell the spectator -- its baseline is
-  // just permanently wrong from that point on (observed as spectators showing the wrong
-  // characters entirely, if the divergence happens to land on character-select). Fix: capture a
-  // CANDIDATE periodically, and only ever serve one to spectators once its own tagged frame has
-  // aged past MAX_PREDICTION_FRAMES, the same way a live frame has to before SpectatePublishTick
-  // publishes it -- see PromoteSafeSnapshotIfReady.
+  // Snapshot safety. A snapshot taken at the exact moment it's requested might still get changed
+  // by a GGPO rollback moments later -- same risk as sending a frame too early (see top of file).
+  // If that happens, the viewer's starting point is just permanently wrong, with no way to fix it
+  // (we've seen this show up as a viewer seeing the wrong characters entirely). So instead: take a
+  // snapshot every so often, and only actually hand one to a viewer once it's old enough that GGPO
+  // can no longer change it.
   std::vector<unsigned char> g_pubSafeSnapshot;
   int g_pubSafeSnapshotFrame = -1;
   std::vector<unsigned char> g_pubPendingSnapshot;
@@ -464,8 +427,8 @@ void SpectatePublishInit(const DirectConnectionOptions& ops)
       ioctlsocket(g_pubTcpSocket, FIONBIO, &nb);
     }
   }
-  // A failed TCP connection means mid-match join AND the live feed both won't be servable from
-  // this host; the match itself still plays fine, so this isn't treated as a hard failure.
+  // If the TCP connection fails, viewers just won't be able to join -- the match still plays
+  // fine either way, so this isn't treated as a fatal error.
 
   g_pubLastRegisterTick = 0; // force an immediate publish registration on the first tick
   g_publishActive = true;
@@ -481,11 +444,8 @@ void SpectatePublishRecordFrame(int frame, const void* values)
   if (g_pubNextFrameToPublish < 0) g_pubNextFrameToPublish = frame;
 }
 
-// Captures a new candidate snapshot roughly once a second (tagged with the current highest
-// recorded frame) and promotes the previous candidate to "the" safe snapshot once its own tagged
-// frame has aged past SPECTATE_PUBLISH_DELAY_FRAMES -- the same aging rule the live feed itself
-// uses before actually publishing a frame (see SpectatePublishTick). See this file's namespace
-// block above for why capturing fresh at snapshot-request time isn't safe.
+// Takes a new snapshot roughly once a second, and once the PREVIOUS one is old enough to be safe
+// (same rule as sending a live frame), makes it the one we actually hand to viewers.
 static void SpectatePublishCaptureSnapshotIfDue(DWORD now)
 {
   if (g_pubHighestRecordedFrame < 0) return; // nothing confirmed yet to capture
@@ -512,9 +472,8 @@ static void SpectatePublishCaptureSnapshotIfDue(DWORD now)
   if (buffer) ggpo_free_buffer_callback(buffer);
 }
 
-// Fully non-blocking and incremental across ticks -- reads at most one complete incoming header
-// per call (looping internally to drain a backlog within the tick if one's already buffered), and
-// only ever reacts to "snapshot-request" (the only thing the relay ever proactively sends here).
+// Reads incoming messages without ever blocking. Only reacts to "snapshot-request", the only
+// thing the relay sends to a publisher on its own.
 static void SpectatePublishServiceIncoming()
 {
   if (g_pubTcpSocket == INVALID_SOCKET) return;
@@ -530,8 +489,8 @@ static void SpectatePublishServiceIncoming()
         int n = recv(g_pubTcpSocket, (char*)g_pubReadLenBuf + g_pubReadLenGot, 4 - g_pubReadLenGot, 0);
         if (n > 0) { g_pubReadLenGot += n; continue; }
         if (n == 0) {
-          // Relay closed the connection. Drop it -- mid-match join and the live feed just won't
-          // be servable from this host until it reconnects (no reconnect logic exists here).
+          // Relay closed the connection. Just drop it -- no reconnect logic here, so viewers
+          // can't join until the relay connection comes back.
           closesocket(g_pubTcpSocket);
           g_pubTcpSocket = INVALID_SOCKET;
           g_pubReadState = PUB_READ_IDLE;
@@ -546,7 +505,7 @@ static void SpectatePublishServiceIncoming()
       }
       uint32_t len = ntohl(*(uint32_t*)g_pubReadLenBuf);
       if (len == 0 || len > 4096) {
-        // Malformed -- the relay only ever sends tiny fixed-shape headers on this connection.
+        // Bad data -- the relay only ever sends small, simple headers here.
         closesocket(g_pubTcpSocket);
         g_pubTcpSocket = INVALID_SOCKET;
         g_pubReadState = PUB_READ_IDLE;
@@ -584,33 +543,24 @@ static void SpectatePublishServiceIncoming()
       JsonExtractString(headerJson, "requestId", requestId);
 
       if (cmd == "snapshot-request" && !requestId.empty()) {
-        // Serve the pre-verified safe snapshot (see SpectatePublishCaptureSnapshotIfDue) instead
-        // of capturing fresh here -- a capture taken at the exact instant this request happens to
-        // arrive could still be a GGPO prediction that a later rollback silently corrects, which
-        // would hand the spectator a permanently-wrong baseline with no way to tell it happened.
-        // If none has aged into "safe" yet (e.g. the match only just started, under ~1-2s in),
-        // don't respond at all -- the relay's own snapshotRequestTimeout, and the spectator's
-        // existing connect-retry loop, already handle that as a routine retry-shortly case.
+        // Use the already-verified safe snapshot instead of taking a fresh one right now -- a
+        // snapshot taken at this exact moment could still be changed by a rollback later, leaving
+        // the viewer with a wrong starting point forever. If we don't have a safe one yet (e.g.
+        // the match just started), don't reply at all -- the viewer will just retry shortly.
         if (g_pubSafeSnapshotFrame >= 0) {
-          // The safe snapshot is necessarily stale relative to "now" -- it can only be promoted
-          // once its own tagged frame has aged past SPECTATE_PUBLISH_DELAY_FRAMES, and it's only
-          // recaptured roughly once a second (SPECTATE_SNAPSHOT_CAPTURE_INTERVAL_MS), so by the
-          // time a request actually arrives it can be up to ~1-2s behind g_pubNextFrameToPublish.
-          // The old spectator design relied on "whatever live frame arrives first on this fresh
-          // connection is exactly the one right after the snapshot" -- true when the snapshot was
-          // captured fresh at request time (a small, fixed ~20-frame gap), but false now: the live
-          // feed keeps publishing the whole time the snapshot sat waiting to be promoted, so the
-          // first live frame the spectator would actually receive could be dozens of frames past
-          // where the snapshot left off, applied to state that never simulated the frames between
-          // -- an immediate, undetectable desync (an emulator can't skip frames, only re-snapshot).
-          // Fix: backfill every frame between the snapshot and the current publish cursor from the
-          // ring buffer (which already holds them regardless of publish/safety status) and append
-          // it to this same response, so the spectator arrives already caught up to the live edge.
+          // The safe snapshot is always a bit old by the time it's used (it can only become
+          // "safe" after aging, and we only take a new one once a second), so the live feed has
+          // usually moved on since then. If the viewer just picked up wherever the live feed
+          // happens to be next, it would be applying real input to a game state that skipped
+          // several frames -- an instant, invisible desync (you can't skip frames in an emulator,
+          // only take a new snapshot). Fix: fill in every frame between the snapshot and right
+          // now from our recent-frames buffer, and send that along with the snapshot, so the
+          // viewer starts already caught up.
           std::vector<unsigned char> backfill;
           int liveFrame = g_pubSafeSnapshotFrame;
           for (int f = g_pubSafeSnapshotFrame + 1; f < g_pubNextFrameToPublish; f++) {
             PublishRingEntry& entry = g_pubRing[f % SPECTATE_RING_SIZE];
-            if (entry.frame != f) break; // shouldn't happen at this ring size -- stop rather than send wrong data
+            if (entry.frame != f) break; // shouldn't happen -- stop rather than send wrong data
             backfill.insert(backfill.end(), entry.bytes, entry.bytes + SPECTATE_INPUT_BYTES);
             liveFrame = f;
           }
@@ -627,13 +577,13 @@ static void SpectatePublishServiceIncoming()
           g_pubTcpOutQueue.push_back(BuildFramedMessage(resp, combined.data(), (int)combined.size()));
         }
       }
-      // Other cmds ignored for forward-compatibility -- loop back to try the next message.
+      // Ignore anything else, and go around to check for the next message.
     }
   }
 }
 
-// Fully non-blocking: sends as much of the queued outgoing messages as the socket will currently
-// accept, resuming a partially-sent message (or the next queued one) on a later tick otherwise.
+// Sends as much of the queue as the socket will accept right now without blocking, and picks up
+// where it left off next tick.
 static void SpectatePublishDrainWriteQueue()
 {
   if (g_pubTcpSocket == INVALID_SOCKET) return;
@@ -677,14 +627,13 @@ void SpectatePublishTick()
         std::string msg = "{\"cmd\":\"frame\",\"frame\":" + std::to_string(frame) + ",\"data\":\"" + b64 + "\"}";
         g_pubTcpOutQueue.push_back(BuildFramedMessage(msg, nullptr, 0));
       }
-      // A missing ring entry shouldn't normally happen (the ring is far larger than the publish
-      // delay) -- if it does, skipping it beats stalling the publish cursor forever.
+      // A missing entry here shouldn't normally happen -- if it does, skip it rather than get stuck.
       g_pubNextFrameToPublish++;
     }
   }
 
-  // The publisher UDP socket is otherwise send-only; this is the one thing the relay ever
-  // pushes back to it unsolicited (see broadcastSpectatorCount in main.go).
+  // The publisher's UDP socket is mostly just for sending -- this spectator-count update is the
+  // one thing the relay sends back on its own.
   if (g_pubUdpSocket != INVALID_SOCKET) {
     char recvBuf[512];
     for (;;) {
@@ -697,17 +646,13 @@ void SpectatePublishTick()
       if (!JsonExtractString(msg, "type", type) || type != "spectator-count") continue;
       long count = -1;
       if (!JsonExtractLong(msg, "count", count) || count < 0) continue;
-      // Two parallel overlay implementations exist in this codebase (VidOverlay* in
-      // vid_overlay.cpp, VidS* in vid_directx_support.cpp) and a host/opponent's own window
-      // renders through VidS*, not VidOverlay* -- both need updating or the host itself won't
-      // show the count despite reading it directly from the relay right here.
+      // There are two separate overlay systems in this codebase, and the host's own window uses
+      // the other one -- update both, or the host won't see the count even though it just got it.
       VidOverlaySetGameSpectators((int)count);
       VidSSetGameSpectators((int)count);
 
-      // The opponent has no connection to the spectate relay at all (only playerSlot 0 ever
-      // talks to it) -- forward the count over the existing GGPO P2P link so both players see
-      // it, not just the one hosting. QuarkSendData/ggpo_send_data are null-safe no-ops if ggpo
-      // isn't up yet, so no extra guard is needed here.
+      // Only player 1 talks to the relay, so forward the count to the opponent over the normal
+      // GGPO connection instead, so they see it too.
       uint8_t countByte = (uint8_t)(std::min)(count, 255L);
       QuarkSendData(DATAGRAM_CODE_SPECTATOR_COUNT, &countByte, sizeof(countByte));
     }
@@ -756,12 +701,11 @@ namespace {
   sockaddr_in g_specRelayUdpAddr;
   DWORD g_specLastWatchRegisterTick = 0;
 
-  SOCKET g_specTcpSocket = INVALID_SOCKET; // the persistent live-feed connection
-  std::deque<std::vector<unsigned char>> g_specFrameQueue; // decoded, not-yet-consumed frames, FIFO
+  SOCKET g_specTcpSocket = INVALID_SOCKET; // the ongoing live-feed connection
+  std::deque<std::vector<unsigned char>> g_specFrameQueue; // frames received but not used yet
   bool g_specFirstFrameApplied = false;
 
-  // Incremental, always-non-blocking TCP read state for the live feed -- mirrors the publisher's
-  // own incoming-header reader (SpectatePublishServiceIncoming).
+  // Reads the live feed without ever blocking -- same idea as the publisher's own reader above.
   enum SpecReadState { SPEC_READ_IDLE, SPEC_READ_LEN, SPEC_READ_HEADER };
   SpecReadState g_specReadState = SPEC_READ_IDLE;
   unsigned char g_specReadLenBuf[4];
@@ -770,39 +714,29 @@ namespace {
   std::vector<char> g_specReadHeaderBuf;
   int g_specReadHeaderGot = 0;
 
-  // Frame this connection's next incoming "frame" push must carry, or -1 if not yet known (still
-  // waiting on the first snapshot response). Set from the snapshot-response's backfilled liveFrame
-  // (see ApplySnapshotAndBackfill) and validated in SpectateServiceIncomingTcp -- a mismatch means
-  // frames slipped through unbackfilled in the narrow window between the publisher computing that
-  // backfill and the relay actually registering this connection as a live watcher (see
-  // SpectatePublishServiceIncoming's snapshot-request handling and main.go's handleSpectatorConn),
-  // and applying it anyway would silently misalign input against state with no way to detect it
-  // later. Forcing a resync (see SpectateServiceIncomingTcp) beats that.
+  // The frame number we expect to see next, or -1 if we don't know yet. Checked in
+  // SpectateServiceIncomingTcp -- if a frame arrives with the wrong number, something slipped
+  // through uncaught and we reconnect rather than risk showing the wrong thing.
   int g_specExpectedNextFrame = -1;
 
-  // Diagnostics only, for the "still waiting" warning in SpectateGetInput below.
+  // Just for the "still waiting" warning message in SpectateGetInput below.
   DWORD g_specConnectTick = 0;
   DWORD g_specLastStallWarnTick = 0;
   long g_specMessagesReceived = 0;
   long g_specFramesReceived = 0;
   int g_specLastFrameNumberSeen = -1;
 
-  // Reconnect-on-death tracking. TCP guarantees no data loss/corruption while a connection is
-  // alive, but nothing guarantees the connection itself stays alive -- a transient NAT/firewall
-  // hiccup or dropped route can kill it for reasons entirely outside this process (and possibly
-  // outside the relay's awareness too, if the relay hasn't tried writing to it since). Without a
-  // reconnect path, a spectator whose live-feed connection dies this way is stuck permanently,
-  // frozen on its last frame, even though the match and the relay are both still fine.
+  // Reconnecting after the connection dies. TCP won't lose or corrupt data while it's alive, but
+  // the connection itself can still die (network hiccup, etc). Without reconnecting, a viewer
+  // would just freeze on its last frame forever, even though the match is still going fine.
   DWORD g_specLastReconnectAttemptTick = 0;
 }
 
 static const DWORD SPECTATE_RECONNECT_COOLDOWN_MS = 3000;
 
-// One attempt at fetching a fresh state snapshot for matchId from the relay's TCP port. Doesn't
-// touch any g_spec* state itself. On success, the connection is closed unless outSocket is
-// non-null, in which case ownership of the still-open, non-blocking-ready socket transfers to the
-// caller (used to keep the live-feed connection open once a snapshot fetch also doubles as the
-// spectator's initial live-feed registration -- see InitSpectatorConnection).
+// Tries once to fetch a fresh state snapshot for matchId. Doesn't touch any of the g_spec*
+// globals itself. If outSocket is given, the connection is kept open and handed back to the
+// caller instead of being closed, since it also becomes the ongoing live-feed connection.
 static bool RequestSnapshotOnce(const std::string& host, UINT16 tcpPort, const std::string& matchId,
   int timeoutMs, long& outFrame, long& outLiveFrame, std::vector<unsigned char>& outPayload, std::string& outFailReason,
   SOCKET* outSocket = nullptr)
@@ -831,7 +765,7 @@ static bool RequestSnapshotOnce(const std::string& host, UINT16 tcpPort, const s
 
   long payloadSize = -1;
   JsonExtractLong(respHeaderJson, "frame", outFrame);
-  outLiveFrame = outFrame; // default if an older/mismatched relay ever omits liveFrame
+  outLiveFrame = outFrame; // fallback in case liveFrame is ever missing
   JsonExtractLong(respHeaderJson, "liveFrame", outLiveFrame);
   JsonExtractLong(respHeaderJson, "payloadSize", payloadSize);
   if (payloadSize < 0 || payloadSize > 64 * 1024 * 1024) {
@@ -856,17 +790,16 @@ static bool RequestSnapshotOnce(const std::string& host, UINT16 tcpPort, const s
   return true;
 }
 
-// Splits a snapshot-response payload into its state-snapshot prefix and trailing per-frame
-// backfill (see SpectatePublishServiceIncoming's snapshot-request handling for why the backfill
-// exists), applies the state via ggpo_load_game_state_callback, queues the backfilled frames so
-// SpectateGetInput consumes them first, and sets g_specExpectedNextFrame so the very next "frame"
-// push actually received over the wire can be validated against what this connection was promised.
+// Splits a snapshot-response into the state snapshot and the extra "catch-up" frames tacked onto
+// the end (see SpectatePublishServiceIncoming for why those exist), applies the state, queues up
+// the catch-up frames so SpectateGetInput uses them first, and sets g_specExpectedNextFrame so we
+// can check the next live frame that arrives is really the one we expect.
 static void ApplySnapshotAndBackfill(std::vector<unsigned char>& payload, long frame, long liveFrame)
 {
   size_t backfillCount = (liveFrame > frame) ? (size_t)(liveFrame - frame) : 0;
   size_t backfillBytes = backfillCount * SPECTATE_INPUT_BYTES;
   if (backfillBytes > payload.size()) {
-    // Malformed/mismatched -- fall back to "no backfill" rather than misreading the snapshot.
+    // Bad data -- don't try to use it, just skip the catch-up frames.
     backfillCount = 0;
     backfillBytes = 0;
     liveFrame = frame;
@@ -900,10 +833,8 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   g_specExpectedNextFrame = -1;
   g_specReadState = SPEC_READ_IDLE;
 
-  // Same globals InitDirectConnection sets before a match begins. ggpo_begin_game_callback,
-  // EnsureSpectatorDriverLoaded, and ggpo_load_game_state_callback (all reused below, see
-  // burner_win32.h) are already kNetSpectator-aware and GGPO-session-agnostic -- they just
-  // serialize/deserialize driver state via BurnAreaScan, never touching GGPOSession at all.
+  // Same globals set before a normal match starts. The functions we reuse below already know how
+  // to handle kNetSpectator and don't need a real GGPO session at all.
   kNetVersion = NET_VERSION;
   kNetGame = 1;
   kNetSpectator = 1;
@@ -916,24 +847,13 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     return false;
   }
 
-  // InitDirectConnection forces this for the host/opponent (see misc_win32.cpp) so coarse
-  // default Windows timer granularity can't bias their frame pacing against each other; a
-  // spectator never called it, an asymmetry worth closing even though it's normally moot in
-  // practice (timeBeginPeriod affects the whole system while any process holds it, and the
-  // host/opponent already do for the match's duration).
+  // Players already do this for more accurate frame timing -- do the same for a spectator.
   ForceHighResolutionTimingForNetplay();
 
-  // Deliberately NOT calling EnsureSpectatorDriverLoaded() here. An earlier version of this
-  // function did, to start the ROM/driver load before the network round trip below -- but that
-  // meant several spectator processes launched close together all hit the same heavy CPU-bound
-  // ROM decompression/decryption work in near lock-step, instead of it being naturally spread
-  // out in time the way it always was before: each one's jittery, variable-length network
-  // connection attempt used to desynchronize when that work happened, purely as a side effect of
-  // ordering. Leaving the load to fire from inside ggpo_load_game_state_callback below (its own
-  // bDelayLoad check, unchanged) restores that natural staggering. This does still only cost ONE
-  // relay round trip overall, same as the early-load version: the single fetch below both
-  // supplies the snapshot ggpo_load_game_state_callback restores AND becomes the live feed
-  // connection, so nothing is lost by leaving the load where it was.
+  // On purpose, we do NOT load the ROM here. We tried that once: when several spectators start
+  // at almost the same time, they'd all do the same heavy ROM-loading work at the same moment
+  // instead of it being spread out naturally. Leaving the load to happen later, inside
+  // ggpo_load_game_state_callback, avoids that.
   g_specUdpSocket = CreateNonBlockingUdpSocket();
   if (g_specUdpSocket == INVALID_SOCKET || !MakeSockAddr(ops.relayHost, ops.relayUdpPort, &g_specRelayUdpAddr)) {
     bprintf(0, _T("*** spectate: failed to set up relay UDP connection.\n"));
@@ -948,10 +868,8 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   std::string watchMsg = "{\"type\":\"watch\",\"matchId\":\"" + JsonEscapeSimple(g_specMatchId) +
     "\",\"uid\":\"" + JsonEscapeSimple(g_specUid) + "\"}";
 
-  // The host is very often still mid-launch (ROM load, GGPO handshake/sync, auto-delay
-  // negotiation) when a viewer connects right after it -- the relay legitimately has no
-  // publisher registered for this matchId yet. Retry the whole handshake for a while instead of
-  // failing on the first attempt, so the caller doesn't have to guess a "host is ready" delay.
+  // The host is often still starting up when a viewer tries to connect, so the relay may not
+  // have a publisher for this match yet. Keep retrying for a while instead of giving up right away.
   VidOverlaySetSystemMessage(_T("Connecting to host..."));
 
   bool ok = false;
@@ -962,16 +880,8 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   SOCKET liveSocket = INVALID_SOCKET;
   DWORD connectStartTick = GetTickCount();
 
-  // One fetch does double duty: its snapshot+backfill data is what ApplySnapshotAndBackfill below
-  // restores and catches up on (also triggering the deferred ROM/driver load, via
-  // ggpo_load_game_state_callback's own bDelayLoad check), and (via outSocket) its connection is
-  // kept open afterward to become the live feed itself. There's no backlog to worry about even
-  // though the driver load happens after this connection is opened: the relay only starts fanning
-  // frame pushes to a spectator connection from the moment its registration completes on this SAME
-  // connection (see handleSpectatorConn in main.go), and by then this fetch's backfill has already
-  // caught the snapshot up to the publish cursor as it stood at request time -- SpectateGetInput's
-  // gap check (via g_specExpectedNextFrame) handles the narrow remaining window between that point
-  // and the relay's registration actually completing.
+  // This one fetch does two jobs: it gets the starting snapshot (which also triggers the delayed
+  // ROM load), and its connection stays open afterward as the live feed itself.
   for (;;) {
     sendto(g_specUdpSocket, watchMsg.data(), (int)watchMsg.size(), 0, (sockaddr*)&g_specRelayUdpAddr, sizeof(g_specRelayUdpAddr));
     g_specLastWatchRegisterTick = GetTickCount();
@@ -994,16 +904,13 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
     return false;
   }
 
-  // One more "watch" keepalive right before the potentially long, fully synchronous, network-
-  // silent call just below (ggpo_load_game_state_callback triggers EnsureSpectatorDriverLoaded's
-  // ROM decompression/decryption, which can run well past a normal keepalive interval on a slow
-  // system like CPS3) -- maximizes how much of the relay's watcherTimeout budget is left when
-  // that call finally returns and SpectateGetInput resumes sending real keepalives on its own.
+  // Send one more "still here" message before the ROM load below, which can take a while and
+  // won't send any messages of its own -- this buys us as much time as possible before the relay
+  // might think we've disappeared.
   sendto(g_specUdpSocket, watchMsg.data(), (int)watchMsg.size(), 0, (sockaddr*)&g_specRelayUdpAddr, sizeof(g_specRelayUdpAddr));
   g_specLastWatchRegisterTick = GetTickCount();
 
-  // Read by ggpo_load_game_state_callback's kNetSpectator branch (fbn_ggpo.cpp), called just
-  // below -- must be set before that call, not after.
+  // Must be set before the call below, since it reads these.
   ANSIToTCHAR(ops.player1Name.c_str(), g_spectateP1Name, 128);
   ANSIToTCHAR(ops.player2Name.c_str(), g_spectateP2Name, 128);
 
@@ -1018,10 +925,8 @@ bool InitSpectatorConnection(const SpectateConnectionOptions& ops)
   return true;
 }
 
-// Fully non-blocking and incremental across ticks -- drains as many complete {"cmd":"frame",...}
-// (or other) messages as are already buffered this tick, resuming a partial read next tick
-// otherwise. Since this rides TCP, every message that was ever sent WILL eventually arrive, in
-// order -- there is no gap/loss case to handle here, unlike the old UDP design.
+// Reads incoming "frame" messages without ever blocking. TCP guarantees every message arrives,
+// in order, so there's no need to handle lost or out-of-order data here.
 static void SpectateServiceIncomingTcp()
 {
   if (g_specTcpSocket == INVALID_SOCKET) return;
@@ -1094,15 +999,9 @@ static void SpectateServiceIncomingTcp()
         JsonExtractLong(headerJson, "frame", frame);
         std::vector<unsigned char> decoded;
         if (JsonExtractString(headerJson, "data", dataB64) && Base64Decode(dataB64, decoded) && decoded.size() == SPECTATE_INPUT_BYTES) {
-          // A mismatch means this connection's snapshot-response backfill (see
-          // ApplySnapshotAndBackfill) didn't actually reach the live publish cursor -- the narrow
-          // window between the publisher computing that backfill and the relay finishing this
-          // connection's watcher registration (see handleSpectatorConn in main.go) let one or more
-          // frames through unaccounted for. Applying this frame anyway would silently misalign
-          // input against state with no way to detect it later (the exact bug this whole backfill
-          // mechanism exists to prevent) -- force a resync instead, reusing the existing
-          // reconnect-on-death path in SpectateGetInput, which re-fetches a fresh, fully-caught-up
-          // snapshot rather than trying to patch just the missing frames in place.
+          // If the frame number isn't what we expected, a frame slipped through somewhere and
+          // using it would silently break sync. Reconnect and get a fresh, fully caught-up
+          // snapshot instead of trying to patch just the missing part.
           if (g_specExpectedNextFrame >= 0 && (int)frame != g_specExpectedNextFrame) {
             bprintf(0, _T("*** spectate: live feed gap detected (expected frame %d, got %ld) -- forcing resync.\n"),
               g_specExpectedNextFrame, frame);
@@ -1123,7 +1022,7 @@ static void SpectateServiceIncomingTcp()
         g_specTcpSocket = INVALID_SOCKET;
         return;
       }
-      // Other cmds ignored for forward-compatibility -- loop back to try the next message.
+      // Ignore anything else, and go around to check for the next message.
     }
   }
 }
@@ -1142,7 +1041,7 @@ bool SpectateGetInput(void* values)
     g_specLastWatchRegisterTick = now;
   }
 
-  // Presence and chat only now -- the live frame feed itself arrives over g_specTcpSocket below.
+  // This UDP socket only carries presence and chat now -- the live feed arrives over TCP below.
   if (g_specUdpSocket != INVALID_SOCKET) {
     char recvBuf[2048];
     for (;;) {
@@ -1155,12 +1054,8 @@ bool SpectateGetInput(void* values)
       if (!JsonExtractString(msg, "type", type)) continue;
 
       if (type == "chat") {
-        // Spectator-only chat from another watcher of this match (see main.go's "chat" case --
-        // it never touches the publishers map, so this can never be a message from a player).
-        // Called unconditionally, same as the player-chat receive path in fbn_ggpo.cpp --
-        // VidOverlayAddChatLine already suppresses display on its own when isSpectatorChatMuted is
-        // set (vid_overlay.cpp checks isSpectatorChatMuted rather than isChatMuted here because
-        // kNetSpectator is set for this process), so no separate check is needed here.
+        // Chat from another viewer -- this can never come from a player. Always call the
+        // display function; it already hides the message on its own if spectator chat is muted.
         std::string userName, text;
         if (!JsonExtractString(msg, "userName", userName) || !JsonExtractString(msg, "text", text)) continue;
 
@@ -1171,28 +1066,21 @@ bool SpectateGetInput(void* values)
         VidOverlayAddChatLine(nameBuf, textBuf);
       }
       else if (type == "spectator-count") {
-        // Pushed by the relay whenever the watcher count for this match changes (see
-        // broadcastSpectatorCount in main.go); includes the local viewer in the count.
+        // The relay sends this whenever the number of viewers changes.
         long count = -1;
         if (!JsonExtractLong(msg, "count", count) || count < 0) continue;
-        // Both overlay implementations updated together, matching the publisher-side handling
-        // of this same message above -- see the comment there for why both are needed.
         VidOverlaySetGameSpectators((int)count);
         VidSSetGameSpectators((int)count);
       }
-      // "publish"/"watch"/etc acks, if the relay ever sends any, are ignored.
+      // Anything else is ignored.
     }
   }
 
   SpectateServiceIncomingTcp();
 
-  // Reconnect-on-death: TCP guarantees no data loss/corruption while a connection is alive, but
-  // not that the connection stays alive -- a transient NAT/firewall hiccup or dropped route can
-  // kill it for reasons outside this process (and possibly outside the relay's own awareness
-  // too, if it hasn't tried writing to this spectator since). Without this, a spectator whose
-  // live-feed connection dies this way would be stuck permanently on its last frame even though
-  // the match and relay are both fine. Cooldown-gated so a relay/network outage doesn't turn into
-  // a tight retry loop.
+  // Reconnect if the connection died. Without this, a viewer would freeze on its last frame
+  // forever if the connection ever drops. Waits a bit between tries so a real outage doesn't turn
+  // into rapid-fire retries.
   if (g_specTcpSocket == INVALID_SOCKET && now - g_specLastReconnectAttemptTick > SPECTATE_RECONNECT_COOLDOWN_MS) {
     g_specLastReconnectAttemptTick = now;
     long freshFrame = -1;
@@ -1211,10 +1099,8 @@ bool SpectateGetInput(void* values)
     }
   }
 
-  // On-screen diagnostics for a stalled connection -- covers both the pre-first-frame case
-  // (still "Waiting for stream...") and a later reconnect in progress (the message text below
-  // distinguishes them). bprintf is a no-op outside a FBNEO_DEBUG build (see AppDebugPrintf,
-  // main.cpp), so the debug console can't be relied on to surface this either way.
+  // Shows an on-screen message if we're stuck waiting, either before the first frame arrives or
+  // during a later reconnect.
   bool tcpAlive = g_specTcpSocket != INVALID_SOCKET;
   bool stalled = (!g_specFirstFrameApplied && now - g_specConnectTick > 3000) || (g_specFirstFrameApplied && !tcpAlive);
   if (stalled && now - g_specLastStallWarnTick > 1000) {
@@ -1234,13 +1120,11 @@ bool SpectateGetInput(void* values)
     VidOverlaySetSystemMessage(msg);
   }
   else if (g_specFirstFrameApplied && tcpAlive) {
-    // Clear a stale "Reconnecting..."/"Waiting..." message left over from a stall that has
-    // since resolved -- the normal per-frame path only clears this once, the first time
-    // g_specFirstFrameApplied flips true, so a later reconnect needs its own clear here.
+    // Clear a leftover "Reconnecting..." message once things are working again.
     VidOverlaySetSystemMessage(_T(""));
   }
 
-  if (g_specFrameQueue.empty()) return false; // not arrived yet -- caller retries next tick
+  if (g_specFrameQueue.empty()) return false; // nothing yet -- try again next tick
 
   if (!g_specFirstFrameApplied) {
     g_specFirstFrameApplied = true;
@@ -1257,18 +1141,9 @@ void SpectateSendChat(const char* text)
 {
   if (!g_spectateActive || !text) return;
 
-  // Local echo first -- the relay never echoes a chat message back to its own sender (see
-  // main.go's "chat" case), so without this the sender would never see their own message. Gated
-  // on !isSpectatorChatMuted, the spectator-only counterpart of isChatMuted (menu.cpp's
-  // MENU_MUTE_SPECTATOR_CHAT, own persisted setting -- see cona.cpp) -- same reasoning as
-  // QuarkSendChat's identical local-echo branch (fbn_ggpo.cpp): VidOverlayAddChatLine already
-  // suppresses display internally when muted (vid_overlay.cpp, using isSpectatorChatMuted here
-  // since kNetSpectator is set), but calling it unconditionally here would also fire its "let the
-  // other side know you're muted" datagram notify for what would just be our own echo, not an
-  // incoming message -- skip the call entirely instead. The message is still sent below
-  // regardless of mute state, same as QuarkSendChat still calls ggpo_send_chat unconditionally:
-  // muting only affects what shows on this screen, not whether other spectators who aren't muted
-  // can still see it.
+  // Show our own message locally first -- the relay doesn't echo it back to us. Skipped if
+  // spectator chat is muted, so we don't show it to ourselves. The message still gets sent either
+  // way, since muting is just about what shows on OUR screen, not stopping others from seeing it.
   if (!isSpectatorChatMuted) {
     TCHAR nameBuf[64];
     ANSIToTCHAR(g_specUserName.c_str(), nameBuf, 64);

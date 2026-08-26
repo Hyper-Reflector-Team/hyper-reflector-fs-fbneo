@@ -1016,12 +1016,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   std::string logPath = "";
   app.add_option("--logf", logPath, "File where GGPO data will be logged.");
 
-  // Artificial network send latency for local testing. This maps to the GGPO env var read by
-  // `Platform::GetConfigInt(L\"ggpo.network.delay\")`.
-  // Examples:
-  // `--net-delay on`  -> 200ms
-  // `--net-delay 200` -> 200ms
-  // `--net-delay off` -> unset
+  // Adds fake network delay, for testing. "on" = 200ms, or give a number of ms, or "off".
   std::string netDelayOpt = "";
   app.add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
@@ -1064,8 +1059,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_flag("--auto-delay", directOps.autoDelay, "Negotiate frame delay automatically from measured ping instead of using --delay. Both sides end up with the same (higher) delay.");
   directConnect->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
 
-  // Spectate-relay publishing (src/util-servers/spectate-relay). Only meaningful when
-  // --player 1 (playerSlot 0) -- that's always the publisher, see fbn_spectate.cpp.
+  // Publishing this match to spectators. Only used when --player 1.
   directConnect->add_flag("--spectate", directOps.spectate, "Publish this match's confirmed input to the spectate relay (playerSlot 0 only).");
   directConnect->add_option("--relay-host", directOps.spectateRelayHost, "Spectate relay host (requires --spectate).");
   directConnect->add_option("--relay-udp-port", directOps.spectateRelayUdpPort, "Spectate relay UDP port. 33335 is default.");
@@ -1074,7 +1068,7 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_option("--uid", directOps.spectateUid, "This player's own account uid (requires --spectate).");
 
 
-  // Options to watch a match via the spectate relay -- not playing in it. See fbn_spectate.cpp.
+  // Options for watching a match instead of playing in it.
   SpectateConnectionOptions spectateOps;
   auto spectate = app.add_subcommand("spectate", "Watch a match via the spectate relay.");
   spectate->add_option("--relay-host", spectateOps.relayHost, "Spectate relay host")->required();

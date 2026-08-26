@@ -55,54 +55,37 @@ static int iRanked = 0;     // REFACTOR: boolean - 'isRanked'
 //static int _playerIndex = 0;     // REFACTOR: uint16 'playerindex' --> NOTE: This is currently 1-based, and should be zero based!  --> NOTE: will be replaced with _playerIndex!
 static int iDelay = 0;
 static int iSeed = 0;
-// Set whenever a GGPO timesync frame-skip correction fires (see nGGPOTimesyncFrames in
-// GGPO_EVENTCODE_TIMESYNC below). Purely a UI latch: VidOverlaySetStats in
-// src/intf/video/win32/vid_overlay.cpp (around the `if (bTimesyncDelayBumped)` block) checks
-// this once per update to show a "timesync active" indicator and then clears it itself.
+// True right after a GGPO timesync correction happens. Just for the on-screen "timesync active"
+// indicator -- it gets shown once, then cleared automatically.
 bool bTimesyncDelayBumped = false;
 
-// True once GGPO_EVENTCODE_RUNNING has actually fired for the current session -- i.e. the match
-// is truly synchronized, as opposed to kNetGame just being set (true for the whole "Connecting
-// to Peer..."/"Synchronizing..." window too). See run.cpp's GetInput: real local input capture
-// (the branch that mutates GameInpClearOpposites/GameInpFixDiagonals's SOCD history) is gated
-// on this, not on kNetGame alone, so idle mashing during that window can't desync the match.
+// True once the match is actually synchronized and running, not just connecting. Real local
+// input only gets captured once this is true, so mashing buttons while still connecting can't
+// throw off the match.
 bool bGGPOMatchRunning = false;
 
-// set by InitSpectatorConnection (fbn_spectate.cpp) before it calls ggpo_load_game_state_callback,
-// so that function's kNetSpectator branch (below) can show the actual players' names in the
-// overlay instead of a blank/generic label. The spectate relay itself never carries match
-// metadata (only opaque confirmed-input bytes), so this has to be passed in from the launcher.
+// The two players' names, set by InitSpectatorConnection before loading a spectator's snapshot,
+// so the overlay can show real names instead of blank ones. The spectate relay itself doesn't
+// carry names, so the launcher has to pass them in directly.
 TCHAR g_spectateP1Name[128] = { 0 };
 TCHAR g_spectateP2Name[128] = { 0 };
 
-// Auto-delay negotiation (see ggpo_on_event_callback's GGPO_EVENTCODE_RUNNING and
-// DATAGRAM_CODE_DELAY_NEGOTIATE handling, and the gate at the top of QuarkGetInput). Each side
-// computes a candidate delay from its own measured ping and exchanges it with the peer; both
-// settle on max(local, remote) so neither player ends up carrying more of the rollback burden
-// than the other. Kicks off as soon as the connection can send data (GGPO_EVENTCODE_RUNNING,
-// datagrams can't send before that: see UdpProtocol::SendData's `_current_state == Running`
-// check in ggpo/src/lib/network/udp_proto.cpp) and is guaranteed to finish (or time out)
-// strictly before any local input frame is queued: GGPO itself refuses local input while
-// _synchronizing is set (Peer2PeerBackend::AddLocalInput in ggpo/src/lib/backends/p2p.cpp,
-// returns GGPO_ERRORCODE_NOT_SYNCHRONIZED), and _synchronizing only clears right after RUNNING
-// fires (Peer2PeerBackend::CheckInitialSync, same file). ggpo_set_frame_delay itself isn't
-// safe once a frame is queued because InputQueue::AddInput bakes the delay into the frame
-// number at queue time (ggpo/src/lib/input_queue.cpp, `frame += _frame_delay;`), changing it
-// after the fact would make frame numbering discontinuous. ops.frameDelay stays in effect as
-// the fallback value until negotiation resolves.
+// Auto-delay: each side measures its own ping, picks a delay from that, and tells the other side.
+// Both then use whichever delay is bigger, so neither player ends up carrying more of the
+// rollback burden than the other. This has to finish before any real local input gets sent, so a
+// player's delay can't change mid-match. ops.frameDelay is used as a fallback until this settles.
 static bool bAutoDelay = false;
 static bool bAutoDelayApplied = false;
 static int nAutoDelayLocalCandidate = -1; // -1 = not yet computed
-static int nAutoDelayBlockedFrames = 0;   // consecutive QuarkGetInput calls held off pending negotiation
+static int nAutoDelayBlockedFrames = 0;   // how many frames we've been waiting on this
 
 static const int MIN_AUTO_DELAY_FRAMES = 0;
 static const int MAX_AUTO_DELAY_FRAMES = 8;
-// Safety net if the peer never replies (packet loss, or a peer build without this feature):
-// stop holding off local input after this many frames (~2s @ 60fps) and just use what we have.
+// If the other side never replies, stop waiting after this many frames (~2s) and just proceed.
 static const int AUTO_DELAY_TIMEOUT_FRAMES = 120;
 
-// Aim the local candidate at roughly covering one-way trip time, so the remote's real input
-// tends to arrive around when it's needed instead of relying entirely on rollback to cover it.
+// Picks a delay that roughly covers the one-way trip time, so the other player's real input
+// tends to arrive right when it's needed instead of relying entirely on rollback.
 static int ComputeAutoDelayFrames(int pingMs)
 {
   if (pingMs <= 0) return MIN_AUTO_DELAY_FRAMES;
@@ -114,8 +97,7 @@ static int ComputeAutoDelayFrames(int pingMs)
   return frames;
 }
 
-// Sends our locally-computed candidate and, if we've already received the peer's, finalizes
-// immediately. Safe to call from either the CONNECTED_TO_PEER handler or the datagram handler.
+// Sends our own delay candidate to the other player. Safe to call from more than one place.
 static void SendAutoDelayCandidate()
 {
   if (nAutoDelayLocalCandidate < 0) {
@@ -129,10 +111,10 @@ static void SendAutoDelayCandidate()
 
 static void FinalizeAutoDelay(int remoteCandidate)
 {
-  if (bAutoDelayApplied) return; // already settled, ignore stray/duplicate packets
+  if (bAutoDelayApplied) return; // already settled, ignore any extra packets
 
   if (nAutoDelayLocalCandidate < 0) {
-    // Peer's candidate beat ours here (unlikely, but handle it): compute ours now.
+    // The other side's candidate arrived before ours -- compute ours now.
     GGPONetworkStats stats;
     ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
     nAutoDelayLocalCandidate = ComputeAutoDelayFrames(stats.network.ping);
@@ -302,21 +284,16 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     VidOverlaySetSystemMessage(_T(""));
     VidSSetSystemMessage(_T(""));
 
-    // The match is now actually synchronized. Let run.cpp's GetInput start capturing real
-    // local input (see bGGPOMatchRunning's declaration above), and wipe whatever SOCD/diagonal
-    // history built up from idle mashing during the "Connecting.../Synchronizing..." window so
-    // it can't bias the first real synchronized frame differently on each machine.
+    // The match is really synchronized now. Let real local input start being captured, and
+    // clear out any leftover button-mashing history from before the match was ready, so it can't
+    // throw the two machines out of sync with each other.
     bGGPOMatchRunning = true;
     GameInpResetSOCDHistory();
 
     // NOTE: Version exchange happens during sync now.
 
-    // NOT the earlier GGPO_EVENTCODE_CONNECTED_TO_PEER, that fires on the first sync reply,
-    // several round trips before this one (see the `_connected`/QueueEvent(evt) block ahead of
-    // the round-trip countdown in UdpProtocol::OnSyncReply, ggpo/src/lib/network/udp_proto.cpp),
-    // while datagrams can't send until Running (see the auto-delay comment block up top for the
-    // full chain of reasoning + citations for why this is still safe despite the round trip to
-    // the peer not having completed yet by the time we get here).
+    // This event fires later than "connected to peer" -- it's the point where we know it's safe
+    // to start sending our delay candidate.
     if (bAutoDelay && !kNetSpectator) {
       SendAutoDelayCandidate();
     }
@@ -326,10 +303,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
     VidOverlaySetSystemMessage(_T("Disconnected from Peer"));
     VidSSetSystemMessage(_T("Disconnected from Peer"));
-    // The local simulation can't advance without the peer (rollback only covers
-    // MAX_PREDICTION_FRAMES worth of missing input, see ggpo/src/lib/sync.h) -- once it's stuck
-    // waiting, the sound card just keeps repeating whatever's left in its buffer, which is
-    // audible as a buzz/drone rather than silence. Stop it instead of leaving that playing.
+    // The game can't keep going without the other player. Once it's stuck, the sound would
+    // just loop the same bit of audio over and over, so stop it instead.
     AudSoundStop();
     if (bReplayRecording) {
       AviStop();
@@ -338,9 +313,8 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
-    // Same "stuck waiting for the peer" case as above, but before GGPO gives up and declares a
-    // full disconnect (see SetDisconnectTimeout/SetDisconnectNotifyStart) -- the peer may still
-    // come back, so this stops the buzzing without ending the match outright.
+    // Same idea as above, but the other player might still come back -- stop the sound without
+    // ending the match yet.
     VidOverlaySetSystemMessage(_T("Connection interrupted..."));
     VidSSetSystemMessage(_T("Connection interrupted..."));
     AudSoundStop();
@@ -353,8 +327,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_TIMESYNC:
-    // Frame-skip approach: stall the ahead client by up to 2 frames during idle.
-    // ggpo_set_frame_delay is not safe mid-match (breaks input frame sequencing).
+    // If we're ahead of the other player, skip up to 2 idle frames to let them catch up.
     if (!kNetSpectator) {
       const int add = info->u.timesync.frames_ahead;
       if (add > 0) {
@@ -385,8 +358,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
       if (bAutoDelay && !kNetSpectator) {
         int remoteCandidate = (uint8_t)info->u.datagram.data[0];
         if (nAutoDelayLocalCandidate < 0) {
-          // We haven't sent ours yet (peer's packet beat our CONNECTED_TO_PEER handling),
-          // send it now so the peer settles too, then finalize on our end.
+          // We haven't sent our own candidate yet -- send it now so both sides can settle.
           SendAutoDelayCandidate();
         }
         FinalizeAutoDelay(remoteCandidate);
@@ -396,11 +368,9 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
 
     case DATAGRAM_CODE_SPECTATOR_COUNT:
     {
-      // Forwarded by playerSlot 0 (see SpectatePublishTick in fbn_spectate.cpp) -- this player
-      // has no connection to the spectate relay at all, so this datagram is the only way it
-      // learns the current spectator count. Both overlay implementations updated together
-      // (VidOverlay* in vid_overlay.cpp, VidS* in vid_directx_support.cpp) since a normal
-      // player's own window renders through VidS*, not VidOverlay*.
+      // Sent to us by player 1, who's the only one actually connected to the spectate relay --
+      // this is the only way we find out the spectator count. Update both overlay systems, since
+      // our own window uses the other one.
       int count = (int)info->u.datagram.data[0];
       VidOverlaySetGameSpectators(count);
       VidSSetGameSpectators(count);
@@ -478,19 +448,15 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
           DetectorLoad(name, false, iSeed);
           // if playing a direct game, we never get match information, so put anonymous
           if (bDirect) {
-            // VidSSetGameInfo is dead code (unconditional early return, see its definition in
-            // vid_directx_support.cpp) -- VidOverlaySetGameInfo is the actually-rendered overlay,
-            // and it's also the only thing that sets game_enabled, the master gate around the
-            // whole names+spectator-count block in vid_overlay.cpp's render function. Without
-            // this call, a direct connection's own window could never show the spectator count
-            // no matter what VidOverlaySetGameSpectators was told.
+            // VidSSetGameInfo doesn't actually do anything -- VidOverlaySetGameInfo is the real
+            // one, and it's also what turns on the spectator-count display. Without this call, a
+            // player's own window could never show the spectator count.
             VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
             VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
           }
           return 0;
         }
-        // If the savestate exists but can't be loaded (wrong format / wrong version),
-        // fall back to normal game init instead of leaving the emulator half-initialized.
+        // If the save file is broken or the wrong version, fall back to a normal game start.
       }
     }
 
@@ -505,13 +471,13 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
         DetectorLoad(name, false, iSeed);
         // if playing a direct game, we never get match information, so put anonymous
         if (bDirect) {
-          // See the matching comment above -- VidSSetGameInfo does nothing.
+          // See the comment above -- VidSSetGameInfo doesn't do anything.
           VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
           VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
         }
         return 0;
       }
-      // Fall back to normal init if load failed.
+      // If loading failed, fall back to a normal game start.
     }
   }
 
@@ -535,11 +501,8 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
       DetectorLoad(name, false, iSeed);
       // if playing a direct game, we never get match information, so play anonymous
       if (bDirect) {
-        // See the matching comment above (savestate-load branch) -- VidSSetGameInfo does
-        // nothing; VidOverlaySetGameInfo is the one that actually matters (it's also what sets
-        // game_enabled, gating the overlay's names+spectator-count block). This is the path a
-        // fresh match with no pre-existing savestate actually takes, so without this call here,
-        // a normal direct-connection match could never show the spectator count at all.
+        // Same as above -- this is the path a fresh match with no save file takes, so this call
+        // is what lets a normal match show the spectator count.
         VidOverlaySetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
         VidSSetGameInfo(_T("Player1#0,0"), _T("Player2#0,0"), false, iRanked, _playerIndex);
       }
@@ -670,13 +633,9 @@ bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int
   return false;
 }
 
-// Extracted from ggpo_load_game_state_callback below so it can be triggered independently of any
-// snapshot buffer. A spectator connection (fbn_spectate.cpp's InitSpectatorConnection) calls this
-// right after ggpo_begin_game_callback, since the ROM/driver load doesn't depend on match state at
-// all -- only on the ROM name already passed to that call -- so there's no reason to wait on a
-// network round trip first just to have *some* buffer to invoke the old fused function with. A
-// no-op if the driver's already loaded (bDelayLoad false), so calling it from both here and
-// InitSpectatorConnection is safe regardless of which one runs first.
+// Loads the ROM/driver on its own, without needing a snapshot first. A spectator can call this
+// right away since loading the ROM doesn't need any match data. Does nothing if the driver is
+// already loaded, so it's safe to call more than once.
 void EnsureSpectatorDriverLoaded()
 {
   if (!bDelayLoad) return;
@@ -713,15 +672,9 @@ bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
     if (kNetSpectator) {
       iRanked = ranked;
       DetectorSetState(state, score1, score2, start1, start2);
-      // g_spectateP1Name/g_spectateP2Name are set by InitSpectatorConnection (fbn_spectate.cpp)
-      // before this callback runs -- the spectate relay itself never carries match metadata, so
-      // the launcher passes these in directly rather than they being discoverable here.
-      //
-      // VidOverlaySetGameInfo/VidSSetGameInfo parse "Name#rank,score,country" out of each name
-      // string (see VidOverlaySetGameInfo in vid_overlay.cpp) -- a bare name with no "#" leaves
-      // the parsed rank position at 0, which truncates the displayed name to nothing (matches
-      // the existing "Player1#0,0" placeholder pattern used elsewhere in this same function for
-      // direct/non-matchmade connections). Append the same placeholder suffix here.
+      // g_spectateP1Name/g_spectateP2Name are set before this runs, since the relay doesn't
+      // carry player names itself. The name display expects a "#rank,score,country" suffix --
+      // a name with no "#" gets cut off to nothing, so add a placeholder suffix here too.
       TCHAR p1Buf[160], p2Buf[160];
       _sntprintf(p1Buf, 160, _T("%s#0,0"), g_spectateP1Name[0] ? g_spectateP1Name : _T("Player 1"));
       _sntprintf(p2Buf, 160, _T("%s#0,0"), g_spectateP2Name[0] ? g_spectateP2Name : _T("Player 2"));
@@ -884,19 +837,12 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   ggpo_set_frame_delay(ggpo, ops.frameDelay, nVidRunahead);
   VidOverlaySetSystemMessage(_T("Connecting..."));
 
-  // Coarse OS timer resolution on either end skews frame pacing enough to look like
-  // one-sided rollback to the other player. Force precise timing for netplay regardless
-  // of the user's offline-play preference (bEnableHighResTimer / EnableHighResolutionTiming
-  // in src/burner/win32/misc_win32.cpp, applied once at app startup, see
-  // ForceHighResolutionTimingForNetplay in the same file for why a separate, session-scoped
-  // call is used instead of touching that setting directly); restored in QuarkEnd().
+  // Low-precision system timing can throw off frame pacing enough to look like rollback to the
+  // other player. Force accurate timing for the whole match, restored later in QuarkEnd().
   ForceHighResolutionTimingForNetplay();
 
-  // Publisher (host) side of spectating (src/burner/win32/fbn_spectate.cpp) -- independent of
-  // the GGPO peer handshake above (it's a separate connection to the relay, not to the other
-  // player), so it can start immediately rather than waiting on any GGPO event. Only ever runs
-  // on the playerSlot-0 client, per the websocket-server's spectate-request handler. No-ops
-  // internally if ops.spectate wasn't set.
+  // Start publishing to spectators, if this is player 1 and spectating was requested. Doesn't
+  // need to wait for anything above, since it's a separate connection to the relay.
   if (ops.spectate && ops.playerNumber == 1) {
     SpectatePublishInit(ops);
   }
@@ -1075,10 +1021,9 @@ void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
-  SpectatePublishShutdown(); // no-op unless this instance was publishing
-  SpectateDisconnect(); // no-op unless this instance was spectating -- sends "unwatch" so the
-                         // relay drops this connection immediately instead of waiting out its
-                         // ~15s UDP registration timeout before the spectator count updates
+  SpectatePublishShutdown(); // does nothing if we weren't publishing
+  SpectateDisconnect(); // does nothing if we weren't spectating -- tells the relay right away
+                         // instead of making it wait for its own timeout
   RestoreHighResolutionTimingAfterNetplay();
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
@@ -1110,35 +1055,22 @@ void QuarkRunIdle(int ms)
 
 // -------------------------------------------------------------------------------------------------------------------
 // Disconnect ourselves from the system... This is what actually runs when the window is closed
-// via its [X] button (WM_CLOSE -> OnClose's PostQuitMessage -> WM_QUIT in RunMessageLoop calls
-// this, not QuarkEnd -- that's reserved for the explicit MENU_QUIT/MENU_EXIT commands). Without
-// these two calls here, closing a host's or spectator's window this way left the relay unaware
-// until its own registration timeouts caught up (~15s for a spectator's UDP "watch", longer for a
-// publisher), instead of notifying it immediately.
+// with the [X] button. Without these two lines, closing the window this way would leave the
+// relay thinking we were still connected until its own timeout caught up, instead of right away.
 void QuarkDisconnect()
 {
   ggpo_disconnect(ggpo);
-  SpectatePublishShutdown(); // no-op unless this instance was publishing
-  SpectateDisconnect(); // no-op unless this instance was spectating
+  SpectatePublishShutdown(); // does nothing if we weren't publishing
+  SpectateDisconnect(); // does nothing if we weren't spectating
 }
 
 // -------------------------------------------------------------------------------------------------------------------
 bool QuarkGetInput(void* values, int isize, int playerIndex)
 {
-  // Hold off feeding local input until auto-delay negotiation resolves. GGPO itself refuses
-  // local input until _synchronizing clears, see the `if (_synchronizing) return
-  // GGPO_ERRORCODE_NOT_SYNCHRONIZED;` check at the top of Peer2PeerBackend::AddLocalInput, and
-  // Peer2PeerBackend::CheckInitialSync where _synchronizing is only cleared right *after*
-  // GGPO_EVENTCODE_RUNNING is dispatched (both ggpo/src/lib/backends/p2p.cpp), but our
-  // negotiation needs one more round trip after that to settle, and ggpo_set_frame_delay isn't
-  // safe once a frame has been queued (see the auto-delay comment block near the top of this
-  // file for why), so this closes that gap. Returning false here is the same "not ready yet"
-  // signal GGPO's own _synchronizing gate already produces during the pre-Running window, the
-  // caller already handles it as a routine skip-and-retry, not an error: NetworkGetInput()
-  // (src/burner/win32/fbn_network.cpp) returns early, and RunFrame (src/burner/win32/run.cpp,
-  // the `if (NetworkGetInput())` branches) just retries next tick without advancing the
-  // emulator or calling ggpo_advance_frame. Times out and proceeds with whatever candidate we
-  // have if the peer never replies, so a lost packet can't hang the match.
+  // Wait for the delay negotiation to finish before sending any local input, since the delay
+  // can't be changed once a frame is sent. Returning false here just means "try again next
+  // frame," the same as GGPO's own normal not-ready-yet case. If the other side never replies,
+  // this gives up waiting after a while and carries on anyway.
   if (bAutoDelay && !bAutoDelayApplied) {
     nAutoDelayBlockedFrames++;
     if (nAutoDelayBlockedFrames < AUTO_DELAY_TIMEOUT_FRAMES) {
@@ -1155,11 +1087,8 @@ bool QuarkGetInput(void* values, int isize, int playerIndex)
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
   bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
 
-  // Record this frame's confirmed input for the spectate-relay publisher (fbn_spectate.cpp),
-  // if active. Called on every ggpo_synchronize_input, including rollback resimulations (see
-  // ggpo_rollback_frame_callback below -> RunFrame(0,0,false) -> NetworkGetInput() ->
-  // QuarkGetInput), so a mispredicted frame's ring buffer entry gets overwritten with the
-  // corrected value before SpectatePublishTick ever considers it old enough to publish.
+  // Save this frame's input for spectators, if we're publishing. Also runs during rollback
+  // replays, so a frame that gets corrected later ends up with the right value before it's sent.
   if (res && SpectatePublishActive()) {
     SpectatePublishRecordFrame(ggpo_get_current_frame(ggpo), values);
   }
@@ -1178,10 +1107,7 @@ bool QuarkIncrementFrame()
   }
 
   if (ggpo) {
-    // Everything in this block assumes a live GGPO session (host or player). A relay spectator
-    // never starts one (see InitSpectatorConnection, fbn_spectate.cpp), so skip it entirely --
-    // ggpo_advance_frame/ggpo_get_stats are null-safe on their own, but ggpoutil_perfmon_update
-    // isn't verified to be, and there's nothing useful for any of this to do for a spectator.
+    // A spectator never has a real GGPO session, so this whole block is skipped for them.
     ggpo_advance_frame(ggpo);
 
     if (!bSkipPerfmonUpdates) {
@@ -1191,7 +1117,7 @@ bool QuarkIncrementFrame()
       ggpoutil_perfmon_update(ggpo, stats);
     }
 
-    SpectatePublishTick(); // no-op unless this instance is publishing
+    SpectatePublishTick(); // does nothing unless we're publishing
   }
 
   if (!bReplaySupport && !bReplayStarted) {

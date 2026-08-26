@@ -21,8 +21,7 @@ int kNetSpectator = 0;					// Non-zero if network replay is active
 int kNetLua = 1;						// Allow lua in network game
 char kNetQuarkId[128] = {};				// Network quark id
 
-// GGPO timesync: number of upcoming frame intervals we should intentionally idle
-// (frontend-driven throttling based on GGPO_EVENTCODE_TIMESYNC).
+// How many upcoming frames to skip on purpose, to let the other player catch up.
 int nGGPOTimesyncFrames = 0;
 
 #ifdef FBNEO_DEBUG
@@ -80,11 +79,8 @@ std::vector<lua_hotkey_handler> hotkey_debounces = {
 
 static void CheckSystemMacros() // These are the Pause / FFWD macros added to the input dialog
 {
-  // Spectating (fbn_spectate.cpp) is a one-way network replay -- nothing local should be able
-  // to touch playback or game state independently of the relay feed. This matters most for
-  // Load State / Save State below: those aren't otherwise gated on kNetGame/kNetSpectator at
-  // all, and a manual state load while spectating would desync it from the live feed
-  // permanently (there's no rollback to recover from it, unlike a real GGPO match).
+  // A spectator just plays back what the relay sends -- nothing local (like loading a save
+  // state) should be able to touch it, or it would desync from the live match for good.
   if (SpectateActive()) {
     return;
   }
@@ -154,9 +150,7 @@ static int GetInput(bool bCopy)
   // get input
   InputMake(bCopy);
 
-  // During netplay, don't let real local input capture (and its SOCD/diagonal-cleaning history)
-  // run until GGPO confirms the match is actually synchronized -- see bGGPOMatchRunning's
-  // declaration in fbn_ggpo.cpp and GameInpResetSOCDHistory's comment in gami.cpp.
+  // During netplay, don't capture real input until GGPO says the match is actually running.
   if (bCopy && (!kNetGame || bGGPOMatchRunning)) {
     GameInpClearOpposites(bCopy);
     GameInpUpdateNext(bCopy);
@@ -245,9 +239,7 @@ static void UpdateOverlay()
 
   // NOTE: This whole thing could be wrapped into 'QuarkUpdateStats' or whatever.
   // --> I mean the check for kNetGame, etc.
-  // A relay spectator (fbn_spectate.cpp) never starts a GGPO session, so QuarkUpdateStats'
-  // ggpo_get_stats call would just fail against a null ggpo and leave its local GGPONetworkStats
-  // uninitialized -- showing garbage (usually 1000+, clamped to the "+999ms" display) as ping.
+  // A spectator has no real GGPO session, so skip this or it would show garbage stats.
   if (kNetGame && !SpectateActive()) {
     QuarkUpdateStats(fps);
   }
@@ -447,8 +439,8 @@ int RunIdle()
   double nFps = 1000.0 * 100.0 / nAppVirtualFps;
   double nFpsIdle = nFps - 1.0;
 
-  // GGPO timesync: if we're running ahead, skip a frame to let the remote catch up.
-  // Only fires during idle input (require_idle_input=true) to avoid disrupting active play.
+  // If we're running ahead of the other player, skip a frame to let them catch up. Only while
+  // idle, so it doesn't interrupt active play.
   if (kNetGame && !kNetSpectator && !bRunPause && !bAppDoFast && nGGPOTimesyncFrames > 0) {
     if (nAccTime >= nFps) {
       nGGPOTimesyncFrames--;
@@ -646,6 +638,14 @@ int RunMessageLoop()
     */
 
     while (true) {
+      // Run the game tick every time through this loop, not just when there's no message waiting
+      // (the old way). RunIdle() checks its own timing and does nothing if it's not due yet, so
+      // this is cheap. Without this, a flood of messages (like WM_MOUSEMOVE while dragging the
+      // window) could stop the game from ticking at all for as long as the flood lasts -- no
+      // input, no network traffic -- causing a big rollback burst the moment it stops. That was
+      // also an easy way for a player to stall the match on purpose by wiggling the mouse.
+      RunIdle();
+
       if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
         // A message is waiting to be processed
         if (msg.message == WM_QUIT) {											// Quit program
@@ -873,9 +873,7 @@ int RunMessageLoop()
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);
-                    // Spectators never start a GGPO session (QuarkSendChat needs one) and their
-                    // chat is a separate, spectator-only relay channel anyway -- see
-                    // SpectateSendChat's doc comment in burner_win32.h.
+                    // Spectator chat uses a separate channel, since spectators have no GGPO session.
                     if (SpectateActive()) {
                       SpectateSendChat(text);
                     }
@@ -1070,9 +1068,9 @@ int RunMessageLoop()
         }
       }
       else {
-        // No messages are waiting
+        // No messages are waiting. The game tick itself now runs at the top of the loop instead
+        // (see above); this only needs to run once the queue is actually empty.
         SplashDestroy(0);
-        RunIdle();
       }
     }
 

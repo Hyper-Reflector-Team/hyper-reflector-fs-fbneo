@@ -237,7 +237,7 @@ static INT_PTR CALLBACK VolumeProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM)	/
 			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETTIC, (WPARAM)0, (LPARAM)50);
 			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETTIC, (WPARAM)0, (LPARAM)75);
 
-			// Set slider to current value (nAudVolume is % * 100, see aud_interface.cpp)
+			// Set slider to current value (nAudVolume is percent times 100)
 			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETPOS, (WPARAM)true, (LPARAM)(nAudVolume / 100));
 
 			// Set the edit control to current value

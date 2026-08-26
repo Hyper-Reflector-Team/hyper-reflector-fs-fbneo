@@ -231,7 +231,7 @@ extern INT32 bVidUnrankedScores;
 extern INT32 bVidSaveOverlayFiles;
 extern INT32 bVidSaveChatHistory;
 extern INT32 isChatMuted;
-extern INT32 isSpectatorChatMuted;					// 1 = mute spectator-only chat (see fbn_spectate.cpp), independent of isChatMuted
+extern INT32 isSpectatorChatMuted;					// 1 = mute spectator chat (separate from isChatMuted)
 extern INT32 nVidRunahead;
 extern wchar_t HorScreen[32];
 extern wchar_t VerScreen[32];
