@@ -343,10 +343,12 @@ int NetworkGetInput(int size)
 
   size = PackGameInputs();
 
-  // Send the control block to the Network DLL & retrieve all controls
+  // Send the control block to the Network DLL & retrieve all controls.
+  // A spectator never starts a GGPO session, it gets confirmed input from the relay instead.
   int playerInputSize = size / nMaxPlayers;
   if (kNetGame) {
-    if (!QuarkSyncInput(nControls, playerInputSize, MAXPLAYER)) {
+    bool gotInput = SpectateActive() ? SpectateGetInput(nControls) : QuarkSyncInput(nControls, playerInputSize, MAXPLAYER);
+    if (!gotInput) {
       return 1;
     }
   }

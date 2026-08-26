@@ -82,6 +82,11 @@ std::vector<lua_hotkey_handler> hotkey_debounces = {
 // These are the Pause / FFWD macros added to the input dialog
 static void CheckSystemMacros()
 {
+  // A spectator only plays back what the relay sends, so block local actions like state load.
+  if (SpectateActive()) {
+    return;
+  }
+
   // Pause
   if (macroSystemPause && macroSystemPause != prevPause && timeGetTime() > prevPause_debounce + 90) {
     if (bHasFocus) {
@@ -241,7 +246,8 @@ static void UpdateOverlay()
 
   // NOTE: This whole thing could be wrapped into 'QuarkUpdateStats' or whatever.
   // --> I mean the check for kNetGame, etc.
-  if (kNetGame) {
+  // A spectator has no real GGPO session, so skip this or it shows garbage stats.
+  if (kNetGame && !SpectateActive()) {
     QuarkUpdateStats(fps);
   }
   else {
@@ -905,7 +911,13 @@ int RunMessageLoop()
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);
-                    QuarkSendChat(text);
+                    // Spectator chat uses a separate channel, since spectators have no GGPO session.
+                    if (SpectateActive()) {
+                      SpectateSendChat(text);
+                    }
+                    else {
+                      QuarkSendChat(text);
+                    }
                   }
 
                 }

@@ -1074,6 +1074,27 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   directConnect->add_option("-s,--replay", directOps.replayAddr, "Replay appliance address");
   directConnect->add_option("-i,--replay-id", directOps.replayId, "Session ID for the replay.");
 
+  // Publishing this match to spectators. Only used when --player 1.
+  directConnect->add_flag("--spectate", directOps.spectate, "Publish this match's confirmed input to the spectate relay (player 1 only).");
+  directConnect->add_option("--relay-host", directOps.spectateRelayHost, "Spectate relay host (requires --spectate).");
+  directConnect->add_option("--relay-udp-port", directOps.spectateRelayUdpPort, "Spectate relay UDP port. 33335 is default.");
+  directConnect->add_option("--relay-tcp-port", directOps.spectateRelayTcpPort, "Spectate relay TCP port. 33336 is default.");
+  directConnect->add_option("--match-id", directOps.spectateMatchId, "Match id to publish under (requires --spectate).");
+  directConnect->add_option("--uid", directOps.spectateUid, "This player's own account uid (requires --spectate).");
+
+  // Options for watching a match instead of playing in it.
+  SpectateConnectionOptions spectateOps;
+  auto spectate = app.add_subcommand("spectate", "Watch a match via the spectate relay.");
+  spectate->add_option("--relay-host", spectateOps.relayHost, "Spectate relay host")->required();
+  spectate->add_option("--relay-udp-port", spectateOps.relayUdpPort, "Spectate relay UDP port. 33335 is default.");
+  spectate->add_option("--relay-tcp-port", spectateOps.relayTcpPort, "Spectate relay TCP port. 33336 is default.");
+  spectate->add_option("--match-id", spectateOps.matchId, "Match id to watch")->required();
+  spectate->add_option("--uid", spectateOps.uid, "This viewer's own identifier")->required();
+  spectate->add_option("-n,--name", spectateOps.userName, "Display name for spectator-only chat. Defaults to --uid if omitted.");
+  spectate->add_option("--p1-name", spectateOps.player1Name, "Display name of player 1 (the publisher), for the overlay.");
+  spectate->add_option("--p2-name", spectateOps.player2Name, "Display name of player 2, for the overlay.");
+  spectate->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
+
   std::string statePath = "";
   auto stateOp = app.add_option("-s,--state", statePath, "Load an intitial state from the given path. (.fs)");
 
@@ -1194,6 +1215,13 @@ int ProcessCommandLine(LPSTR lpCmdLine)
     int res = HandleDirectConnection(directOps, logOps);
     if (res != 0) {
       return res;
+    }
+  }
+  else if (spectate->parsed())
+  {
+    spectateOps.romName = romName;
+    if (!InitSpectatorConnection(spectateOps)) {
+      return 1;
     }
   }
 

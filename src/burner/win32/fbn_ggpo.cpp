@@ -62,6 +62,10 @@ bool bTimesyncDelayBumped = false;
 // True once the match is really running, not just connecting.
 bool bGGPOMatchRunning = false;
 
+// Player names for the spectator overlay, since the relay itself carries no names.
+TCHAR g_spectateP1Name[128] = { 0 };
+TCHAR g_spectateP2Name[128] = { 0 };
+
 // Auto-delay: each side measures ping and picks a delay, then both use the bigger one.
 static bool bAutoDelay = false;
 static bool bAutoDelayApplied = false;
@@ -359,6 +363,15 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     }
     break;
 
+    case DATAGRAM_CODE_SPECTATOR_COUNT:
+    {
+      // Only the publisher (player 1) talks to the relay, so this is how the other player finds out.
+      int count = (int)info->u.datagram.data[0];
+      VidOverlaySetGameSpectators(count);
+      VidSSetGameSpectators(count);
+    }
+    break;
+
     case DATAGRAM_CODE_CHAT:
     case 'T': // old builds used 'T' for chat
     {
@@ -612,15 +625,20 @@ bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int
   return false;
 }
 
+// Loads the ROM for a spectator. Does nothing if already loaded.
+void EnsureSpectatorDriverLoaded()
+{
+  if (!bDelayLoad) return;
+  DrvInit(nBurnDrvActive, true);
+  MediaInit();
+  RunInit();
+  bDelayLoad = false;
+}
+
 bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
 {
   // Used for initial loading.  Connecting + starting up spectator stuff and so on....
-  if (bDelayLoad) {
-    DrvInit(nBurnDrvActive, true);
-    MediaInit();
-    RunInit();
-    bDelayLoad = false;
-  }
+  EnsureSpectatorDriverLoaded();
 
   // The buffer is all of the game data that we are interested in.
   // It includes state?, scores, ranked, etc.
@@ -644,9 +662,15 @@ bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len)
     if (kNetSpectator) {
       iRanked = ranked;
       DetectorSetState(state, score1, score2, start1, start2);
-      VidOverlaySetGameInfo(0, 0, kNetSpectator, iRanked, 0);
+      // Name display needs a "#rank,score,country" suffix, so add a placeholder one.
+      TCHAR p1Buf[160], p2Buf[160];
+      _sntprintf(p1Buf, 160, _T("%s#0,0"), g_spectateP1Name[0] ? g_spectateP1Name : _T("Player 1"));
+      _sntprintf(p2Buf, 160, _T("%s#0,0"), g_spectateP2Name[0] ? g_spectateP2Name : _T("Player 2"));
+      const TCHAR* p1Name = p1Buf;
+      const TCHAR* p2Name = p2Buf;
+      VidOverlaySetGameInfo(p1Name, p2Name, kNetSpectator, iRanked, 0);
       VidOverlaySetGameScores(score1, score2);
-      VidSSetGameInfo(0, 0, kNetSpectator, iRanked, 0);
+      VidSSetGameInfo(p1Name, p2Name, kNetSpectator, iRanked, 0);
       VidSSetGameScores(score1, score2);
     }
 
@@ -817,6 +841,11 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
 
   // Force precise timing for the match, restored in QuarkEnd().
   ForceHighResolutionTimingForNetplay();
+
+  // Publish to spectators if this is player 1 and spectating was requested.
+  if (ops.spectate && ops.playerNumber == 1) {
+    SpectatePublishInit(ops);
+  }
 
   return 0;
 
@@ -992,6 +1021,8 @@ void QuarkEnd()
 {
   ConfigGameSave(bSaveInputs);
   ggpo_close_session(ggpo);
+  SpectatePublishShutdown(); // does nothing if we weren't publishing
+  SpectateDisconnect(); // does nothing if we weren't spectating
   RestoreHighResolutionTimingAfterNetplay();
   kNetGame = 0;
   nGGPOTimesyncFrames = 0;
@@ -1022,10 +1053,12 @@ void QuarkRunIdle(int ms)
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-// Disconnect ourselves from the system...
+// Disconnect ourselves from the system, and tell the relay right away.
 void QuarkDisconnect()
 {
   ggpo_disconnect(ggpo);
+  SpectatePublishShutdown();
+  SpectateDisconnect();
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -1047,6 +1080,12 @@ bool QuarkSyncInput(void* values, int isize, int playerIndex)
 
   // NOTE: This call is handling both the addition of the local inputs, and the sync call....
   bool res = ggpo_synchronize_input(ggpo, values, isize, GGPO_MAX_PLAYERS) == GGPO_OK;
+
+  // Save this frame's input for spectators, if we're publishing.
+  if (res && SpectatePublishActive()) {
+    SpectatePublishRecordFrame(ggpo_get_current_frame(ggpo), values);
+  }
+
   return res;
 }
 
@@ -1070,6 +1109,8 @@ bool QuarkIncrementFrame()
       ggpo_get_stats(ggpo, &stats, _otherPlayerIndex);
       ggpoutil_perfmon_update(ggpo, stats);
     }
+
+    SpectatePublishTick(); // does nothing unless we're publishing
   }
 
   if (!bReplaySupport && !bReplayStarted) {

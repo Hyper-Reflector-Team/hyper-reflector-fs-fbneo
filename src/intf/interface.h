@@ -231,6 +231,7 @@ extern INT32 bVidUnrankedScores;
 extern INT32 bVidSaveOverlayFiles;
 extern INT32 bVidSaveChatHistory;
 extern INT32 isChatMuted;
+extern INT32 isSpectatorChatMuted; // separate mute setting for spectator chat
 extern INT32 nVidRunahead;
 extern wchar_t HorScreen[32];
 extern wchar_t VerScreen[32];

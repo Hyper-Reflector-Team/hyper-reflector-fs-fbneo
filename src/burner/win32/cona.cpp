@@ -171,6 +171,7 @@ int ConfigAppLoad()
 		VAR(bVidSaveOverlayFiles);
 		VAR(bVidSaveChatHistory);
 		VAR(isChatMuted);
+		VAR(isSpectatorChatMuted);
 
 		// Runahead
 		VAR(nVidRunahead);
@@ -539,6 +540,8 @@ int ConfigAppSave()
 	VAR(bVidSaveChatHistory);
 	_ftprintf(h, _T("\n// Mute chat\n"));
 	VAR(isChatMuted);
+	_ftprintf(h, _T("\n// Mute spectator chat\n"));
+	VAR(isSpectatorChatMuted);
 	_ftprintf(h, _T("\n// Run ahead frames (0 = disabled, 1, 2)\n"));
 	VAR(nVidRunahead);
 

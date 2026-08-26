@@ -161,6 +161,14 @@ bool ggpo_get_stats(GGPOSession* ggpo, GGPONetworkStats* stats, uint8_t playerIn
   return res;
 }
 
+int ggpo_get_current_frame(GGPOSession* ggpo)
+{
+  if (!ggpo) {
+    return -1;
+  }
+  return ggpo->GetCurrentFrame();
+}
+
 // ----------------------------------------------------------------------------------------------------------------
 char* ggpo_get_playerName(GGPOSession* ggpo, uint8_t playerIndex) {
   if (!ggpo) { return nullptr; }

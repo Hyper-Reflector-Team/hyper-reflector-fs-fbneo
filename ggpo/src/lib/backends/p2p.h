@@ -43,6 +43,7 @@ public:
   virtual GGPOErrorCode DisconnectPlayer(uint8_t playerIndex);
   virtual void DisconnectEx();
   virtual bool GetNetworkStats(GGPONetworkStats* stats, uint8_t playerIndex);
+  virtual int GetCurrentFrame() { return _sync.GetFrameCount(); }
 
   // HACK: I am just stuffing the runahead data here for the sake of convenience.
   // Future iterations will put it somewhere else that is more appropriate.

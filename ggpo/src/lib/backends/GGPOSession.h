@@ -30,6 +30,9 @@ struct GGPOSession {
   virtual bool GetNetworkStats(GGPONetworkStats* stats, uint8_t playerIndex) { return GGPO_OK; }
   virtual GGPOErrorCode Logv(const char* fmt, va_list list) { Utils::LogIt_v(fmt, list); return GGPO_OK; }
 
+  // Current simulation frame, used by spectating. -1 means unsupported.
+  virtual int GetCurrentFrame() { return -1; }
+
   virtual void SetFrameDelay(int delay, int runahead) { throw std::exception("not supported!"); }
   virtual GGPOErrorCode SetDisconnectTimeout(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }
   virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout) { return GGPO_ERRORCODE_UNSUPPORTED; }

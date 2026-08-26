@@ -4050,6 +4050,9 @@
     <ClCompile Include="..\..\src\burner\win32\fbn_network.cpp">
       <Filter>burner\win32</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\burner\win32\fbn_spectate.cpp">
+      <Filter>burner\win32</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\burner\dynhuff.cpp">
       <Filter>burner</Filter>
     </ClCompile>

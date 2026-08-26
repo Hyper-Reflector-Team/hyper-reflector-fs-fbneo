@@ -177,6 +177,7 @@ extern "C" {
     , DATAGRAM_CODE_GGPO_SETTINGS = 3
     , DATAGRAM_CODE_DISCONNECT = 4        // Player is disconnecting.
     , DATAGRAM_CODE_DELAY_NEGOTIATE = 5   // Used for auto-delay, handled in fbn_ggpo.cpp.
+    , DATAGRAM_CODE_SPECTATOR_COUNT = 6   // Tells the other player how many spectators are watching.
   } EDatagramCode;
 
   /*
@@ -573,6 +574,13 @@ extern "C" {
     * Used to fetch some statistics about the quality of the network connection.
     */
   GGPO_API bool __cdecl ggpo_get_stats(GGPOSession*, GGPONetworkStats* stats, uint8_t playerIndex);
+
+  /*
+   * ggpo_get_current_frame --
+   *
+   * The current simulation frame. -1 if not supported. Used by spectating to key input frames.
+   */
+  GGPO_API int __cdecl ggpo_get_current_frame(GGPOSession*);
 
   /*
    * ggpo_set_disconnect_timeout --
