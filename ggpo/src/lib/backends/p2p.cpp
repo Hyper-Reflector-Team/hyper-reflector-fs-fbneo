@@ -391,7 +391,7 @@ void Peer2PeerBackend::AddRemotePlayer(GGPOPlayer* player, uint64_t sessionId) /
 
   auto ep = new GGPOEndpoint();
   ep->Init(this, &_udp, _pollMgr, playerIndex, player->u.remote.ip_address, player->u.remote.port, _local_connect_status, _client_version, _delay, _runahead);
-  ep->SetConnectTimeout(-1);
+  ep->SetConnectTimeout((uint32_t)DEFAULT_CONNECT_TIMEOUT);
   ep->SetDisconnectTimeout(_disconnect_timeout);
   ep->SetDisconnectNotifyStart(_disconnect_notify_start);
   ep->SetPlayerName(_PlayerNames[_playerIndex]);
@@ -797,8 +797,6 @@ void Peer2PeerBackend::CheckInitialSync()
       // xxx: IsInitialized() must go... we're actually using it as a proxy for "represents the local player"
       // NOTE IsInitialized() returns false when it is the local player.
       auto ep = _endpoints[i];
-      auto epi = ep->PlayerIndex();
-
 
       if (ep->IsLocalPlayer) { continue; }
       if (ep->IsReplayClient() && ep->IsDisconnected()) { continue; }
