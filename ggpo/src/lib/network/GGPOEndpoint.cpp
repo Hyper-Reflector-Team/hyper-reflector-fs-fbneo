@@ -867,7 +867,7 @@ int GGPOEndpoint::RecommendFrameDelay()
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void GGPOEndpoint::SetConnectTimeout(uint32_t timeout)
+void GGPOEndpoint::SetConnectTimeout(int timeout)
 {
   ConnectTimeout = timeout;
 }

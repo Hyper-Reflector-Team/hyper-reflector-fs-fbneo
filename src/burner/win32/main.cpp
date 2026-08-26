@@ -1176,9 +1176,12 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   }
 
   // Apply flags.
-  if (recordFlag) {
-    QuarkRecordReplay();
-  }
+  // Replay recording via CLI flag isn't wired up yet -- see the commented-out add_flag("--rec",
+  // recordFlag, ...) above. QuarkRecordReplay() doesn't exist anywhere in this codebase yet
+  // either, so this stayed disabled rather than referencing a function that was never written.
+  // if (recordFlag) {
+  //   QuarkRecordReplay();
+  // }
 
   if (screenFlag) {
     bVidAutoSwitchFullDisable = true;

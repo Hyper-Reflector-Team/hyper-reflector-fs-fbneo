@@ -83,6 +83,7 @@ typedef int int32;
 
 // Useful consts:
 static const int UDP_HEADER_SIZE = 28;     /* Size of IP + UDP headers */
+static const int NEVER_TIMEOUT = -1;       /* Sentinel meaning "don't time out at all" */
 
 
 #endif // _TYPES_H

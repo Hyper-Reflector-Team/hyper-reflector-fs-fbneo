@@ -127,7 +127,7 @@ public:
   void SetLocalFrameNumber(int num);
   int RecommendFrameDelay();
 
-  void SetConnectTimeout(uint32_t timeout);
+  void SetConnectTimeout(int timeout);
   void SetDisconnectTimeout(int timeout);
   void SetDisconnectNotifyStart(int timeout);
 

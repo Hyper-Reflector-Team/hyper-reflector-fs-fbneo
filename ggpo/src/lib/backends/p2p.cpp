@@ -46,7 +46,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks* cb,
   if (len >= MAX_NAME_SIZE - 1) {
     throw std::runtime_error("Game name is too long!");
   }
-  strcpy(_GameName, gameName_);
+  strcpy_s(_GameName, gameName_);
 
   _callbacks = *cb;
   _synchronizing = true;
@@ -589,7 +589,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, const GGPOEndpoint* end
     info.player_index = evt.u.connected.player_index;
 
     // info.u.connected.delay = evt.Synchronized.
-    strcpy_s(_PlayerNames[playerIndex], evt.u.connected.playerName);
+    strcpy_s(_PlayerNames[_playerIndex], evt.u.connected.playerName);
     info.u.connected.delay = evt.u.connected.delay;
     info.u.connected.runahead = evt.u.connected.runahead;
 
@@ -602,7 +602,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, const GGPOEndpoint* end
     break;
   case UdpEvent::Synchronizing:
     info.event_code = GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER;
-    info.player_index = playerIndex;
+    info.player_index = _playerIndex;
     info.u.synchronizing.count = evt.u.synchronizing.count;
     info.u.synchronizing.total = evt.u.synchronizing.total;
     _callbacks.on_event(&info);
@@ -610,34 +610,34 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, const GGPOEndpoint* end
 
   case UdpEvent::Synchronized:
     info.event_code = GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER;
-    info.player_index = playerIndex;
+    info.player_index = _playerIndex;
     _callbacks.on_event(&info);
 
     CheckInitialSync();
     break;
 
-  
+
   case UdpEvent::NetworkInterrupted:
     info.event_code = GGPO_EVENTCODE_CONNECTION_INTERRUPTED;
-    info.player_index = playerIndex;
+    info.player_index = _playerIndex;
     info.u.connection_interrupted.disconnect_timeout = evt.u.network_interrupted.disconnect_timeout;
     _callbacks.on_event(&info);
     break;
 
   case UdpEvent::NetworkResumed:
     info.event_code = GGPO_EVENTCODE_CONNECTION_RESUMED;
-    info.player_index = playerIndex;
+    info.player_index = _playerIndex;
     _callbacks.on_event(&info);
     break;
 
   case UdpEvent::Datagram:
 
     info.event_code = GGPO_EVENTCODE_DATAGRAM;
-    info.player_index = (uint8_t)playerIndex;
-    info.u.datagram.code = evt.u.chat.code;
-    info.u.datagram.dataSize = (uint8_t)(std::min)((size_t)evt.u.chat.dataSize, (size_t)MAX_GGPO_DATA_SIZE);
+    info.player_index = (uint8_t)_playerIndex;
+    info.u.datagram.code = evt.u.datagram.code;
+    info.u.datagram.dataSize = (uint8_t)(std::min)((size_t)evt.u.datagram.dataSize, (size_t)MAX_GGPO_DATA_SIZE);
     if (info.u.datagram.dataSize > 0) {
-      memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.chat.data, info.u.datagram.dataSize);
+      memcpy_s(info.u.datagram.data, MAX_GGPO_DATA_SIZE, evt.u.datagram.data, info.u.datagram.dataSize);
     }
     _callbacks.on_event(&info);
     break;
@@ -645,7 +645,7 @@ void Peer2PeerBackend::OnUdpProtocolEvent(UdpEvent& evt, const GGPOEndpoint* end
   case UdpEvent::SyncFailed:
     GGPOEvent e;
     info.event_code = GGPO_EVENTCODE_CONNECT_TIMEOUT;
-    info.player_index = (uint8_t)playerIndex;
+    info.player_index = (uint8_t)_playerIndex;
     e.isReplayEndpoint = (uint8_t)(endpoint->IsReplayClient() ? 1 : 0);
     _callbacks.on_event(&info);
 
@@ -801,8 +801,6 @@ void Peer2PeerBackend::CheckInitialSync()
       // xxx: IsInitialized() must go... we're actually using it as a proxy for "represents the local player"
       // NOTE IsInitialized() returns false when it is the local player.
       auto ep = _endpoints[i];
-      auto epi = ep->PlayerIndex();
-
 
       if (ep->IsLocalPlayer) { continue; }
       if (ep->IsReplayClient() && ep->IsDisconnected()) { continue; }

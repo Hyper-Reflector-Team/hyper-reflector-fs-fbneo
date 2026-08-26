@@ -109,6 +109,9 @@ struct DirectConnectionOptions {
   UINT16 spectateRelayTcpPort = 33336;
   std::string spectateMatchId = "";
   std::string spectateUid = "";
+
+  std::string replayAddr = "";
+  uint64_t replayId = 0;
 };
 
 // Options for watching a match as a spectator, instead of playing in one.

@@ -2214,7 +2214,7 @@ void GameInpFixDiagonals(bool bCopy)
 // GameInpClearOpposites/GameInpFixDiagonals run every tick from the moment a netplay session
 // exists (see GetInput in run.cpp) -- including the whole "Connecting..." window before the
 // match is actually synchronized, well before any of it should count as real input. Their
-// SOCD/diagonal-cleaning decisions depend on InpDataPrev/InpDataNext/bInpIsLocked above, which
+// SOCD/diagonal-cleaning decisions depend on InpDirectionsPrev/InpDirectionsNext/bInpIsLocked above, which
 // are process-lifetime statics never reset between matches. Without a reset at the moment a
 // match actually starts, whatever built up from idle-screen mashing (or a previous match) can
 // bias the very first real frame's cleaned input in a way the other player's machine has no
@@ -2222,7 +2222,7 @@ void GameInpFixDiagonals(bool bCopy)
 // confirms the match is actually running (see fbn_ggpo.cpp's GGPO_EVENTCODE_RUNNING handler).
 void GameInpResetSOCDHistory()
 {
-	memset(InpDataPrev, 0, sizeof(InpDataPrev));
-	memset(InpDataNext, 0, sizeof(InpDataNext));
+	memset(InpDirectionsPrev, 0, sizeof(InpDirectionsPrev));
+	memset(InpDirectionsNext, 0, sizeof(InpDirectionsNext));
 	memset(bInpIsLocked, 0, sizeof(bInpIsLocked));
 }

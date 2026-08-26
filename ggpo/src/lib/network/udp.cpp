@@ -32,7 +32,7 @@ CreateSocket(uint16 bind_port, int retries)
     auto bindRes = bind(s, (sockaddr*)&sin, sizeof sin) ;
     if (bindRes == SOCKET_ERROR) { 
       // TODO: Some kind of better logging here!
-      ASSERT(bindRes != SOCKET_ERROR, "Error creating the socket!");
+      ASSERT(bindRes != SOCKET_ERROR);
     }
     else {
       Utils::LogIt(CATEGORY_UDP, "Udp bound to port: %d.", port);

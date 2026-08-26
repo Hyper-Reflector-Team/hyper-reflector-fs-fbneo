@@ -269,8 +269,11 @@ int PackGameInputs()
     // is zero-initialized above, so anything beyond wIndex+1 is already zero.
     int k = 7;
 
-    res = k;
-    memOffset = k;
+    // memOffset must advance by k each player so each player's block lands at its own fixed
+    // 7-byte slot in nControls; res must end up as the TOTAL across all players (nMaxPlayers * k)
+    // since callers (NetworkGetInput) divide this back down by nMaxPlayers to recover k.
+    memOffset += k;
+    res = memOffset;
   }
 
 
