@@ -138,7 +138,7 @@
       <SupportJustMyCode>
       </SupportJustMyCode>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <TreatWarningAsError>true</TreatWarningAsError>
+      <TreatWarningAsError>false</TreatWarningAsError>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
       <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;CMAKE_INTDIR="Debug";_DEBUG</PreprocessorDefinitions>
@@ -265,15 +265,18 @@
     <ClInclude Include="..\..\ggpo\src\include\ggponet.h" />
     <ClInclude Include="..\..\ggpo\src\lib\backends\GGPOSession.h" />
     <ClInclude Include="..\..\ggpo\src\lib\backends\p2p.h" />
-    <ClInclude Include="..\..\ggpo\src\lib\backends\spectator.h" />
-    <ClInclude Include="..\..\ggpo\src\lib\backends\synctest.h" />
     <ClInclude Include="..\..\ggpo\src\lib\bitvector.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\CReplayFile.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\EZQ.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\EZRing.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\CGameRecorder.h" />
     <ClInclude Include="..\..\ggpo\src\lib\game_input.h" />
     <ClInclude Include="..\..\ggpo\src\lib\input_queue.h" />
     <ClInclude Include="..\..\ggpo\src\lib\log.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\network\ReplayEndpoint.h" />
     <ClInclude Include="..\..\ggpo\src\lib\network\udp.h" />
     <ClInclude Include="..\..\ggpo\src\lib\network\udp_msg.h" />
-    <ClInclude Include="..\..\ggpo\src\lib\network\udp_proto.h" />
+    <ClInclude Include="..\..\ggpo\src\lib\network\GGPOEndpoint.h" />
     <ClInclude Include="..\..\ggpo\src\lib\platform_windows.h" />
     <ClInclude Include="..\..\ggpo\src\lib\poll.h" />
     <ClInclude Include="..\..\ggpo\src\lib\ring_buffer.h" />
@@ -283,15 +286,16 @@
     <ClInclude Include="..\..\ggpo\src\lib\zconf.h" />
     <ClInclude Include="..\..\ggpo\src\lib\zlib.h" />
     <ClCompile Include="..\..\ggpo\src\lib\backends\p2p.cpp" />
-    <ClCompile Include="..\..\ggpo\src\lib\backends\spectator.cpp" />
-    <ClCompile Include="..\..\ggpo\src\lib\backends\synctest.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\bitvector.cpp" />
+    <ClCompile Include="..\..\ggpo\src\lib\CReplayFile.cpp" />
+    <ClCompile Include="..\..\ggpo\src\lib\CGameRecorder.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\game_input.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\input_queue.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\log.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\main.cpp" />
+    <ClCompile Include="..\..\ggpo\src\lib\network\ReplayEndpoint.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\network\udp.cpp" />
-    <ClCompile Include="..\..\ggpo\src\lib\network\udp_proto.cpp" />
+    <ClCompile Include="..\..\ggpo\src\lib\network\GGPOEndpoint.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\platform_windows.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\poll.cpp" />
     <ClCompile Include="..\..\ggpo\src\lib\sync.cpp" />

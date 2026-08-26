@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "network/udp_proto.h"
+#include "network/GGPOEndpoint.h"
 
 static GGPOLogOptions _logOps;
 static bool _isLogActive = false;
@@ -29,7 +29,7 @@ bool IsCategoryActive(const char* category) {
 
 // ----------------------------------------------------------------------------------------------------------------
 void Utils::InitLogger(GGPOLogOptions& options_) {
-  if (logInitialized) { throw new std::exception("The log has already been initialized!"); }
+  if (logInitialized) { throw std::runtime_error("The log has already been initialized!"); }
   logInitialized = true;
 
   _logOps = options_;

@@ -1,4 +1,6 @@
 ﻿*.vcxproj.user
+*.csproj.user
+*.replay
 .vs
 .vscode
 projectfiles/visualstudio-2019/enc_temp_folder
@@ -13,9 +15,26 @@ src/intf/video/win32/detector_buffers.h
 src/intf/video/win32/detector_loaders.h
 UPDATE_GIT_IGNORE.BAT
 build/
+obj/
+bin/
 
 gitlog.txt
 *.cpp.bak
 ggpo_legacy/
 console-log.txt
 dev-notes.*
+
+*.orig
+*.bak
+/src/burner/win32/RCa15624
+/src/burner/win32/RCa29680
+/src/burner/win32/RCb15624
+/src/burner/win32/RCc15624
+/src/dep/libs/lib7z/7zVersion.aps
+*.\~lock
+/.~lock.replay-file-format.ods#
+*.aps
+/ReplayAppliance/ReplayAppliance/libs/NetcodeInterop.dll
+/ReplayAppliance/ReplayAppliance/libs/NetcodeInterop.exp
+/ReplayAppliance/ReplayAppliance/libs/NetcodeInterop.lib
+/ReplayAppliance/ReplayAppliance/libs/NetcodeInterop.pdb

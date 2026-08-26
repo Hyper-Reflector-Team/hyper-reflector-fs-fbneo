@@ -15,6 +15,10 @@
 
 #pragma pack(push, 1)
 
+enum EEndpointType : uint8_t {
+  Player = 0,
+  ReplayAppliance = 1
+};
 
 struct UdpMsg
 {
@@ -27,8 +31,10 @@ struct UdpMsg
     QualityReply = 5,
     KeepAlive = 6,
     InputAck = 7,
-    Datagram = 8      // REFACTOR: -> 'Datagram' -> update related nomeclature too!
+    Datagram = 8,  
+    Heartbeat = 9
   };
+
 
   // This struct saves us one byte of space.
   // Makes ports to other languages a bit annoying to deal with, so
@@ -52,16 +58,22 @@ struct UdpMsg
   union {
     struct {
       uint32      random_request;  /* please reply back with this random data */
-      uint16      remote_magic;
-      uint8       remote_endpoint;
+      uint8_t     player_index;
+      uint8_t     endpointType;       // Type of endpoint (application defined).  Use a value for EEndpointType or whatever you want.
+      uint64_t    session_id;         // Used for replay ids.  This is the form of a unix timestamp in milliseconds!  For p2p connections, this can be zero, but is ignored.
     } sync_request;
 
     struct {
       uint32      random_reply;           /* OK, here's your random data back */
       uint32      client_version;       // Version of this client, in 8 byte chunks: MAJOR - MINOR - REVISION - GGPO (protocol version)
+      uint8_t player_index;             // Index of the remote player.  Should match what we expect / not be our index!
+      uint8_t isReady;                  // Indicates that we are ready to begin.
       uint8_t delay;                    // current delay setting.
       uint8_t runahead;                 // current runahead setting.
+      uint8_t endpointType;             // Type of endpoint (application defined).  Use a value for EEndpointType or whatever you want.
+
       char playerName[MAX_NAME_SIZE];   /* The name of the player we synced to: */
+      char gameName[MAX_NAME_SIZE];     // Name of the game.  This is a little hack so we can create file names for replay state.
     } sync_reply;
 
     struct {
@@ -88,12 +100,14 @@ struct UdpMsg
     } input;
 
     struct {
-      int               ack_frame : 31;
+      int32_t           start_frame;      // What is the starting frame of the ACK?
+      uint16            frame_count;      // How many total frames were ACKed?
     } input_ack;
 
     struct {
       uint8_t code;
       uint8_t dataSize;
+      int frame;                          // The frame # when the data was sent.  Useful for playbacks or whatever....
       char data[MAX_GGPO_DATA_SIZE];
     } datagram;
 
@@ -140,6 +154,7 @@ public:
 
     case Datagram:
       size = sizeof(uint8_t) * 2;     // code + dataSize
+      size += sizeof(int);            // frame
       size += u.datagram.dataSize;
 
       // size = strnlen_s(u.chat.data, MAX_GGPO_DATA_SIZE) + 1;

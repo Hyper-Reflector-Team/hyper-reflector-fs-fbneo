@@ -1,0 +1,50 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ReplayAppliance\GlobalUsings.cs" Link="GlobalUsings.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="3.9.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ReplayAppliance\ReplayAppliance.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <Target Name="CopyLibs" AfterTargets="Build">
+    <!--Example of conditional includes....-->
+    <!--<ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+      <NativeFiles Include="NativeLibs/win-x64/**/*.*" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+      <NativeFiles Include="NativeLibs/linux-x64/**/*.*" />
+    </ItemGroup>-->
+
+    <ItemGroup>
+      <ExtraFiles Include="../libs/$(Configuration)/*.*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ExtraFiles)" DestinationFiles="@(ExtraFiles->'$(OutputPath)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

@@ -2,7 +2,7 @@
 #include "burner.h"
 #include "ggpoclient.h"
 #include "ggpo_perfmon.h"
-// #include "GGPOSession.h";
+#include <stdexcept>
 
 extern "C" {
 #include "ggponet.h"
@@ -243,6 +243,13 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   switch (info->event_code) {
   case GGPO_EVENTCODE_CONNECTED_TO_PEER:
   {
+    // TODO: Use a const here:
+    if (info->player_index == 255) {
+      // We have connected to a replay appliance.  We don't need to mess with the overlay, unless we want to indicate that we are
+      // connected (maybe via icon or something in debug mode?....)
+      return true;
+    }
+
     VidOverlaySetSystemMessage(_T("Connected to Peer"));
     VidSSetSystemMessage(_T("Connected to Peer"));
 
@@ -250,6 +257,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     char* p1 = ggpo_get_playerName(ggpo, 0);
     char* p2 = ggpo_get_playerName(ggpo, 1);
 
+    // BUG: If the player name that is sent in the sync reply is too big, the stack will be corrupted!
     char p1Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars....
     char p2Final[16 * 2];   // NOTE: NAME_MAX * 2 for formatting chars....
 
@@ -277,7 +285,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   case GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER:
     //_stprintf(status, _T("Synchronizing with Peer (%d/%d)..."), info->u.synchronizing.count, info->u.synchronizing.total);
     VidOverlaySetSystemMessage(_T("Synchronizing with Peer..."));
-    VidSSetSystemMessage(_T("Synchronizing with Peer..."));
+    // VidSSetSystemMessage(_T("Synchronizing with Peer..."));
     break;
 
   case GGPO_EVENTCODE_RUNNING: {
@@ -303,8 +311,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
   case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
     VidOverlaySetSystemMessage(_T("Disconnected from Peer"));
     VidSSetSystemMessage(_T("Disconnected from Peer"));
-    // The game can't keep going without the other player. Once it's stuck, the sound would
-    // just loop the same bit of audio over and over, so stop it instead.
+    // If the game stops stop the sound
     AudSoundStop();
     if (bReplayRecording) {
       AviStop();
@@ -313,8 +320,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
     break;
 
   case GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
-    // Same idea as above, but the other player might still come back -- stop the sound without
-    // ending the match yet.
+    // Same idea as above, the other player might still come back stop the sound without ending the match
     VidOverlaySetSystemMessage(_T("Connection interrupted..."));
     VidSSetSystemMessage(_T("Connection interrupted..."));
     AudSoundStop();
@@ -368,9 +374,7 @@ bool __cdecl ggpo_on_event_callback(GGPOEvent* info)
 
     case DATAGRAM_CODE_SPECTATOR_COUNT:
     {
-      // Sent to us by player 1, who's the only one actually connected to the spectate relay --
-      // this is the only way we find out the spectator count. Update both overlay systems, since
-      // our own window uses the other one.
+      // Sent to us by player 1, the only one actually connected to the spectate relay
       int count = (int)info->u.datagram.data[0];
       VidOverlaySetGameSpectators(count);
       VidSSetGameSpectators(count);
@@ -436,6 +440,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
 
   if (!kNetSpectator)
   {
+    // NOTE: Find out why there are specific savestates for ranked games?
     // ranked savestate
     if (iRanked) {
       _stprintf(tfilename, _T("savestates\\%s_fbneo_ranked.fs"), tname);
@@ -461,6 +466,7 @@ bool __cdecl ggpo_begin_game_callback(const char* name)
     }
 
     // regular savestate
+    // NOTE: That this can happen for ranked games as well....
     _stprintf(tfilename, _T("savestates\\%s_fbneo.fs"), tname);
     HANDLE hFind = FindFirstFile(tfilename, &fd);
     if (hFind != INVALID_HANDLE_VALUE) {
@@ -765,28 +771,30 @@ void ParseAddress(const char* addr, char* host, UINT16* port)
 // ----------------------------------------------------------------------------------------------------------------------------------------------
 int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
 {
-
   Utils::InitLogger(logOps);
 
   const UINT16 DEFAULT_LOCAL_PORT = 7000;
-  const UINT16 DEFAULT_REMOTE_PORT = 7000;
+  const UINT16 DEFAULT_REMOTE_PORT = 7001;
 
   // Let's parse out the ips/ports...
   char remoteIP[MAX_HOST];
   UINT16 localPort = DEFAULT_LOCAL_PORT;
   UINT16 remotePort = DEFAULT_REMOTE_PORT;
+  UINT16 replayPort = 0;
 
   char localHost[MAX_HOST];
   char remoteHost[MAX_HOST];
+  char replayHost[MAX_HOST];
 
   try
   {
     ParseAddress(ops.localAddr.data(), localHost, &localPort);
     ParseAddress(ops.remoteAddr.data(), remoteHost, &remotePort);
+    ParseAddress(ops.replayAddr.data(), replayHost, &replayPort);
   }
   catch (const std::exception&)
   {
-    throw std::exception("Could not parse local or remote address");
+    throw std::runtime_error("Could not parse local, remote, or replay address!");
   }
 
   kNetVersion = NET_VERSION;
@@ -827,12 +835,24 @@ int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps)
   bDirect = true;
   iRanked = 0;
   _playerIndex = ops.playerNumber - 1;
-  _otherPlayerIndex = _playerIndex == 0 ? 1 : 0;
+  _otherPlayerIndex = _playerIndex == 0 ? 1 : 0;  // TODO: This is passed along in the sync request (or reply) now.
 
   iDelay = ops.frameDelay;
   iSeed = 0;
 
-  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, _playerIndex, ops.playerName.data(), FS_VERSION);
+  char* useReplayIp = nullptr;
+  uint64_t useSessionId = 0;
+
+  if (ops.replayAddr.length() > 0) {
+    useReplayIp = ops.replayAddr.data();
+
+    if (ops.replayId == 0) {
+      throw std::exception("Invalid or missing replay id!");
+    }
+    useSessionId = ops.replayId;
+  }
+
+  ggpo = ggpo_start_session(&cb, ops.romName.data(), localPort, remoteHost, remotePort, _playerIndex, ops.playerName.data(), FS_VERSION, useReplayIp, replayPort, useSessionId);
 
   ggpo_set_frame_delay(ggpo, ops.frameDelay, nVidRunahead);
   VidOverlaySetSystemMessage(_T("Connecting..."));
@@ -1065,7 +1085,7 @@ void QuarkDisconnect()
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-bool QuarkGetInput(void* values, int isize, int playerIndex)
+bool QuarkSyncInput(void* values, int isize, int playerIndex)
 {
   // Wait for the delay negotiation to finish before sending any local input, since the delay
   // can't be changed once a frame is sent. Returning false here just means "try again next
@@ -1195,8 +1215,9 @@ void QuarkUpdateStats(double fps)
 }
 
 // --------------------------------------------------------------------------------------------------------
-void QuarkRecordReplay()
+void QuarkRecordAVIReplay()
 {
+  throw std::runtime_error("avi recording is not supported at this time!");
   bReplayRecord = true;
   bReplayRecording = false;
 }

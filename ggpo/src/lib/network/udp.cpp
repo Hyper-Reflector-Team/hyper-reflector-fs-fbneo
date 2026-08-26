@@ -28,7 +28,13 @@ CreateSocket(uint16 bind_port, int retries)
   sin.sin_addr.s_addr = htonl(INADDR_ANY);
   for (port = bind_port; port <= bind_port + retries; port++) {
     sin.sin_port = htons(port);
-    if (bind(s, (sockaddr*)&sin, sizeof sin) != SOCKET_ERROR) {
+
+    auto bindRes = bind(s, (sockaddr*)&sin, sizeof sin) ;
+    if (bindRes == SOCKET_ERROR) { 
+      // TODO: Some kind of better logging here!
+      ASSERT(bindRes != SOCKET_ERROR, "Error creating the socket!");
+    }
+    else {
       Utils::LogIt(CATEGORY_UDP, "Udp bound to port: %d.", port);
       return s;
     }
@@ -82,6 +88,8 @@ void Udp::SendTo(char* buffer, int len, int flags, struct sockaddr* dst, int des
   Utils::LogIt(CATEGORY_UDP, "sent %d to %s:%d", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res);
 }
 
+int pollCount = 0;
+
 // ----------------------------------------------------------------------------------------------------------
 bool Udp::OnLoopPoll(void* cookie)
 {
@@ -107,6 +115,7 @@ bool Udp::OnLoopPoll(void* cookie)
       Utils::LogIt(CATEGORY_UDP, "recvfrom returned (len:%d  from:%s:%d).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port));
       UdpMsg* msg = (UdpMsg*)recv_buf;
       _callbacks->OnMsg(recv_addr, msg, len);
+      ++pollCount;
     }
   }
   return true;

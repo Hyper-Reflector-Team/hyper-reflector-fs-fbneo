@@ -5,18 +5,19 @@
  * in the LICENSE file.
  */
 
-#include <string>
- // #include "network/udp_proto.h"
-
- //struct UdpProtocol::Event;
- //class UdpProtocol;
- //struct UdpProtocol::Event;
-
-struct UdpEvent;
-struct UdpMsg;
 
 #ifndef _LOG_H
 #define _LOG_H
+
+#include <string>
+ // #include "network/GGPOEndpoint.h"
+
+ //struct GGPOEndpoint::Event;
+ //class GGPOEndpoint;
+ //struct GGPOEndpoint::Event;
+
+struct UdpEvent;
+struct UdpMsg;
 
 static const char* CATEGORY_GENERAL = "NA";
 static const char* CATEGORY_MESSAGE = "MSG";

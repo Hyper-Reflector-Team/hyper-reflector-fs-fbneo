@@ -32,6 +32,7 @@ bool bDisableDebugConsole = true;
 #include "version.h"
 #include "CLI11.hpp"
 #include "../../ggpo/src/lib/log.h"
+#include "CMemRecorder.h"
 
 HINSTANCE hAppInst = NULL;			// Application Instance
 HANDLE hMainThread;
@@ -62,9 +63,17 @@ bool bKeypadVolume = true;
 bool bFixDiagonals = false;
 int nEnableSOCD = 0;
 
+
+bool RecordMem = false;
+std::string MemFilePath;
+CMemRecorder* MemRecorder = nullptr;
+
+
 // Used for the load/save dialog in commdlg.h (savestates, input replay, wave logging)
+// REFACTOR / HACK:
+// Don't use the same variable for filenames all over the system!  BAD DESIGN!
 TCHAR szChoice[MAX_PATH] = _T("");
-OPENFILENAME ofn;
+OPENFILENAME openFileName;
 
 #if defined (UNICODE)
 char* TCHARToANSI(const TCHAR* pszInString, char* pszOutString, int nOutSize)
@@ -124,6 +133,7 @@ CHAR* astring_from_utf8(const char* utf8string)
   int char_count;
   CHAR* result;
 
+  // FUTURE: We will make the application UTF-8 everywhere in the future.
   // convert MAME string (UTF-8) to UTF-16
   char_count = MultiByteToWideChar(CP_UTF8, 0, utf8string, -1, NULL, 0);
   wstring = (WCHAR*)malloc(char_count * sizeof(*wstring));
@@ -877,6 +887,7 @@ int AppMessage(MSG* pMsg)
   return 1; // Didn't process this message
 }
 
+// REFACTOR:  This is a misleading name.
 bool AppProcessKeyboardInput()
 {
   if (bEditActive) {
@@ -1002,13 +1013,15 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   app.add_option("--rom", romName, "Name of ROM to load");
   app.add_option("--lua", scriptName, "LUA script file to execute.");
 
-  bool recordFlag = false;
+  std::string memOptions = "";
+  // TEMP: We will pick up the memorry analyzers again, at some future date.
+  // app.add_option("--mem", memOptions, "Option to save memory to disk for future analysis.  Use the form: '<pathspec>:<what(all|nvram|etc...>' (NOTE: Not fully implemented, more docs to come!)");
+
   bool resFlag = false;
   bool screenFlag = false;
-  app.add_flag("--rec", recordFlag, "Record replay.");
+  // app.add_flag("--rec", recordFlag, "Record replay.");
   app.add_flag("-a", resFlag, "Use game resolution for fullscreen modes.");
   app.add_flag("-w", screenFlag, "Disable auto switch to fullscreen on loading driver.");
-
 
   // Logging options for GGPO.  NOTE: This could be combined with the other logging facilities at some point.
   // TODO: Some kind of command line option to load all options from a single file.  This makes it easier
@@ -1080,13 +1093,27 @@ int ProcessCommandLine(LPSTR lpCmdLine)
   spectate->add_option("--p1-name", spectateOps.player1Name, "Display name of playerSlot 0 (the publisher), for the overlay's game-info text.");
   spectate->add_option("--p2-name", spectateOps.player2Name, "Display name of playerSlot 1, for the overlay's game-info text.");
   spectate->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
+  // Replay client
+  directConnect->add_option("-s,--replay", directOps.replayAddr, "Replay appliance address");
+  directConnect->add_option("-i,--replay-id", directOps.replayId, "Session ID for the replay.");
 
+  std::string statePath = "";
+  auto stateOp = app.add_option("-s,--state", statePath, "Load an intitial state from the given path. (.fs)");
 
   std::string loadPath = "";
   auto load = app.add_subcommand("load", "Load a game state (.fs), or replay file (.fr)");
   load->add_option("-f,--file", loadPath, "Path of the file to load.");
   load->add_option("--net-delay", netDelayOpt, "Enable test network delay: on|off|<ms> (default off).");
+  // record / replay options.
+  std::string recordPath = "";
+  std::string replayPath = "";
+  auto recordOp = app.add_option("--record", recordPath, "Record inputs to file.");
+  auto replayOp = app.add_option("--replay", replayPath, "Replay inputs from file.");
 
+  // You can record, or replay, or load a state, but only one!
+  // NOTE: I can see a future argument for allowing both STATE and RECORD options at the same time.
+  recordOp->excludes(replayOp, stateOp);
+  replayOp->excludes(recordOp, stateOp);
 
   // Only allow one subcommand.
   app.require_subcommand(0, 1);
@@ -1163,12 +1190,12 @@ int ProcessCommandLine(LPSTR lpCmdLine)
 
 
   // Handle subcommands, if any.
-  if (list->parsed())
-  {
-    int res = HandleListInfoCommand(listOption);
-    return res;
-  }
-  else if (directConnect->parsed())
+  //if (list->parsed())
+  //{
+  //  int res = HandleListInfoCommand(listOption);
+  //  return res;
+  //}
+  if (directConnect->parsed())
   {
     // GGPO logging, if set.
     GGPOLogOptions logOps;
@@ -1258,7 +1285,47 @@ int ProcessCommandLine(LPSTR lpCmdLine)
         FBAPopupDisplay(PUF_TYPE_ERROR);
         return 1;
       }
+
     }
+  }
+
+  // Record / Replay / State?
+  if (replayPath != "") {
+    if (!std::filesystem::exists(replayPath))
+    {
+      // TODO: DIALOG
+      throw runtime_error("replay file does not exist at path!");
+    }
+
+    auto szPath = ANSIToTCHAR(replayPath.data(), NULL, NULL);
+    int replayStarted = StartReplay(szPath);
+    if (replayStarted) {
+      return replayStarted;
+    }
+  }
+  else if (recordPath != "") {
+    throw runtime_error("not supported!");
+  }
+  else if (statePath != "") {
+    throw runtime_error("not supported!");
+
+    // OLD!
+    //if (!std::filesystem::exists(statePath))
+    //{
+    //  // TODO: Standard error dialog.
+    //  throw std::exception("File does not exist!");
+    //}
+    //if (ends_with(statePath, ".fs")) {
+    //  if (!BurnStateLoad(ANSIToTCHAR(statePath.data(), NULL, NULL), 1, &DrvInitCallback)) {
+    //    return 1;
+    //  }
+    //}
+    //else {
+    //  // Error dialog:
+    //  // TODO: Allow any old extension, as long as the file is of the correct format, it is OK!
+    //  throw std::exception("File is not a state (.fs) file!");
+    //}
+
   }
 
   POST_INITIALISE_MESSAGE;

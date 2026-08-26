@@ -8,24 +8,32 @@ int bDrvSaveAll = 0;
 static void MakeOfn(TCHAR* pszFilter)
 {
 	_stprintf(pszFilter, FBALoadStringEx(hAppInst, IDS_DISK_FILE_STATE, true), _T(APP_TITLE));
-	memcpy(pszFilter + _tcslen(pszFilter), _T(" (*.fs, *.fr)\0*.fs;*.fr\0\0"), 25 * sizeof(TCHAR));
+	memcpy(pszFilter + _tcslen(pszFilter), _T(" (*.fs, *.replay)\0*.fs;*.replay\0\0"), 25 * sizeof(TCHAR));
 
-	memset(&ofn, 0, sizeof(ofn));
-	ofn.lStructSize = sizeof(ofn);
-	ofn.hwndOwner = hScrnWnd;
-	ofn.lpstrFilter = pszFilter;
-	ofn.lpstrFile = szChoice;
-	ofn.nMaxFile = sizeof(szChoice) / sizeof(TCHAR);
-	ofn.lpstrInitialDir = _T(".\\savestates");
-	ofn.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
-	ofn.lpstrDefExt = _T("fs");
+	memset(&openFileName, 0, sizeof(openFileName));
+	openFileName.lStructSize = sizeof(openFileName);
+	openFileName.hwndOwner = hScrnWnd;
+	openFileName.lpstrFilter = pszFilter;
+	openFileName.lpstrFile = szChoice;
+	openFileName.nMaxFile = sizeof(szChoice) / sizeof(TCHAR);
+	openFileName.lpstrInitialDir = _T(".\\savestates");
+	openFileName.Flags = OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+	openFileName.lpstrDefExt = _T("fs");
 	return;
 }
 
 // The automatic save (nvram or nvram+state if restore state on load is enabled.)
 // TODO: Find a better name for this function.  Something like 'Load Default State(bool saveFirst)'
+// TODO: "Restore State on Load" appears to be enabled / set by default, but I don't think that it is really
+// doing what it is meant to...
+// REFACTOR: bSave is a boolean value that indicates you are saving or not, but you are actually saving OR loading.  This should proabably be an enum!
 int StatedAuto(int bSave)
 {
+  // I don't see the point in saving/loading some hunk of ram when the ROM starts + stops.
+  // If it is some kind of 'pick up where you left off' kind of feature, it either isn't working
+  // as expected, or it needs to be updated.
+  return 0;
+  
 	static TCHAR szName[MAX_PATH] = _T("");
 	int nRet;
 
@@ -73,15 +81,15 @@ int StatedLoad(int nSlot)
 
 	// if rewinding during playback, and readonly is not set,
 	// then transition from decoding to encoding (recording)
-	if(!bReplayReadOnly && nReplayStatus == 2)
+	if(!bReplayReadOnly && nReplayStatus == REPLAY_STATUS_REPLAY)
 	{
-		nReplayStatus = 1;
+		nReplayStatus = REPLAY_STATUS_RECORD;
 	}
-	if(bReplayReadOnly && nReplayStatus == 1)
+	if(bReplayReadOnly && nReplayStatus == REPLAY_STATUS_RECORD)
 	{
 		bReplayDontClose = 1;
 		StopReplay();
-		nReplayStatus = 2;
+		nReplayStatus = REPLAY_STATUS_REPLAY;
 	}
 
 	if (nSlot) {
@@ -97,11 +105,11 @@ int StatedLoad(int nSlot)
 			_stprintf(szChoice, _T("savestate"));
 		}
 		MakeOfn(szFilter);
-		ofn.lpstrTitle = FBALoadStringEx(hAppInst, IDS_STATE_LOAD, true);
+		openFileName.lpstrTitle = FBALoadStringEx(hAppInst, IDS_STATE_LOAD, true);
 
 		bOldPause = bRunPause;
 		bRunPause = 1;
-		nRet = GetOpenFileName(&ofn);
+		nRet = GetOpenFileName(&openFileName);
 		bRunPause = bOldPause;
 
 		if (nRet == 0) {		// Error
@@ -162,12 +170,12 @@ int StatedSave(int nSlot)
 			_stprintf(szChoice, _T("%s"), BurnDrvGetText(DRV_NAME));
 		}
 		MakeOfn(szFilter);
-		ofn.lpstrTitle = FBALoadStringEx(hAppInst, IDS_STATE_SAVE, true);
-		ofn.Flags |= OFN_OVERWRITEPROMPT;
+		openFileName.lpstrTitle = FBALoadStringEx(hAppInst, IDS_STATE_SAVE, true);
+		openFileName.Flags |= OFN_OVERWRITEPROMPT;
 
 		bOldPause = bRunPause;
 		bRunPause = 1;
-		nRet = GetSaveFileName(&ofn);
+		nRet = GetSaveFileName(&openFileName);
 		bRunPause = bOldPause;
 
 		if (nRet == 0) {		// Error

@@ -28,7 +28,8 @@ struct UdpEvent {
     Disconnected,
     NetworkInterrupted,
     NetworkResumed,
-    Datagram
+    Datagram,
+    SyncFailed
   };
 
   Type      type;
@@ -45,6 +46,7 @@ struct UdpEvent {
 
     struct {
       char playerName[MAX_NAME_SIZE];
+      uint8_t player_index;
       uint8_t delay;
       uint8_t runahead;
     } connected;
@@ -55,9 +57,14 @@ struct UdpEvent {
 
     struct {
       uint8_t code;
+      int frame;
       uint8_t dataSize;
       char		data[MAX_GGPO_DATA_SIZE];
-    } chat;   // REFACTOR: Rename to 'data' or something like that...
+    } datagram;   // REFACTOR: Rename to 'data' or something like that...
+
+    struct {
+      uint8_t endpointType;
+    } SyncFailed;
 
   } u;			// REFACTOR: Rename this to something descriptive.
 
@@ -65,8 +72,8 @@ struct UdpEvent {
 };
 
 
-
-class UdpProtocol : public IPollSink
+// REFACTOR: -> GGPOEndpoint
+class GGPOEndpoint : public IPollSink
 {
 public:
   struct Stats {
@@ -78,19 +85,30 @@ public:
   };
 
 
+private:
+  bool _IsReplayClient = false;
+
 public:
   virtual bool OnLoopPoll(void* cookie);
+  void SetSessionId(int64_t value) { _sessionId = value; }
+  void SetIsReplayClient(bool value) { _IsReplayClient = value; }
+  inline bool IsReplayClient() const { return _IsReplayClient; }
 
 public:
-  UdpProtocol();
-  virtual ~UdpProtocol();
+  GGPOEndpoint();
+  virtual ~GGPOEndpoint();
 
-  void Init(Udp* udp, PollManager& p, int queue, char* ip, u_short port, UdpMsg::connect_status* status, uint32_t clientVersion, uint8_t delay_, uint8_t runahead_);
+  void Init(GGPOSession* client_, Udp* udp, PollManager& p, uint8_t playerIndex_, char* ip, u_short port, UdpMsg::connect_status* status, uint32_t clientVersion, uint8_t delay_, uint8_t runahead_);
 
   void Synchronize();
   bool GetPeerConnectStatus(int id, int* frame);
+
+  // [OBSOLETE]
   bool IsInitialized() { return _udp != NULL; }
   bool IsSynchronized() { return _current_state == Running; }
+  bool IsDisconnected() { return _current_state == Disconnected; }
+
+
   bool IsRunning() { return _current_state == Running; }
   void SendInput(GameInput& input);
   void SendChat(char* text);
@@ -101,7 +119,7 @@ public:
 
   // [OBSOLETE]  --> This functionality will be replaced with 'DisconnectEx' in the future.
   void Disconnect();
-  void DisconnectEx(int onFrame);
+  void DisconnectEx(int onFrame, bool sendDisconnectMessage);
 
   void GetNetworkStats(struct GGPONetworkStats* stats);
   bool GetEvent(UdpEvent& e);
@@ -109,11 +127,23 @@ public:
   void SetLocalFrameNumber(int num);
   int RecommendFrameDelay();
 
+  void SetConnectTimeout(uint32_t timeout);
   void SetDisconnectTimeout(int timeout);
   void SetDisconnectNotifyStart(int timeout);
 
   void SetPlayerName(char* playerName_);
+  void SetGameName(char* gameName_);
+
+  inline uint8_t PlayerIndex() const { return _playerIndex; }
+  inline void PlayerIndex(uint8_t value) { _playerIndex = value; }
+
+  bool IsLocalPlayer = false;
+
 protected:
+
+  EEndpointType EndpointType = EEndpointType::Player;
+
+  GGPOSession* _Client = nullptr;
 
   enum State {
     Syncing,
@@ -148,12 +178,15 @@ protected:
   bool OnInvalid(UdpMsg* msg, int len);
   bool OnSyncRequest(UdpMsg* msg, int len);
   bool OnSyncReply(UdpMsg* msg, int len);
-  bool OnInput(UdpMsg* msg, int len);
+  virtual bool OnInput(UdpMsg* msg, int len);
   bool OnInputAck(UdpMsg* msg, int len);
   bool OnQualityReport(UdpMsg* msg, int len);
   bool OnQualityReply(UdpMsg* msg, int len);
   bool OnKeepAlive(UdpMsg* msg, int len);
   bool OnData(UdpMsg* msg, int len);
+
+  uint64_t _sessionId = 0;
+
 
 protected:
   /*
@@ -162,7 +195,7 @@ protected:
   Udp* _udp;
   sockaddr_in    _peer_addr;
   uint16         _magic_number;
-  int            _queue;
+  uint8_t        _playerIndex;
   uint16         _remote_magic_number;
   bool           _connected;
   int            _send_latency;
@@ -231,8 +264,12 @@ protected:
   unsigned int               _disconnect_notify_start;
   bool                       _disconnect_notify_sent;
 
+  uint32_t                   SyncStartTime = 0;
+
   uint16                     _next_send_seq;
   uint16                     _next_recv_seq;
+
+  int                        ConnectTimeout = -1;  // Never timeout.
 
   /*
    * Rift synchronization.
@@ -246,7 +283,7 @@ protected:
 
   // Your name.  This will be exchanged with other peers on sync.
   char _playerName[MAX_NAME_SIZE];
-
+  char _gameName[MAX_NAME_SIZE];
 };
 
 #endif

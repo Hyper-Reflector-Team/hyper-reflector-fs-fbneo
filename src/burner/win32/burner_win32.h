@@ -86,6 +86,7 @@ INT32 DDCore_Init();
 // #define POST_INITIALISE_MESSAGE { debugPrintf(_T("*** (re-) initialising - %s %i\n"), _T(__FILE__), __LINE__); PostMessage(NULL, WM_APP + 0, 0, 0); }
 #define POST_INITIALISE_MESSAGE PostMessage(NULL, WM_APP + 0, 0, 0)
 
+class CMemRecorder;
 struct GGPOLogOptions;
 
 // Command line stuff.  Not a huge fan of this header file being a huge dumping ground.....
@@ -93,7 +94,7 @@ struct DirectConnectionOptions {
   std::string romName;
   std::string localAddr = "";
   std::string remoteAddr = "";
-  UINT16 playerNumber = 0;
+  uint16_t playerNumber = 0;
   std::string playerName = "";
   UINT16 frameDelay = 1;
   // If true, frameDelay above is just a fallback -- the real delay gets worked out
@@ -119,10 +120,12 @@ struct SpectateConnectionOptions {
   std::string matchId;
   std::string uid; // this viewer's own id
   std::string userName; // shown in spectator chat; falls back to uid if empty
-  // The two players' names, for the overlay. Passed in directly since the spectate feed itself
-  // doesn't carry names -- empty just falls back to a generic label.
   std::string player1Name;
   std::string player2Name;
+  uint16_t frameDelay = 1;
+
+  std::string replayAddr = "";
+  uint64_t replayId = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -164,7 +167,7 @@ extern int nEnableSOCD;
 
 // Used for the load/save dialog in commdlg.h
 extern TCHAR szChoice[MAX_PATH];					// File chosen by the user
-extern OPENFILENAME ofn;
+extern OPENFILENAME openFileName;
 
 // Used to convert strings when possibly needed
 /* const */ char* TCHARToANSI(const TCHAR* pszInString, char* pszOutString, int nOutSize);
@@ -296,6 +299,7 @@ int RunIdle();
 
 // updateNetInputs: If we are running a net game, set this to true to get local inputs before network sync.
 int RunFrame(int bDraw, int bPause, bool updateNetInputs);
+bool UpdateInputs(int bPause, bool updateNetInputs);
 int RunMessageLoop();
 int RunInit();
 int RunReset();
@@ -420,7 +424,7 @@ int WaveLogStop();
 // inpd.cpp
 extern HWND hInpdDlg;								// Handle to the Input Dialog
 
-int InpdUpdate();
+int UpdateInputDialog();
 int InpdCreate();
 int InpdListMake(int bBuild);
 
@@ -444,7 +448,7 @@ int InpMacroCreate(int nInput);
 extern HWND hInpsDlg;								// Handle to the Input Set Dialog
 extern unsigned int nInpsInput;						// The input number we are redefining
 int InpsCreate();
-int InpsUpdate();
+int UpdateInputSetDialog();
 
 // inpc.cpp
 extern HWND hInpcDlg;								// Handle to the Input Constant Dialog
@@ -488,8 +492,19 @@ int ResCreate(int);
 
 // fba_network.cpp
 int NetworkInitInput();
-int NetworkGetInputSize();
-int NetworkGetInput();
+int NetworkGetInput(int size);
+
+// Pack all game inputs into a byte array (nControls) which can be sent across the network
+// later, or used for replays, etc.
+// Returns the number of bytes that were used to pack the inputs.
+// @@AAR: 5.2.2026 : This is part of the efforts to make the input system more streamlined and less redundant.
+// NOTE: This will pack inputs for all players.
+int PackGameInputs();
+void UnpackGameInputs(int playerInputSize);
+
+const int INPUTSIZE = 8 * (4 + 8);				// We are assuming a max of eight bytes of input for up to 12 players.
+// REFACTOR: Use uint8_t....
+extern unsigned char nControls[INPUTSIZE];
 
 // fbn_ggpo.cpp
 int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps);
@@ -532,7 +547,7 @@ void QuarkInit(TCHAR* connect);
 void QuarkEnd();
 void QuarkTogglePerfMon();
 void QuarkRunIdle(int ms);
-bool QuarkGetInput(void* values, int isize, int playerCount);
+bool QuarkSyncInput(void* values, int isize, int playerCount);
 bool QuarkIncrementFrame();
 void QuarkSendChat(char* text);
 
@@ -550,22 +565,29 @@ void QuarkSendChatCmd(char* text, char code);
 void QuarkSendData(uint8_t code, void* data, UINT8 dataSize);
 
 void QuarkUpdateStats(double fps);
-void QuarkRecordReplay();
+void QuarkRecordAVIReplay();
 void QuarkFinishReplay();
 void QuarkDisconnect();
 
+// run.cpp : Memory Options
+extern bool RecordMem;
+extern std::string MemFilePath;
+extern CMemRecorder* MemRecorder;
+
 // replay.cpp
-extern int nReplayStatus;
+extern EReplayStatus nReplayStatus;
 extern bool bReplayReadOnly;
 extern bool bReplayFrameCounterDisplay;
 extern INT32 movieFlags;
-int RecordInput();
+extern uint32_t TotalInputSize;
+
+void RecordInput(int packedInputSize);
 int ReplayInput();
 int StartRecord();
 int StartReplay(const TCHAR* szFileName = NULL);
 void StopReplay();
-int FreezeInput(unsigned char** buf, int* size);
-int UnfreezeInput(const unsigned char* buf, int size);
+int SaveInputState(unsigned char** buf, int* size);
+int LoadInputState(const unsigned char* buf, int size);
 void DisplayReplayProperties(HWND hDlg, bool bClear);
 
 // memcard.cpp

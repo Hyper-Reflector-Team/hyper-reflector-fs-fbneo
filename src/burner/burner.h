@@ -29,6 +29,10 @@
 #include "title.h"
 #include "burn.h"
 
+
+#define REPLAY_EXT ".fr"
+#define STATE_EXT ".fs"
+
 // ---------------------------------------------------------------------------
 // OS dependent functionality
 typedef struct tagIMAGE {
@@ -111,7 +115,7 @@ void GameInpCheckMouse();
 INT32 GameInpBlank(INT32 bDipSwitch);
 INT32 GameInputAutoIni(INT32 nPlayer, TCHAR* lpszFile, bool bOverWrite);
 INT32 ConfigGameLoadHardwareDefaults();
-INT32 GameInpDefault();
+INT32 SetGameDefaultInputs();
 INT32 GameInpWrite(FILE* h);
 INT32 GameInpRead(TCHAR* szVal, bool bOverWrite);
 INT32 GameInpMacroRead(TCHAR* szVal, bool bOverWrite);

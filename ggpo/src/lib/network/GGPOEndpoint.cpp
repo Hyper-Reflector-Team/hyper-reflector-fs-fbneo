@@ -6,9 +6,11 @@
  */
 
 #include "types.h"
-#include "udp_proto.h"
+#include "GGPOEndpoint.h"
 #include "bitvector.h"
 #include <algorithm>
+#include "backends/GGPOSession.h"
+#include <stdexcept>
 
  // OPTIONS: These should all be configurable at some point....
 static const int SYNC_PACKETS_COUNT = 5;
@@ -21,10 +23,10 @@ static const int NETWORK_STATS_INTERVAL = 1000;
 static const int UDP_SHUTDOWN_TIMER = 5000;
 static const int MAX_SEQ_DISTANCE = (1 << 15);
 
-UdpProtocol::UdpProtocol() :
+GGPOEndpoint::GGPOEndpoint() :
   _local_frame_advantage(0),
   _remote_frame_advantage(0),
-  _queue(-1),
+  _playerIndex(0),
   _magic_number(0),
   _remote_magic_number(0),
   _packets_sent(0),
@@ -60,21 +62,25 @@ UdpProtocol::UdpProtocol() :
   memset(_playerName, 0, MAX_NAME_SIZE);
 }
 
+void GGPOEndpoint::SetGameName(char* gameName_) {
+  strcpy_s(_gameName, gameName_);
+}
+
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SetPlayerName(char* playerName_) {
+void GGPOEndpoint::SetPlayerName(char* playerName_) {
   strcpy_s(_playerName, playerName_);
 }
 
 // ----------------------------------------------------------------------------------------------------------
-UdpProtocol::~UdpProtocol()
+GGPOEndpoint::~GGPOEndpoint()
 {
   ClearSendQueue();
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::Init(Udp* udp,
+void GGPOEndpoint::Init(GGPOSession* client_, Udp* udp,
   PollManager& poll,
-  int queue,
+  uint8_t playerIndex_,
   char* ip,
   u_short port,
   UdpMsg::connect_status* status,
@@ -82,8 +88,9 @@ void UdpProtocol::Init(Udp* udp,
   uint8_t delay_,
   uint8_t runahead_)
 {
+  _Client = client_;
   _udp = udp;
-  _queue = queue;
+  _playerIndex = playerIndex_;
   _local_connect_status = status;
   _client_version = clientVersion;
   _delay = delay_;
@@ -93,6 +100,10 @@ void UdpProtocol::Init(Udp* udp,
   _peer_addr.sin_port = htons(port);
   inet_pton(AF_INET, ip, &_peer_addr.sin_addr.s_addr);
 
+  if (!_peer_addr.sin_addr.s_addr) {
+    throw std::runtime_error("Invalid peer address!");
+  }
+
   do {
     _magic_number = (uint16)rand();
   } while (_magic_number == 0);
@@ -100,12 +111,13 @@ void UdpProtocol::Init(Udp* udp,
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
+void GGPOEndpoint::SendData(uint8_t code, void* data, uint8_t dataSize) {
   if (_udp && _current_state == Running) {
 
     UdpMsg* msg = new UdpMsg(UdpMsg::Datagram);
 
     msg->u.datagram.code = code;
+    msg->u.datagram.frame = _Client->CurrentFrame();
     uint8_t useSize = (uint8_t)(std::min)((size_t)dataSize, (size_t)MAX_GGPO_DATA_SIZE);
     msg->u.datagram.dataSize = useSize;
     if (data != nullptr && useSize > 0) {
@@ -117,7 +129,7 @@ void UdpProtocol::SendData(uint8_t code, void* data, uint8_t dataSize) {
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SendChat(char* text) {
+void GGPOEndpoint::SendChat(char* text) {
 
   if (_udp && _current_state == Running) {
     // Leave room for the receiver to add a null terminator safely.
@@ -127,7 +139,7 @@ void UdpProtocol::SendChat(char* text) {
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SendInput(GameInput& input)
+void GGPOEndpoint::SendInput(GameInput& input)
 {
   if (_udp) {
     if (_current_state == Running) {
@@ -151,7 +163,7 @@ void UdpProtocol::SendInput(GameInput& input)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SendPendingOutput()
+void GGPOEndpoint::SendPendingOutput()
 {
   // This assert is checking consts.  Probably don't need to do this each time....
     // Can probably do it on program init....
@@ -220,15 +232,16 @@ void UdpProtocol::SendPendingOutput()
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SendInputAck()
+void GGPOEndpoint::SendInputAck()
 {
-  UdpMsg* msg = new UdpMsg(UdpMsg::InputAck);
-  msg->u.input_ack.ack_frame = _last_received_input.frame;
-  SendMsg(msg);
+  throw std::exception("This is not supported!");
+  //UdpMsg* msg = new UdpMsg(UdpMsg::InputAck);
+  //msg->u.input_ack.ack_frame = _last_received_input.frame;
+  //SendMsg(msg);
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::GetEvent(UdpEvent& e)
+bool GGPOEndpoint::GetEvent(UdpEvent& e)
 {
   if (_event_queue.size() == 0) {
     return false;
@@ -241,7 +254,7 @@ bool UdpProtocol::GetEvent(UdpEvent& e)
 
 // ------------------------------------------------------------------------------------------
 // REFACTOR: Rename to 'DoPoll' or 'Poll' or whatever.
-bool UdpProtocol::OnLoopPoll(void* cookie)
+bool GGPOEndpoint::OnLoopPoll(void* cookie)
 {
   if (!_udp) {
     return true;
@@ -256,10 +269,25 @@ bool UdpProtocol::OnLoopPoll(void* cookie)
   switch (_current_state) {
   case Syncing:
     next_interval = (_state.sync.roundtrips_remaining == SYNC_PACKETS_COUNT) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
-    if (_last_send_time && _last_send_time + next_interval < now) {
-      Utils::LogIt(CATEGORY_SYNC, "Re-Queueing Sync"); //  "No luck syncing after %d ms... Re-queueing sync packet.\n", next_interval);
-      SendSyncRequest();
+
+
+    if (_last_send_time > 0) {
+      if (ConnectTimeout != -1 && now > SyncStartTime + ConnectTimeout)
+      {
+        // Connection timed out!  Let's end things here!
+        DisconnectEx(0, true);
+
+        UdpEvent evt(UdpEvent::SyncFailed);
+        evt.u.SyncFailed.endpointType = EndpointType;
+        QueueEvent(evt);
+      }
+      else if (_last_send_time + next_interval < now)
+      {
+          Utils::LogIt(CATEGORY_SYNC, "Re-Queueing Sync");
+          SendSyncRequest();
+      }
     }
+
     break;
 
   case Running:
@@ -322,42 +350,55 @@ bool UdpProtocol::OnLoopPoll(void* cookie)
 }
 
 // ------------------------------------------------------------------------------------------------
-void UdpProtocol::DisconnectEx(int onFrame)
+void GGPOEndpoint::DisconnectEx(int onFrame, bool sendDisconnectMessage = true)
 {
+  if (!_udp || _current_state == Disconnected) { return; }
+  
   // We send out duplicate message packets in case of packet loss.
-  const int MSG_COUNT = 3;
-  for (size_t i = 0; i < MSG_COUNT; i++)
-  {
-    UdpMsg* msg = new UdpMsg(UdpMsg::MsgType::Datagram);
-    msg->u.datagram.code = DATAGRAM_CODE_DISCONNECT;
+  if (sendDisconnectMessage) {
+    const int MSG_COUNT = 3;
+    for (size_t i = 0; i < MSG_COUNT; i++)
+    {
+      UdpMsg* msg = new UdpMsg(UdpMsg::MsgType::Datagram);
+      msg->u.datagram.code = DATAGRAM_CODE_DISCONNECT;
+      msg->u.datagram.frame = onFrame;
+      msg->u.datagram.dataSize = 0;
 
-    *(int*)msg->u.datagram.data = onFrame;
-    msg->u.datagram.dataSize = sizeof(int);
-
-    SendMsg(msg);
+      SendMsg(msg);
+    }
   }
 
   _current_state = Disconnected;
   _shutdown_timeout = Platform::GetCurrentTimeMS() + UDP_SHUTDOWN_TIMER;
+
+  // Drop the udp pointer so that we don't update this endpoint anymore....
+  _udp = nullptr;
+
 }
 
+//// ------------------------------------------------------------------------------------------------
+//void GGPOEndpoint::CompleteDisconnect() { 
+//}
+
 // ------------------------------------------------------------------------------------------------
-void UdpProtocol::Disconnect()
+void GGPOEndpoint::Disconnect()
 {
-  throw std::exception("OBSOLETE!");
+  throw std::exception("OBSOLETE!  Use DisconnectEX!");
 }
 
 // ------------------------------------------------------------------------------------------------
-void UdpProtocol::SendSyncRequest()
+void GGPOEndpoint::SendSyncRequest()
 {
   _state.sync.random = rand() & 0xFFFF;
   UdpMsg* msg = new UdpMsg(UdpMsg::SyncRequest);
   msg->u.sync_request.random_request = _state.sync.random;
+  msg->u.sync_request.player_index = _playerIndex;
+  msg->u.sync_request.session_id = _sessionId;
   SendMsg(msg);
 }
 
 // ------------------------------------------------------------------------------------------------
-void UdpProtocol::SendMsg(UdpMsg* msg)
+void GGPOEndpoint::SendMsg(UdpMsg* msg)
 {
   _packets_sent++;
   _last_send_time = Platform::GetCurrentTimeMS();
@@ -373,8 +414,9 @@ void UdpProtocol::SendMsg(UdpMsg* msg)
 }
 
 // ------------------------------------------------------------------------------------------------
-bool UdpProtocol::HandlesMsg(sockaddr_in& from, UdpMsg* msg)
+bool GGPOEndpoint::HandlesMsg(sockaddr_in& from, UdpMsg* msg)
 {
+  // NOTE: Local player doesn't have _udp set.
   if (!_udp) {
     return false;
   }
@@ -385,23 +427,23 @@ bool UdpProtocol::HandlesMsg(sockaddr_in& from, UdpMsg* msg)
 }
 
 // ------------------------------------------------------------------------------------------------
-void UdpProtocol::OnMsg(UdpMsg* msg, int len)
+void GGPOEndpoint::OnMsg(UdpMsg* msg, int len)
 {
   bool handled = false;
-  typedef bool (UdpProtocol::* DispatchFn)(UdpMsg* msg, int len);
+  typedef bool (GGPOEndpoint::* DispatchFn)(UdpMsg* msg, int len);
 
   // NOTE:  A table of function pointers is used so that the values from UdpMsg::MsgType
   // can be used to index into this.
   static const DispatchFn msgHandlers[] = {
-     &UdpProtocol::OnInvalid,             /* Invalid */
-     &UdpProtocol::OnSyncRequest,         /* SyncRequest */
-     &UdpProtocol::OnSyncReply,           /* SyncReply */
-     &UdpProtocol::OnInput,               /* Input */
-     &UdpProtocol::OnQualityReport,       /* QualityReport */
-     &UdpProtocol::OnQualityReply,        /* QualityReply */
-     &UdpProtocol::OnKeepAlive,           /* KeepAlive */
-     &UdpProtocol::OnInputAck,            /* InputAck */
-     &UdpProtocol::OnData					        /* Data Exchange - A chat message or other type of data was received */
+     &GGPOEndpoint::OnInvalid,             /* Invalid */
+     &GGPOEndpoint::OnSyncRequest,         /* SyncRequest */
+     &GGPOEndpoint::OnSyncReply,           /* SyncReply */
+     &GGPOEndpoint::OnInput,               /* Input */
+     &GGPOEndpoint::OnQualityReport,       /* QualityReport */
+     &GGPOEndpoint::OnQualityReply,        /* QualityReply */
+     &GGPOEndpoint::OnKeepAlive,           /* KeepAlive */
+     &GGPOEndpoint::OnInputAck,            /* InputAck */
+     &GGPOEndpoint::OnData					        /* Data Exchange - A chat message or other type of data was received */
   };
 
   // Filter out messages that don't match what we expect
@@ -438,9 +480,9 @@ void UdpProtocol::OnMsg(UdpMsg* msg, int len)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::UpdateNetworkStats(void)
+void GGPOEndpoint::UpdateNetworkStats(void)
 {
-  UINT32 now = Platform::GetCurrentTimeMS();
+  uint32_t now = Platform::GetCurrentTimeMS();
 
   if (_stats_start_time == 0) {
     _stats_start_time = now;
@@ -458,16 +500,19 @@ void UdpProtocol::UpdateNetworkStats(void)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::QueueEvent(const UdpEvent& evt)
+void GGPOEndpoint::QueueEvent(const UdpEvent& evt)
 {
   Utils::LogEvent(evt);
   _event_queue.push(evt);
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::Synchronize()
+void GGPOEndpoint::Synchronize()
 {
   if (_udp) {
+
+    SyncStartTime = Platform::GetCurrentTimeMS();
+
     _current_state = Syncing;
     _state.sync.roundtrips_remaining = SYNC_PACKETS_COUNT;
     SendSyncRequest();
@@ -475,21 +520,21 @@ void UdpProtocol::Synchronize()
 }
 
 bool
-UdpProtocol::GetPeerConnectStatus(int id, int* frame)
+GGPOEndpoint::GetPeerConnectStatus(int id, int* frame)
 {
   *frame = _peer_connect_status[id].last_frame;
   return !_peer_connect_status[id].disconnected;
 }
 
 // ----------------------------------------------------------------------------------------
-bool UdpProtocol::OnInvalid(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnInvalid(UdpMsg* msg, int len)
 {
-  ASSERT(FALSE && "Invalid msg in UdpProtocol");
+  ASSERT(FALSE && "Invalid msg in GGPOEndpoint");
   return false;
 }
 
 // ----------------------------------------------------------------------------------------
-bool UdpProtocol::OnSyncRequest(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnSyncRequest(UdpMsg* msg, int len)
 {
   if (_remote_magic_number != 0 && msg->header.magic != _remote_magic_number) {
     Utils::LogIt(CATEGORY_SYNC, "SyncRequest from unknown endpoint :%d != %d)", msg->header.magic, _remote_magic_number);
@@ -498,17 +543,32 @@ bool UdpProtocol::OnSyncRequest(UdpMsg* msg, int len)
   UdpMsg* reply = new UdpMsg(UdpMsg::SyncReply);
   reply->u.sync_reply.random_reply = msg->u.sync_request.random_request;
   reply->u.sync_reply.client_version = _client_version;
+  reply->u.sync_reply.player_index = _playerIndex;
   reply->u.sync_reply.delay = _delay;
   reply->u.sync_reply.runahead = _runahead;
 
+  // TODO: Check the GGPOClient to see if we are waiting for replay appliance connections....
+  reply->u.sync_reply.isReady = this->_Client->IsReadyToSync(msg) ? 1 : 0; //  true;
+  reply->u.sync_reply.endpointType = this->EndpointType;
+
+  // reply->u.sync_reply.is_ready = this->_Client->IsReplayApplianceReady();
+
+  // TODO: I need to send the delay + runahead here (in main)
+  // So... if we are sending whatever data in the sync replies, should we include replay id here too?
+  // --> We should include whatever extra client/game specific data is needed for the specific game.
+  // TODO: For future protocol, some kind of proper 'metadata exchange' would be cool.  That way
+  // appplications can define + swap whatever specific data they need, and we don't have to get
+  // clever or think of possible scenarios.
+
   strcpy_s(reply->u.sync_reply.playerName, _playerName);
+  strcpy_s(reply->u.sync_reply.gameName, _gameName);
 
   SendMsg(reply);
   return true;
 }
 
 // ----------------------------------------------------------------------------------------
-bool UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnSyncReply(UdpMsg* msg, int len)
 {
   if (_current_state != Syncing) {
     Utils::LogIt(CATEGORY_SYNC, "SyncReply while not synching");
@@ -520,12 +580,46 @@ bool UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
     return false;
   }
 
-  if (!_connected) {
+
+  // New stuff......
+  // NOTE: We need to add this to the C++ client as well.....
+  bool continueSync = true;
+  if (msg->u.sync_reply.isReady == 0)
+  {
+    Utils::LogIt(CATEGORY_SYNC, "Remote endpoint is replying to sync, but not ready!");
+    continueSync = false;
+  }
+
+  // We need to check the main client for readyness as well!
+  if (continueSync && !_Client->IsReadyToSync(msg))
+  {
+    Utils::LogIt(CATEGORY_SYNC, "Local client is still not ready to fully sync!");
+    continueSync = false;
+  }
+
+
+
+
+  if (!_connected && continueSync) {
     auto evt = UdpEvent(UdpEvent::Connected);
     strcpy_s(evt.u.connected.playerName, msg->u.sync_reply.playerName);
 
+    evt.u.connected.player_index = msg->u.sync_reply.player_index;
     evt.u.connected.delay = msg->u.sync_reply.delay;
     evt.u.connected.runahead = msg->u.sync_reply.runahead;
+
+    if (!this->IsReplayClient())
+    {
+      if (msg->u.sync_reply.player_index == _playerIndex) {
+        throw std::runtime_error("The other player is using the same index as you!");
+      }
+    }
+
+    // Do we need to do something about setting player names here?
+    if (strcmp(_gameName, msg->u.sync_reply.gameName))
+    {
+      throw std::runtime_error("remote game name is not the same as local game name!");
+    }
 
     QueueEvent(evt);
 
@@ -551,14 +645,15 @@ bool UdpProtocol::OnSyncReply(UdpMsg* msg, int len)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::OnData(UdpMsg* msg, int dataSize)
+bool GGPOEndpoint::OnData(UdpMsg* msg, int dataSize)
 {
   UdpEvent evt(UdpEvent::Datagram);
   auto dataLen = (uint8_t)(dataSize - sizeof(UdpMsg::header));
 
-  evt.u.chat.code = msg->u.datagram.code;
-  evt.u.chat.dataSize = msg->u.datagram.dataSize;
-  memcpy_s(evt.u.chat.data, MAX_GGPO_DATA_SIZE, msg->u.datagram.data, dataLen);
+  evt.u.datagram.code = msg->u.datagram.code;
+  evt.u.datagram.frame = _Client->CurrentFrame();
+  evt.u.datagram.dataSize = msg->u.datagram.dataSize;
+  memcpy_s(evt.u.datagram.data, MAX_GGPO_DATA_SIZE, msg->u.datagram.data, dataLen);
 
   QueueEvent(evt);
 
@@ -566,7 +661,7 @@ bool UdpProtocol::OnData(UdpMsg* msg, int dataSize)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::OnInput(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnInput(UdpMsg* msg, int len)
 {
   // If a disconnect is requested, go ahead and disconnect now.
   bool disconnect_requested = msg->u.input.disconnect_requested;
@@ -598,6 +693,7 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
 
     _last_received_input.size = msg->u.input.input_size;
     if (_last_received_input.frame < 0) {
+      // Prime the expected input frame when receiving the first input (*.frame == -1 in IF condition)
       _last_received_input.frame = msg->u.input.start_frame - 1;
     }
     while (offset < numBits) {
@@ -660,9 +756,7 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
 
   ASSERT(_last_received_input.frame >= last_received_frame_number);
 
-  /*
-   * Get rid of our buffered input
-   */
+  // Remove all output frames that have been ACKed by other side.
   while (_pending_output.size() && _pending_output.front().frame < msg->u.input.ack_frame) {
     Utils::LogIt(CATEGORY_INPUT, "Nixed output:%d", _pending_output.front().frame);
     _last_acked_input = _pending_output.front();
@@ -673,21 +767,39 @@ bool UdpProtocol::OnInput(UdpMsg* msg, int len)
 
 
 // ----------------------------------------------------------------------------------------------------------
-// NOTE: This comes from the spectator listener...
-bool UdpProtocol::OnInputAck(UdpMsg* msg, int len)
+// NOTE: This comes from the ReplayAppliance
+bool GGPOEndpoint::OnInputAck(UdpMsg* msg, int len)
 {
   // Get rid of our buffered input
-  while (_pending_output.size() &&
-    _pending_output.front().frame < msg->u.input_ack.ack_frame) {
+  int start = msg->u.input_ack.start_frame;
+  int count = msg->u.input_ack.frame_count;
+  int max_frame = start + (count - 1);
+  while (_pending_output.size() != 0 && _pending_output.front().frame < max_frame)
+  {
     Utils::LogIt(CATEGORY_INPUT, "ACK: Throwing away pending output frame %d", _pending_output.front().frame);
     _last_acked_input = _pending_output.front();
+    _last_received_input = _pending_output.front();
+
     _pending_output.pop();
   }
   return true;
+
+
+
+  //// LEGACY:
+  //// Get rid of our buffered input
+  //int maxFrame = msg->u.input_ack.start_frame + (msg->u.input_ack.frame_count - 1);
+  //while (_pending_output.size() &&
+  //  _pending_output.front().frame < maxFrame) {
+  //  Utils::LogIt(CATEGORY_INPUT, "ACK: Throwing away pending output frame %d", _pending_output.front().frame);
+  //  _last_acked_input = _pending_output.front();
+  //  _pending_output.pop();
+  //}
+  //return true;
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::OnQualityReport(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnQualityReport(UdpMsg* msg, int len)
 {
   // send a reply so the other side can compute the round trip transmit time.
   UdpMsg* reply = new UdpMsg(UdpMsg::QualityReply);
@@ -699,21 +811,21 @@ bool UdpProtocol::OnQualityReport(UdpMsg* msg, int len)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::OnQualityReply(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnQualityReply(UdpMsg* msg, int len)
 {
   _round_trip_time = Platform::GetCurrentTimeMS() - msg->u.quality_reply.pong;
   return true;
 }
 
 // ----------------------------------------------------------------------------------------------------------
-bool UdpProtocol::OnKeepAlive(UdpMsg* msg, int len)
+bool GGPOEndpoint::OnKeepAlive(UdpMsg* msg, int len)
 {
   // Yep, we just say OK!
   return true;
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::GetNetworkStats(struct GGPONetworkStats* s)
+void GGPOEndpoint::GetNetworkStats(struct GGPONetworkStats* s)
 {
   // TODO: Include rollback stats here too!
   s->network.ping = _round_trip_time;
@@ -724,10 +836,10 @@ void UdpProtocol::GetNetworkStats(struct GGPONetworkStats* s)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SetLocalFrameNumber(int localFrame)
+void GGPOEndpoint::SetLocalFrameNumber(int localFrame)
 {
   /*
-   * Estimate which frame the other guy is one by looking at the
+   * Estimate which frame the other guy is on by looking at the
    * last frame they gave us plus some delta for the one-way packet
    * trip time.
    */
@@ -743,7 +855,7 @@ void UdpProtocol::SetLocalFrameNumber(int localFrame)
 }
 
 // ----------------------------------------------------------------------------------------------------------
-int UdpProtocol::RecommendFrameDelay()
+int GGPOEndpoint::RecommendFrameDelay()
 {
   // Keep timesync stalls gentle:
   // - Require idle input so we don't induce slowdown during active motions/combos.
@@ -754,21 +866,26 @@ int UdpProtocol::RecommendFrameDelay()
   return (std::min)(frames, 1);
 }
 
+// ----------------------------------------------------------------------------------------------------------
+void GGPOEndpoint::SetConnectTimeout(uint32_t timeout)
+{
+  ConnectTimeout = timeout;
+}
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SetDisconnectTimeout(int timeout)
+void GGPOEndpoint::SetDisconnectTimeout(int timeout)
 {
   _disconnect_timeout = timeout;
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::SetDisconnectNotifyStart(int timeout)
+void GGPOEndpoint::SetDisconnectNotifyStart(int timeout)
 {
   _disconnect_notify_start = timeout;
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::PumpSendQueue()
+void GGPOEndpoint::PumpSendQueue()
 {
   while (!_send_queue.empty())
   {
@@ -798,7 +915,8 @@ void UdpProtocol::PumpSendQueue()
     }
     else
     {
-      ASSERT(entry.dest_addr.sin_addr.s_addr);
+      // NOTE: This is checked when we construct the endpoint.
+      // ASSERT(entry.dest_addr.sin_addr.s_addr);
 
       int packetSize = entry.msg->PacketSize();
       _udp->SendTo((char*)entry.msg, packetSize, 0,
@@ -822,7 +940,7 @@ void UdpProtocol::PumpSendQueue()
 }
 
 // ----------------------------------------------------------------------------------------------------------
-void UdpProtocol::ClearSendQueue()
+void GGPOEndpoint::ClearSendQueue()
 {
   while (!_send_queue.empty()) {
     delete _send_queue.front().msg;

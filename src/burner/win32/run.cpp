@@ -1,6 +1,7 @@
 // Run module
 #include "burner.h"
 #include <string.h>
+#include "CMemRecorder.h"
 
 int bRunPause = 0;
 int bAltPause = 0;
@@ -16,10 +17,10 @@ static int nOldAudVolume;
 
 // TODO: At this point we can assume that the net version is going to be 14, and never change.
 int kNetVersion = NET_VERSION;			// Network version
-int kNetGame = 0;						// Non-zero if network is being used
-int kNetSpectator = 0;					// Non-zero if network replay is active
-int kNetLua = 1;						// Allow lua in network game
-char kNetQuarkId[128] = {};				// Network quark id
+int kNetGame = 0;						        // Non-zero if network is being used
+int kNetSpectator = 0;					    // Non-zero if network replay is active
+int kNetLua = 1;						        // Allow lua in network game
+char kNetQuarkId[128] = {};			  	// Network quark id
 
 // How many upcoming frames to skip on purpose, to let the other player catch up.
 int nGGPOTimesyncFrames = 0;
@@ -77,7 +78,9 @@ std::vector<lua_hotkey_handler> hotkey_debounces = {
   { &macroSystemLuaHotkey9, macroSystemLuaHotkey9, 0 },
 };
 
-static void CheckSystemMacros() // These are the Pause / FFWD macros added to the input dialog
+// ------------------------------------------------------------------------------------------------------------
+// These are the Pause / FFWD macros added to the input dialog
+static void CheckSystemMacros()
 {
   // A spectator just plays back what the relay sends -- nothing local (like loading a save
   // state) should be able to touch it, or it would desync from the live match for good.
@@ -145,6 +148,10 @@ static void CheckSystemMacros() // These are the Pause / FFWD macros added to th
   prevUState = macroSystemUNDOState;
 }
 
+// ------------------------------------------------------------------------------------------------------------
+// This will pull inputs from hardware, and optionally copy their values to 'GameInp', which is the data
+// structure that contains all of the current inputs that will get sent off to the game.
+// This function also updates data in the input / set input dialogs.
 static int GetInput(bool bCopy)
 {
   // get input
@@ -160,24 +167,25 @@ static int GetInput(bool bCopy)
   }
 
   if (!kNetGame || kNetSpectator) {
+    // PAUSE and or FFWD support.
     CheckSystemMacros();
   }
 
   // Update Input dialog every 3rd frame
   static unsigned int i = 0;
   if ((i % 2) == 0) {
-    InpdUpdate();
+    UpdateInputDialog();
   }
   i++;
 
   // Update Input Set dialog
-  InpsUpdate();
+  UpdateInputSetDialog();
   return 0;
 }
 
+// ------------------------------------------------------------------------------------------------
 static LONGLONG lastTime;
 static unsigned int nPreviousFrames;
-
 static void InitOverlay()
 {
   nDoFPS = 0;
@@ -292,6 +300,7 @@ void RunaheadSaveState()
   bRunaheadFrame = 0;
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------------
 void RunaheadLoadState()
 {
   bRunaheadFrame = 1;
@@ -304,43 +313,125 @@ void RunaheadLoadState()
 // ------------------------------------------------------------------------------------------------------------------------------------
 // With or without sound, run one frame.
 // If bDraw is true, it's the last frame before we are up to date, and so we should draw the screen
+// REFACTOR: Make this a boolean function.
+// REFACTOR: Actually, make a it a void function b/c callers never care about the output.
 int RunFrame(int bDraw, int bPause, bool updateNetInputs)
 {
   if (!bDrvOkay) {
     return 1;
   }
 
+  bool updated = UpdateInputs(bPause, updateNetInputs);
+  if (!updated) { return 1; }
+  // nCurrentFrame
+  //if (RecordMem) {
+  //  if (MemRecorder)
+  //  {
+  //    //  MemRecorder->AddMemory(nCurrentFrame, nullptr, 0);
+  //  }
+  //}
+
+  // Render frame with video or audio
+  if (bDraw) {
+    if (nVidRunahead > 0 && nVidRunahead <= 3 && !kNetSpectator) {
+      // Runahead frames, first frame is audio only
+      pBurnDraw = NULL;
+      pBurnSoundOut = nAudNextSound;
+      BurnDrvFrame();
+      // Save state
+      RunaheadSaveState();
+      // Intermediate frames don't have audio or video
+      for (int i = 0; i < (nVidRunahead - 1); i++) {
+        pBurnDraw = NULL;
+        pBurnSoundOut = NULL;
+        BurnDrvFrame();
+      }
+      // Last frame is video only
+      pBurnSoundOut = NULL;
+      VidFrame();
+      // Restore state
+      RunaheadLoadState();
+    }
+    else {
+      // Render video and audio
+      pBurnSoundOut = nAudNextSound;
+      VidFrame();
+    }
+    // add audio from last frame
+    AudSoundFrame();
+  }
+  else {
+    pBurnDraw = NULL;
+    pBurnSoundOut = nAudNextSound;
+    BurnDrvFrame();
+  }
+
+  if (kNetGame) {
+    QuarkIncrementFrame();
+  }
+
+  DetectorUpdate();
+
+  if (kNetLua) {
+    FBA_LuaFrameBoundary();
+    CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION); // TODO: find proper place
+  }
+
+#ifdef INCLUDE_AVI_RECORDING
+  if (nAviStatus) {
+    if (AviRecordFrame(bDraw)) {
+      AviStop();
+    }
+  }
+#endif
+
+
+  return 0;
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------------
+// Returns a flag that tells us if the inputs were updated or not.
+bool UpdateInputs(int bPause, bool updateNetInputs)
+{
+
   if (bPause && !bAppDoFast) {
     GetInput(false);						// Update burner inputs, but not game inputs
   }
   else {
+    // NOTE: These counters should probably not be updated as part of the input system!
     nFramesEmulated++;
     nCurrentFrame++;
+
+    // HACK: This should be setup when the rest of the input system
+    // is initialized.
+    if (TotalInputSize == 0) {
+      TotalInputSize = PackGameInputs();
+    }
 
     if (kNetGame) {
       if (updateNetInputs) {
         GetInput(true);						// Update inputs
         VidDisplayInputs(0, 0);
-        if (NetworkGetInput()) {	// Synchronize input with Network
+        if (NetworkGetInput(TotalInputSize)) {	// Synchronize input with Network
           VidDisplayInputs(1, 1);
           DetectFreeze();
-          return 1;
+          return false;
         }
         VidDisplayInputs(1, 2);
         DetectTurbo();
       }
       else {
         VidDisplayInputs(0, 3);
-        if (NetworkGetInput()) {
+        if (NetworkGetInput(TotalInputSize)) {
           VidDisplayInputs(1, 1);
           DetectFreeze();
-          return 1;
+          return false;
         }
         VidDisplayInputs(1, 4);
       }
     }
     else {
-      if (nReplayStatus == 2) {
+      if (nReplayStatus == REPLAY_STATUS_REPLAY) {
         GetInput(false);					// Update burner inputs, but not game inputs
         if (ReplayInput()) {		  // Read input from file
           SetPauseMode(1);        // Replay has finished
@@ -348,7 +439,7 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
           bAppDoFastToggled = 0;  // Disable FFWD
           MenuEnableItems();
           InputSetCooperativeLevel(false, false);
-          return 0;
+          return true;
         }
       }
       else {
@@ -364,66 +455,13 @@ int RunFrame(int bDraw, int bPause, bool updateNetInputs)
       }
     }
 
-    if (nReplayStatus == 1) {
-      RecordInput();					  	// Write input to file
+    if (nReplayStatus == REPLAY_STATUS_RECORD) {
+      int inputSize = PackGameInputs();
+      RecordInput(inputSize);     // Write input to file
     }
-
-    // Render frame with video or audio
-    if (bDraw) {
-      if (nVidRunahead > 0 && nVidRunahead <= 3 && !kNetSpectator) {
-        // Runahead frames, first frame is audio only
-        pBurnDraw = NULL;
-        pBurnSoundOut = nAudNextSound;
-        BurnDrvFrame();
-        // Save state
-        RunaheadSaveState();
-        // Intermediate frames don't have audio or video
-        for (int i = 0; i < (nVidRunahead - 1); i++) {
-          pBurnDraw = NULL;
-          pBurnSoundOut = NULL;
-          BurnDrvFrame();
-        }
-        // Last frame is video only
-        pBurnSoundOut = NULL;
-        VidFrame();
-        // Restore state
-        RunaheadLoadState();
-      }
-      else {
-        // Render video and audio
-        pBurnSoundOut = nAudNextSound;
-        VidFrame();
-      }
-      // add audio from last frame
-      AudSoundFrame();
-    }
-    else {
-      pBurnDraw = NULL;
-      pBurnSoundOut = nAudNextSound;
-      BurnDrvFrame();
-    }
-
-    if (kNetGame) {
-      QuarkIncrementFrame();
-    }
-
-    DetectorUpdate();
-
-    if (kNetLua) {
-      FBA_LuaFrameBoundary();
-      CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION); // TODO: find proper place
-    }
-
-#ifdef INCLUDE_AVI_RECORDING
-    if (nAviStatus) {
-      if (AviRecordFrame(bDraw)) {
-        AviStop();
-      }
-    }
-#endif
   }
 
-  return 0;
+  return true;
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------
@@ -431,6 +469,13 @@ int RunIdle()
 {
   if (bAudPlaying) {
     AudSoundCheck();
+  }
+
+  if (RecordMem) {
+    if (MemRecorder) {
+      // TODO: We will do an area scan + use the callback for the memrecorder here...
+      // MemRecorder
+    }
   }
 
   // Render loop with sound
@@ -930,7 +975,7 @@ int RunMessageLoop()
                 }
               }
               else if (!bEditActive) { // Backspace: toggles FPS
-                showStatsMode = (showStatsMode + 1) % (kNetGame ? SHOWSTATS_MAX: 2);
+                showStatsMode = (showStatsMode + 1) % (kNetGame ? SHOWSTATS_MAX : 2);
                 VidOverlayClearWarnings();
                 UpdateOverlay();
                 MenuUpdate();
