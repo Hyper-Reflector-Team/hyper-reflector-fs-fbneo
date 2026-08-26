@@ -214,6 +214,140 @@ void GammaDialog()
 }
 
 // -----------------------------------------------------------------------------
+// Volume dialog
+
+static INT_PTR CALLBACK VolumeProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM)	// LPARAM lParam
+{
+	static INT32 nPrevVolume;
+
+	switch (Msg) {
+		case WM_INITDIALOG: {
+			TCHAR szText[16];
+
+			nPrevVolume = nAudVolume;
+			nExitStatus = 0;
+
+			WndInMid(hDlg, hScrnWnd);
+
+			// Initialise slider (0-100%, one tic per quarter)
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETRANGE, (WPARAM)0, (LPARAM)MAKELONG(0, 100));
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETLINESIZE, (WPARAM)0, (LPARAM)1);
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETPAGESIZE, (WPARAM)0, (LPARAM)10);
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETTIC, (WPARAM)0, (LPARAM)25);
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETTIC, (WPARAM)0, (LPARAM)50);
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETTIC, (WPARAM)0, (LPARAM)75);
+
+			// Set slider to current value (nAudVolume is percent times 100)
+			SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETPOS, (WPARAM)true, (LPARAM)(nAudVolume / 100));
+
+			// Set the edit control to current value
+			_stprintf(szText, _T("%i"), nAudVolume / 100);
+			SendDlgItemMessage(hDlg, IDC_VOLUME_EDIT, WM_SETTEXT, (WPARAM)0, (LPARAM)szText);
+
+			return TRUE;
+		}
+		case WM_COMMAND: {
+			switch (HIWORD(wParam)) {
+				case BN_CLICKED: {
+					if (LOWORD(wParam) == IDOK) {
+						nExitStatus = 1;
+						SendMessage(hDlg, WM_CLOSE, 0, 0);
+					}
+					if (LOWORD(wParam) == IDCANCEL) {
+						nExitStatus = -1;
+						SendMessage(hDlg, WM_CLOSE, 0, 0);
+					}
+					break;
+				}
+				case EN_UPDATE: {
+					if (nExitStatus == 0) {
+						TCHAR szText[16] = _T("");
+						bool bValid = 1;
+						int nValue;
+
+						if (SendDlgItemMessage(hDlg, IDC_VOLUME_EDIT, WM_GETTEXTLENGTH, (WPARAM)0, (LPARAM)0) < 16) {
+							SendDlgItemMessage(hDlg, IDC_VOLUME_EDIT, WM_GETTEXT, (WPARAM)16, (LPARAM)szText);
+						}
+
+						// Scan string in the edit control for illegal characters
+						for (int i = 0; szText[i]; i++) {
+							if (!_istdigit(szText[i])) {
+								bValid = 0;
+								break;
+							}
+						}
+
+						if (bValid) {
+							nValue = _tcstol(szText, NULL, 0);
+							if (nValue < 0) {
+								nValue = 0;
+							} else {
+								if (nValue > 100) {
+									nValue = 100;
+								}
+							}
+
+							// Apply live so the user hears the change while typing
+							nAudVolume = nValue * 100;
+							AudSoundSetVolume();
+
+							// Set slider to current value
+							SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_SETPOS, (WPARAM)true, (LPARAM)nValue);
+						}
+					}
+					break;
+				}
+			}
+			break;
+		}
+
+		case WM_HSCROLL: {
+			switch (LOWORD(wParam)) {
+				case TB_BOTTOM:
+				case TB_ENDTRACK:
+				case TB_LINEDOWN:
+				case TB_LINEUP:
+				case TB_PAGEDOWN:
+				case TB_PAGEUP:
+				case TB_THUMBPOSITION:
+				case TB_THUMBTRACK:
+				case TB_TOP: {
+					if (nExitStatus == 0) {
+						TCHAR szText[16];
+						int nValue;
+
+						// Update the contents of the edit control
+						nValue = SendDlgItemMessage(hDlg, IDC_VOLUME_SLIDER, TBM_GETPOS, (WPARAM)0, (LPARAM)0);
+						_stprintf(szText, _T("%i"), nValue);
+						SendDlgItemMessage(hDlg, IDC_VOLUME_EDIT, WM_SETTEXT, (WPARAM)0, (LPARAM)szText);
+
+						// Apply live so the user hears the change while dragging
+						nAudVolume = nValue * 100;
+						AudSoundSetVolume();
+					}
+					break;
+				}
+			}
+			break;
+		}
+
+		case WM_CLOSE:
+			if (nExitStatus != 1) {
+				nAudVolume = nPrevVolume;
+				AudSoundSetVolume();
+			}
+			EndDialog(hDlg, 0);
+	}
+
+	return 0;
+}
+
+void VolumeDialog()
+{
+	FBADialogBox(hAppInst, MAKEINTRESOURCE(IDD_VOLUME), hScrnWnd, (DLGPROC)VolumeProc);
+}
+
+// -----------------------------------------------------------------------------
 // Scanline intensity dialog
 
 static INT_PTR CALLBACK ScanlineProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM)	// LPARAM lParam

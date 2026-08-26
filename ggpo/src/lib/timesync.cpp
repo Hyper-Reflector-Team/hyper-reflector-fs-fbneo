@@ -25,6 +25,9 @@ void TimeSync::rollback_frame(GameInput& input, int localAdvantage, int remoteAd
 }
 
 
+float g_timesync_advantage = 0;
+float g_timesync_radvantage = 0;
+
 // ----------------------------------------------------------------------------------------------------
 int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
 {
@@ -48,7 +51,11 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   // See if someone should take action.  The person furthest ahead
   // needs to slow down so the other user can catch up.
   // Only do this if both clients agree on who's ahead!!
+  g_timesync_advantage = advantage;
+  g_timesync_radvantage = radvantage;
+  Utils::LogIt(CATEGORY_TIMESYNC, "timesync check: advantage=%.2f radvantage=%.2f diff=%.2f", advantage, radvantage, radvantage - advantage);
   if (advantage >= radvantage) {
+    _idle_gate_blocked_frames = 0; // not ahead, nothing pending
     return 0;
   }
 
@@ -62,6 +69,7 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   // Some things just aren't worth correcting for.  Make sure
   // the difference is relevant before proceeding.
   if (sleep_frames < MIN_FRAME_ADVANTAGE) {
+    _idle_gate_blocked_frames = 0;
     return 0;
   }
 
@@ -70,14 +78,29 @@ int TimeSync::recommend_frame_wait_duration(bool require_idle_input)
   // user's input isn't sweeping in arcs (e.g. fireball motions in
   // Street Fighter), which could cause the player to miss moves.
   if (require_idle_input) {
-    for (i = 1; i < ARRAY_SIZE(_last_inputs); i++) {
-      if (!_last_inputs[i].equal(_last_inputs[0])) {
-        Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  rejecting due to input stuff at position %d...!!!", count, i);
+    // How many recent frames must be idle before we allow a correction.
+    const int IDLE_WINDOW = 8;
+    bool isIdle = true;
+    for (i = 1; i < IDLE_WINDOW; i++) {
+      // Only compare bits, not frame number, since frame number always differs.
+      if (memcmp(_last_inputs[i].bits, _last_inputs[0].bits, _last_inputs[0].size) != 0) {
+        isIdle = false;
+        break;
+      }
+    }
+
+    if (!isIdle) {
+      // Don't let an active player block corrections forever.
+      _idle_gate_blocked_frames++;
+      if (_idle_gate_blocked_frames < IDLE_GATE_ESCALATION_FRAMES) {
+        Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  rejecting due to input stuff (blocked %d frames)...!!!", count, _idle_gate_blocked_frames);
         return 0;
       }
+      Utils::LogIt(CATEGORY_TIMESYNC, "iteration %d:  idle gate blocked for %d frames, applying correction anyway", count, _idle_gate_blocked_frames);
     }
   }
 
   // Success!!! Recommend the number of frames to sleep and adjust
+  _idle_gate_blocked_frames = 0;
   return MIN(sleep_frames, MAX_FRAME_ADVANTAGE);
 }

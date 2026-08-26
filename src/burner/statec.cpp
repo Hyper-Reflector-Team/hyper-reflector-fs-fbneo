@@ -8,6 +8,7 @@ static INT32 nCompLen = 0;
 static INT32 nCompFill = 0;				// How much of the buffer has been filled so far
 
 static z_stream Zstr;					// Deflate stream
+static INT32 nDecompressError = 0;
 
 // -----------------------------------------------------------------------------
 // Compression
@@ -142,7 +143,12 @@ static INT32 __cdecl StateDecompressAcb(struct BurnArea* pba)
 	Zstr.next_out =(UINT8*)pba->Data;
 	Zstr.avail_out = pba->nLen;
 
-	inflate(&Zstr, Z_SYNC_FLUSH);
+	if (nDecompressError == 0) {
+		const int err = inflate(&Zstr, Z_SYNC_FLUSH);
+		if (err != Z_OK && err != Z_STREAM_END) {
+			nDecompressError = err;
+		}
+	}
 
 	Zstr.avail_out = 0;
 	Zstr.next_out = NULL;
@@ -153,7 +159,11 @@ static INT32 __cdecl StateDecompressAcb(struct BurnArea* pba)
 INT32 BurnStateDecompress(UINT8* Def, INT32 nDefLen, INT32 bAll)
 {
 	memset(&Zstr, 0, sizeof(Zstr));
-	inflateInit(&Zstr);
+	nDecompressError = 0;
+	if (inflateInit(&Zstr) != Z_OK) {
+		memset(&Zstr, 0, sizeof(Zstr));
+		return 1;
+	}
 
 	// Set all of the buffer as available input
 	Zstr.next_in = (UINT8*)Def;
@@ -167,5 +177,5 @@ INT32 BurnStateDecompress(UINT8* Def, INT32 nDefLen, INT32 bAll)
 	inflateEnd(&Zstr);
 	memset(&Zstr, 0, sizeof(Zstr));
 
-	return 0;
+	return nDecompressError ? 1 : 0;
 }

@@ -22,6 +22,9 @@ int kNetSpectator = 0;					    // Non-zero if network replay is active
 int kNetLua = 1;						        // Allow lua in network game
 char kNetQuarkId[128] = {};			  	// Network quark id
 
+// Frames to skip so the other player can catch up.
+int nGGPOTimesyncFrames = 0;
+
 #ifdef FBNEO_DEBUG
 int counter;								// General purpose variable used when debugging
 #endif
@@ -148,7 +151,8 @@ static int GetInput(bool bCopy)
   // get input
   InputMake(bCopy);
 
-  if (bCopy) {
+  // Don't capture real input until the netplay match is actually running.
+  if (bCopy && (!kNetGame || bGGPOMatchRunning)) {
     GameInpClearOpposites(bCopy);
     GameInpUpdateNext(bCopy);
     GameInpFixDiagonals(bCopy);
@@ -473,6 +477,17 @@ int RunIdle()
   double nFps = 1000.0 * 100.0 / nAppVirtualFps;
   double nFpsIdle = nFps - 1.0;
 
+  // Skip an idle frame to let the other player catch up.
+  if (kNetGame && !kNetSpectator && !bRunPause && !bAppDoFast && nGGPOTimesyncFrames > 0) {
+    if (nAccTime >= nFps) {
+      nGGPOTimesyncFrames--;
+      GetInput(false);
+      QuarkRunIdle(1);
+      nFrameLast += nFps;
+      return 0;
+    }
+  }
+
   if (nAccTime < nFps || (kNetGame && nRunQuark)) {
     // No need to do anything for a bit
     if (kNetGame) {
@@ -660,6 +675,9 @@ int RunMessageLoop()
     */
 
     while (true) {
+      // Run the game tick here too, so a flood of messages (like window drag) can't freeze it.
+      RunIdle();
+
       if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
         // A message is waiting to be processed
         if (msg.message == WM_QUIT) {											// Quit program
@@ -875,15 +893,15 @@ int RunMessageLoop()
               if (bEditActive) {
                 if (kNetGame) {
 
-                  bool allSpaces = true;
-                  for (size_t i = 0; i < MAX_CHAT_SIZE; i++)
+                  bool hasContent = false;
+                  for (size_t i = 0; i < MAX_CHAT_SIZE && EditText[i] != L'\0'; i++)
                   {
-                    if (EditText[i] != 0x20) {
-                      allSpaces = false;
+                    if (EditText[i] != L' ') {
+                      hasContent = true;
                       break;
                     }
                   }
-                  if (!allSpaces)
+                  if (hasContent)
                   {
                     char text[MAX_CHAT_SIZE + 1];
                     TCHARToANSI(EditText, text, MAX_CHAT_SIZE + 1);
@@ -1076,9 +1094,8 @@ int RunMessageLoop()
         }
       }
       else {
-        // No messages are waiting
+        // No messages waiting. RunIdle() already ran above.
         SplashDestroy(0);
-        RunIdle();
       }
     }
 

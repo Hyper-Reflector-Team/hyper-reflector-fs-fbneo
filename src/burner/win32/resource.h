@@ -50,6 +50,7 @@
 #define IDD_DOWNLOAD_LOCAL					82
 #define IDD_CHOOSEMONITOR					83
 #define IDD_LUA                         84
+#define IDD_VOLUME							85
 
 #define IDR_MENU                        	100
 #define IDR_MENU_BLITTER_1					110
@@ -948,6 +949,7 @@
 #define MENU_AVISTART								11827
 #define MENU_AVISTOP								11828
 #define MENU_AVIINTAUD					    11829
+#define MENU_VOLUME									11830
 
 #define GAMESEL_MENU_PLAY						11900
 #define GAMESEL_MENU_GAMEINFO				11901
@@ -968,6 +970,9 @@
 #define IDC_LOCAL_CPU                       301067
 #define IDC_REMOTE_CPU                      301068
 #define IDD_PERFMON                         301065
+
+#define IDC_VOLUME_SLIDER                   301069
+#define IDC_VOLUME_EDIT                     301070
 
 // Next default values for new objects
 //

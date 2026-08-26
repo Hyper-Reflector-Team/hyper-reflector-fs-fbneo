@@ -315,3 +315,26 @@ void DisableHighResolutionTiming()
 		bHighResolutionTimerActive = 0;
 	}
 }
+
+// Forces precise timing during netplay, independent of the user's own timer setting.
+static int bNetplayHighResTimerActive = 0;
+
+void ForceHighResolutionTimingForNetplay()
+{
+	TIMECAPS hTCaps;
+
+	if (bNetplayHighResTimerActive) return; // already forced
+
+	if (timeGetDevCaps(&hTCaps, sizeof(hTCaps)) == TIMERR_NOERROR) {
+		bNetplayHighResTimerActive = hTCaps.wPeriodMin;
+		timeBeginPeriod(hTCaps.wPeriodMin);
+	}
+}
+
+void RestoreHighResolutionTimingAfterNetplay()
+{
+	if (bNetplayHighResTimerActive) {
+		timeEndPeriod(bNetplayHighResTimerActive);
+		bNetplayHighResTimerActive = 0;
+	}
+}

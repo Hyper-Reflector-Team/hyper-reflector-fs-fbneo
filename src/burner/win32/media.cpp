@@ -17,6 +17,10 @@ int MediaInit()
 
 	if (!bAudOkay) {
 		AudSoundInit();					// Init Sound (not critical if it fails)
+		// Apply the saved volume right away.
+		if (bAudOkay) {
+			AudSoundSetVolume();
+		}
 	}
 
 	nBurnSoundRate = 0;					// Assume no sound

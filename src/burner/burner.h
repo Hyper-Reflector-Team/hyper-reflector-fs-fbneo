@@ -124,6 +124,8 @@ void GameInpUpdatePrev(bool bCopy);
 void GameInpUpdateNext(bool bCopy);
 void GameInpClearOpposites(bool bCopy);
 void GameInpFixDiagonals(bool bCopy);
+// Clears SOCD/diagonal-cleaning history, call when a netplay match actually starts.
+void GameInpResetSOCDHistory();
 
 // inp_interface.cpp
 extern INT32 nAutoFireRate;

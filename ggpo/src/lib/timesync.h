@@ -16,6 +16,9 @@
 #define MIN_FRAME_ADVANTAGE          3
 #define MAX_FRAME_ADVANTAGE          9
 
+// Force a blocked correction through after ~3 seconds (180 frames at 60fps).
+#define IDLE_GATE_ESCALATION_FRAMES 180
+
 class TimeSync {
 public:
    TimeSync();
@@ -28,6 +31,7 @@ protected:
    int         _remote[FRAME_WINDOW_SIZE];
    GameInput   _last_inputs[MIN_UNIQUE_FRAMES];
    int         _next_prediction;
+   int         _idle_gate_blocked_frames = 0;
 };
 
 #endif

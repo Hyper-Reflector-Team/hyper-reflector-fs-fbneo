@@ -318,6 +318,19 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,105,40,50,14
 END
 
+IDD_VOLUME DIALOGEX 0, 0, 222, 59
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Adjust sound volume"
+FONT 8, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,167,40,50,14
+    GROUPBOX        "",IDC_STATIC,3,0,216,35
+    CONTROL         "Volume",IDC_VOLUME_SLIDER,"msctls_trackbar32",WS_TABSTOP,5,10,160,18
+    EDITTEXT        IDC_VOLUME_EDIT,167,10,35,14,0x200
+    LTEXT           "%",IDC_STATIC,206,11,8,10,SS_CENTERIMAGE
+    PUSHBUTTON      "Cancel",IDCANCEL,113,40,50,14
+END
+
 IDD_SCANLINE DIALOGEX 0, 0, 214, 59
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Select desired scanline intensity"
@@ -1021,6 +1034,8 @@ BEGIN
             MENUITEM "Wasapi",                      MENU_AUD_PLUGIN_3
         END
         MENUITEM "Plugin &options",             MENU_AUDIO_OPTIONS, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "&Volume...",                  MENU_VOLUME
         MENUITEM SEPARATOR
         MENUITEM "2-point 1st order sample interpolation", MENU_INTERPOLATE_1
         MENUITEM "4-point 3rd order sample interpolation", MENU_INTERPOLATE_3
