@@ -1372,8 +1372,8 @@ void VidOverlaySetGameScores(int score1, int score2, int winner)
 void VidOverlaySetGameSpectators(int num)
 {
   wchar_t buf[32];
-  spectators.Set(_itow(MAX(0, num - 1), buf, 10));	// remove server spectator
-  show_spectators = num > 1;
+  spectators.Set(_itow(MAX(0, num), buf, 10));
+  show_spectators = num > 0;
 }
 
 void VidOverlaySetSystemMessage(const wchar_t* text)
@@ -1430,7 +1430,7 @@ void VidOverlaySetRemoteStats(uint8_t delay, uint8_t runahead) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 void VidOverlaySetStats(double fps, int ping, int delay)
 {
-  // Send this right away, don't wait -- otherwise the other side shows a stale value.
+  // Send this right away, don't wait, otherwise the other side shows a stale value.
   if (ping > 0 && prev_runahead != nVidRunahead) {
     prev_runahead = nVidRunahead;
     SendToPeer(delay, nVidRunahead);
@@ -1604,7 +1604,8 @@ void VidOverlayAddChatLine(const wchar_t* name, const wchar_t* text)
 
   // Let other player know that your chat is muted.  Only do this branch for non-system messages.
   // NOTE: This is a great demonstration of how double-dipping on the 'name' parameter just makes things more difficult to deal with.
-  if (isChatMuted && wcscmp(name, _T("System"))) {
+  // Playing and spectating are never both true, so use whichever mute setting applies.
+  if ((kNetSpectator ? isSpectatorChatMuted : isChatMuted) && wcscmp(name, _T("System"))) {
     if (!bMutedWarnSent) {
       QuarkSendData(DATAGRAM_CODE_MUTED, nullptr, 0);
       bMutedWarnSent = true;

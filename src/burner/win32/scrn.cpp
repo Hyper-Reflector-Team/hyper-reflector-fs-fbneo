@@ -2491,6 +2491,10 @@ static void OnCommand(HWND /*hDlg*/, int id, HWND /*hwndCtl*/, UINT codeNotify)
 			isChatMuted = !isChatMuted;
 			break;
 
+		case MENU_MUTE_SPECTATOR_CHAT:
+			isSpectatorChatMuted = !isSpectatorChatMuted;
+			break;
+
 		case MENU_RUNAHEAD_DISABLED:
 			nVidRunahead = 0;
 			break;

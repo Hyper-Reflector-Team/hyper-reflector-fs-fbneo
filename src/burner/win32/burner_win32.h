@@ -102,6 +102,28 @@ struct DirectConnectionOptions {
 
   std::string replayAddr = "";
   uint64_t replayId = 0;
+
+  // Publishing this match to spectators. Only used by player 1.
+  bool spectate = false;
+  std::string spectateRelayHost = "";
+  uint16_t spectateRelayUdpPort = 33335;
+  uint16_t spectateRelayTcpPort = 33336;
+  std::string spectateMatchId = "";
+  std::string spectateUid = "";
+};
+
+// Options for watching a match as a spectator.
+struct SpectateConnectionOptions {
+  std::string romName;
+  std::string relayHost;
+  uint16_t relayUdpPort = 33335;
+  uint16_t relayTcpPort = 33336;
+  std::string matchId;
+  std::string uid; // this viewer's own id
+  std::string userName; // shown in spectator chat, falls back to uid if empty
+  // Player names for the overlay, since the spectate feed itself has no names.
+  std::string player1Name;
+  std::string player2Name;
 };
 
 // ---------------------------------------------------------------------------
@@ -484,6 +506,33 @@ extern unsigned char nControls[INPUTSIZE];
 
 // fbn_ggpo.cpp
 int InitDirectConnection(DirectConnectionOptions& ops, GGPOLogOptions& logOps);
+
+// Reused by fbn_spectate.cpp, since these already know how to load a game and its state.
+bool __cdecl ggpo_begin_game_callback(const char* name);
+bool __cdecl ggpo_save_game_state_callback(unsigned char** buffer, int* len, int* checksum, int frame);
+bool __cdecl ggpo_load_game_state_callback(unsigned char* buffer, int len);
+void __cdecl ggpo_free_buffer_callback(void* buffer);
+// Loads the ROM for a spectator. Does nothing if already loaded.
+void EnsureSpectatorDriverLoaded();
+
+// Player names for the spectator overlay, since the relay itself carries no names.
+extern TCHAR g_spectateP1Name[128];
+extern TCHAR g_spectateP2Name[128];
+
+// fbn_spectate.cpp, watching a match through the backend relay, not GGPO.
+void SpectatePublishInit(const DirectConnectionOptions& ops);
+void SpectatePublishRecordFrame(int frame, const void* values);
+void SpectatePublishTick();
+void SpectatePublishShutdown();
+bool SpectatePublishActive();
+
+bool InitSpectatorConnection(const SpectateConnectionOptions& ops);
+bool SpectateGetInput(void* values);
+bool SpectateActive();
+void SpectateDisconnect();
+
+// Spectator-only chat, goes to other viewers, never to the players.
+void SpectateSendChat(const char* text);
 
 // [OBSOLETE]
 void QuarkInit(TCHAR* connect);
